@@ -33,6 +33,7 @@ export default function InstallationStatusTab({
     handleChange,
     saving,
     setSaving,
+    canDeleteDocs = false,
     documents = [],
     onFileUpload,
     onFileDelete,
@@ -45,7 +46,6 @@ export default function InstallationStatusTab({
     const { showConfirm } = useGlobalPopup();
     const vendorLogin = isOn('vendorLogin');
     const userType = user?.userType;
-    const canDeleteDocs = ['admin', 'sales'].includes(userType);
     const status = editData.installation_status || null;
     const isFinal = isFinalTagValue(customer.installation_status, INSTALLATION_TAGS);
     // A final status (Installed) locks the tag for everyone except the admin.

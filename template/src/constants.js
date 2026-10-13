@@ -222,6 +222,7 @@ export const ADMIN_COLUMNS = new Set([
     'delivery_batch_id',
     'delivery_status',
     'digital_certificate',
+    'discom_agreement',
     'discom_inspection',
     'discom_submission',
     'driver_name',
@@ -278,10 +279,9 @@ export const ADMIN_COLUMNS = new Set([
     'registration_no',
     'roof_shed',
     'sfdc_photo',
-    // Free-text siblings of the sfdc_photo / warranty_card checkboxes, plus
-    // file_status which has no checkbox at all. These MUST be listed here - a
-    // column missing from ADMIN_COLUMNS is stripped by sanitizeAdminUpdate, so
-    // the field would save "successfully" and write nothing.
+    // Free-text columns without a checkbox of their own. These MUST be listed
+    // here - a column missing from ADMIN_COLUMNS is stripped by
+    // sanitizeAdminUpdate, so the field would save "successfully" and write nothing.
     'sfdc_photo_text',
     'warranty_card_text',
     'file_status',
@@ -340,12 +340,13 @@ export const ADMIN_NUMERIC_COLUMNS = [
 export const CUSTOMER_CARD_COLUMNS = 'id, customer_name, phone_number, email_address, consumer_no, folder_no, stage, channel_partner, sub_channel_partner, payment_type, loan_tag, subsidy_tag, installation_status, system_capacity_kwp, module_brand, module_wp, no_of_modules, villages, full_address, pincode, sub_divisions, district, registration_date, invoice_value, vendor_quote, created_at, updated_at, deleted_at, delivery_batch_id, delivery_status, stages_remarks, vendor, geo_tag_status, google_drive_link, location_link';
 
 // cpo_leads is `select * from admin`, so both sources share one column list.
+export const CPO_CARD_COLUMNS = CUSTOMER_CARD_COLUMNS;
 export const getCustomerCardColumns = () => CUSTOMER_CARD_COLUMNS;
 
 
 // Vendor list cards and stage counters do not need the full admin record. The
 // complete record is fetched only when a vendor opens one assignment.
-export const VENDOR_LIST_COLUMNS = 'id, customer_name, phone_number, email_address, consumer_no, folder_no, stage, vendor, deleted_at, installation_status, geo_tag_status, villages, sub_divisions, district, system_capacity_kwp, module_brand, module_wp, no_of_modules, material_delivery_date, installation_date, vendor_quote, vendor_payment_status, vendor_paid_date, created_at, updated_at';
+export const VENDOR_LIST_COLUMNS = 'id, customer_name, phone_number, email_address, consumer_no, folder_no, stage, vendor, deleted_at, installation_status, geo_tag_status, villages, sub_divisions, district, system_capacity_kwp, module_brand, module_wp, no_of_modules, material_delivery_date, installation_date, inverter_serial_no, panel_serial_no, vendor_quote, vendor_payment_status, vendor_paid_date, created_at, updated_at';
 
 
 // A tag value is "final" when it is the terminal state of its set. Reaching it

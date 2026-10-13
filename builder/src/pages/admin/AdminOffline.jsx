@@ -51,7 +51,7 @@ export default function AdminOffline() {
                 </SectionCard>
                 {loaded && (
                     <SubmissionReview key={loaded.key} submission={loaded.submission}
-                        initial={{ adminOverrides: loaded.adminOverrides, slug: loaded.slug, ownerEmail: loaded.ownerEmail }} />
+                        initial={{ adminOverrides: loaded.adminOverrides, slug: loaded.slug, ownerEmail: loaded.ownerEmail, branding: loaded.branding }} />
                 )}
             </div>
         </PageShell>

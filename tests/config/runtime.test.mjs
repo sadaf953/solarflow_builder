@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     PRIMARY_STAGES, STAGE_IDS, getNextStageId, missingStageRequirements, isViewOn, isRoleEnabled, isOn,
-    documentMode, LOAN_TAGS, HOLD_STATUS_TAGS, stageLabel, applicableStages,
+    documentMode, LOAN_TAGS, HOLD_STATUS_TAGS, stageLabel, applicableStages, paymentTypeOptions, BRANDING,
 } from '../../template/src/config/index.js';
 
 // The template ships with every available feature on (client.config.js).
@@ -45,4 +45,10 @@ test('stages carry icons and tags carry the styling the UI expects', () => {
     assert.ok(LOAN_TAGS.every(tag => tag.icon));
     assert.equal(LOAN_TAGS.at(-1).isFinal, true);
     assert.ok(HOLD_STATUS_TAGS.every(tag => tag.activeClass));
+});
+
+test('payment types follow the loan and cash features; company details default to empty', () => {
+    assert.deepEqual(paymentTypeOptions(), ['Loan', 'Cash']);
+    assert.equal(BRANDING.logoUrl, '');
+    assert.equal(BRANDING.bankIfsc, '');
 });

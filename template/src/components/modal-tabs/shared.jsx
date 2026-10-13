@@ -4,10 +4,7 @@ import { formatINR, toIndianCommas, formatInputValue, getTelephoneHref } from '.
 import { supabase } from '../../supabase';
 import { useGlobalPopup } from '../GlobalPopup';
 import { useChecklistMode } from '../../utils/checklistMode';
-
-// @deprecated Sample files are no longer generated. Kept only so tabs that
-// still import it keep building; it returns no file, so nothing is uploaded.
-export const generateDemoSampleFile = () => null;
+import { documentMode } from '../../config/index.js';
 
 // ─── Vendor name list (process-wide cache) ────────────────────────────────────
 // InstallationStatusTab and MaterialDeliveryTab each fetched this on mount with
@@ -492,21 +489,26 @@ function DocRemarkEditor({ doc, onUpdateRemark, canEdit, variant = 'compact' }) 
 export const RETURNED_DOCUMENT_PREFIX = '[RETURNED]';
 export const isReturnedDocument = (doc) => String(doc?.remark || '').trim().toUpperCase().startsWith(RETURNED_DOCUMENT_PREFIX);
 
-// @deprecated The only thing this rendered was a sample-document filler. Kept
-// so tabs that still render it keep building; it renders nothing.
-export function ChecklistModeToggle() {
-    return null;
-}
-
 // One document item: a tick in checklist mode, an upload in files mode.
-// `mode` forces one of the two (extra file fields always need the upload).
+// A client with only one of the two features always gets that one. With both,
+// each user picks (utils/checklistMode.js), and `mode` forces one of them
+// (extra file fields always need the upload).
+//
+// onUpload(event, field) stores event.target.files[0] and resolves false when
+// nothing was stored. "Change" removes the replaced file through onDelete only
+// after that, so a failed or refused upload never loses the old document.
 export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, isEditing, documents = [], onUpload, onDelete, onPreview, onUpdateRemark, note, canDelete = false, canReplace = canDelete, allowReturnedReplace = !canDelete, mode }) {
     const { showConfirm, showImageCropper } = useGlobalPopup();
     const fieldDocs = documents.filter(d => d.doc_type === field);
     const fileInputRef = useRef(null);
     const [replacingDocId, setReplacingDocId] = useState(null);
     const sharedMode = useChecklistMode();
-    const checklistMode = mode || sharedMode;
+    const clientMode = documentMode();
+    const checklistMode = clientMode === 'both' ? (mode || sharedMode) : clientMode;
+    const filesOn = clientMode !== 'checklist';
+    const canUpload = filesOn && Boolean(onUpload);
+    const canRemove = filesOn && canDelete && Boolean(onDelete);
+    const canReplaceDoc = doc => canUpload && Boolean(onDelete) && (canReplace || (allowReturnedReplace && isReturnedDocument(doc)));
 
     const isUploaded = fieldDocs.length > 0;
     const isChecklistOnly = checklistMode === 'checklist';
@@ -520,7 +522,7 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
             if (onAutoSave) {
                 await onAutoSave(field, nextVal);
             }
-        } else if (!isUploaded) {
+        } else if (!isUploaded && canUpload) {
             handleUploadClick();
         }
     };
@@ -532,9 +534,11 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
 
     const handleFileSelected = async (e) => {
         const rawFile = e.target.files?.[0];
-        if (!rawFile) return;
-        const inputEl = e.target;
-        inputEl.value = '';
+        const replacing = fieldDocs.find(d => d.id === replacingDocId);
+        setReplacingDocId(null);
+        e.target.value = '';
+        if (!rawFile || !canUpload) return;
+        if (replacing && !canReplaceDoc(replacing)) return;
 
         let file = rawFile;
         if (showImageCropper) {
@@ -542,26 +546,10 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
             if (!file) return; // User cancelled upload
         }
 
-        const wrappedEvent = { target: { files: [file], value: '' } };
-
-        // If replacing a specific document, or if field already has a document, delete old one first
-        const replacingDoc = fieldDocs.find(d => d.id === replacingDocId);
-        const replacementAllowed = canReplace || (allowReturnedReplace && isReturnedDocument(replacingDoc));
-        if (replacementAllowed && replacingDocId && onDelete) {
-            const oldDoc = fieldDocs.find(d => d.id === replacingDocId);
-            if (oldDoc) await onDelete(oldDoc);
-        } else if (canReplace && fieldDocs.length > 0 && onDelete) {
-            for (const oldDoc of fieldDocs) {
-                await onDelete(oldDoc);
-            }
-        }
-
-        if (onUpload) await onUpload(wrappedEvent, field, replacingDocId);
-        // Automatically check when a file is uploaded
-        if (onChange) {
-            onChange(field, true);
-        }
-        setReplacingDocId(null);
+        const stored = await onUpload({ target: { files: [file], value: '' } }, field);
+        if (stored === false) return;
+        if (replacing) await onDelete(replacing);
+        if (onChange) onChange(field, true);
     };
 
     const handleDeleteClick = async (doc) => {
@@ -592,7 +580,7 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
                                 ? 'bg-emerald-500 border-emerald-500 text-white' 
                                 : isEditing ? 'border-stone-300 hover:border-amber-400 bg-white cursor-pointer' : 'bg-stone-100 border-stone-300 text-transparent'
                         }`}
-                        title={isChecklistOnly ? (isChecked ? 'Completed (click to uncheck)' : 'Click to mark checked') : (isUploaded ? 'Verified & Uploaded' : 'Click to upload file to verify')}
+                        title={isChecklistOnly ? (isChecked ? 'Completed (click to uncheck)' : 'Click to mark checked') : (isUploaded ? 'Verified & Uploaded' : canUpload ? 'Click to upload file to verify' : 'Not uploaded yet')}
                     >
                         {isChecked && (
                             <svg className="w-2.5 h-2.5 stroke-[3] stroke-current" fill="none" viewBox="0 0 24 24">
@@ -631,13 +619,15 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
                 </div>
             )}
 
-            <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/jpg,application/pdf,.png,.jpg,.jpeg,.pdf"
-                onChange={handleFileSelected}
-                className="hidden"
-            />
+            {canUpload && (
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,application/pdf,.png,.jpg,.jpeg,.pdf"
+                    onChange={handleFileSelected}
+                    className="hidden"
+                />
+            )}
 
             <div className="ml-6.5 mt-1.5 space-y-1.5">
                 {fieldDocs.map(doc => (
@@ -652,17 +642,17 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
                                         <Eye size={10} /> View
                                     </button>
                                 )}
-                                {isEditing && (canReplace || (allowReturnedReplace && isReturnedDocument(doc))) && (
+                                {isEditing && canReplaceDoc(doc) && (
                                     <button onClick={() => handleUploadClick(doc.id)} className="text-[9px] font-bold text-blue-600 hover:text-blue-700 px-1.5 py-0.5 rounded hover:bg-blue-50 transition-colors flex items-center gap-0.5 cursor-pointer" title="Change / Replace File">
                                         <Upload size={10} /> Change
                                     </button>
                                 )}
-                                {isEditing && onDelete && canDelete && (
+                                {isEditing && canRemove && (
                                     <button onClick={() => handleDeleteClick(doc)} className="text-[9px] font-bold text-red-500 hover:text-red-600 px-1.5 py-0.5 rounded hover:bg-red-50 transition-colors flex items-center gap-0.5 cursor-pointer" title="Delete Document">
                                         <Trash2 size={10} /> Delete
                                     </button>
                                 )}
-                                {isEditing && canDelete && onUpdateRemark && !isReturnedDocument(doc) && (
+                                {isEditing && filesOn && canDelete && onUpdateRemark && !isReturnedDocument(doc) && (
                                     <button
                                         onClick={() => onUpdateRemark(doc.id, `${RETURNED_DOCUMENT_PREFIX} Please upload the correct document.`)}
                                         className="text-[9px] font-bold text-amber-700 hover:text-amber-800 px-1.5 py-0.5 rounded hover:bg-amber-50 transition-colors cursor-pointer"
@@ -678,7 +668,7 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
                         <DocRemarkEditor doc={doc} onUpdateRemark={onUpdateRemark} canEdit={isEditing && canDelete} />
                     </div>
                 ))}
-                {!isChecklistOnly && fieldDocs.length === 0 && isEditing && onUpload && (
+                {!isChecklistOnly && fieldDocs.length === 0 && isEditing && canUpload && (
                     <div className="flex items-center gap-2 flex-wrap">
                         <button
                             type="button"
@@ -694,6 +684,29 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
     );
 }
 
+// ─── EditToggle: pencil / done button for a section's `actions` ──────────────
+// Opens section `id` for editing (one at a time, via editingSection) and
+// scrolls its `section-<id>` element into view. Closing does not discard edits.
+export function EditToggle({ id, label, editingSection, setEditingSection }) {
+    const open = editingSection === id;
+    const toggle = () => {
+        setEditingSection?.(open ? null : id);
+        if (!open) setTimeout(() => document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
+    };
+    return (
+        <button
+            type="button"
+            onClick={toggle}
+            aria-pressed={open}
+            aria-label={`Edit ${label}`}
+            title={open ? 'Done editing' : `Edit ${label}`}
+            className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-100 hover:text-amber-600"
+        >
+            {open ? <Check size={16} aria-hidden="true" /> : <Edit3 size={15} aria-hidden="true" />}
+        </button>
+    );
+}
+
 // ─── SectionHeader: simple section headers with edit toggle buttons ───────────
 export function SectionHeader({ title, id, icon: Icon, isEditable, editingSection, setEditingSection }) {
     return (
@@ -701,24 +714,7 @@ export function SectionHeader({ title, id, icon: Icon, isEditable, editingSectio
             <h3 className="text-[9px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
                 <Icon size={12} /> {title}
             </h3>
-            {isEditable && (
-                <button onClick={() => {
-                    const isOpening = editingSection !== id;
-                    if (setEditingSection) {
-                        setEditingSection(isOpening ? id : null);
-                    }
-                    if (isOpening) {
-                        setTimeout(() => {
-                            const el = document.getElementById(`section-${id}`);
-                            if (el) {
-                                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            }
-                        }, 150);
-                    }
-                }} className="text-stone-400 hover:text-amber-600 transition-colors">
-                    {editingSection === id ? <X size={14} /> : <Edit3 size={12} />}
-                </button>
-            )}
+            {isEditable && <EditToggle id={id} label={String(title).toLowerCase()} editingSection={editingSection} setEditingSection={setEditingSection} />}
         </div>
     );
 }

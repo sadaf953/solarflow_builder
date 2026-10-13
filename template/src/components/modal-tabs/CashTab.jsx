@@ -1,7 +1,8 @@
-import { Banknote, Edit3, Save, X } from 'lucide-react';
+import { Banknote, Save } from 'lucide-react';
 import { dropdownOptions } from '../../config/index.js';
 import { formatINR } from '../../lib/format.js';
 import { FieldRenderer, SectionCard } from '../../ui/index.js';
+import { EditToggle } from './shared';
 import useStageSave from './useStageSave';
 
 const PAYMENT_NAMES = ['1st Payment', '2nd Payment', '3rd Payment'];
@@ -40,13 +41,6 @@ export default function CashTab(props) {
     const isSectionEditing = editingSection === 'cash_details';
     const canEdit = isEditable && isSectionEditing;
 
-    const toggleEditing = () => {
-        setEditingSection?.(isSectionEditing ? null : 'cash_details');
-        if (!isSectionEditing) {
-            setTimeout(() => document.getElementById('section-cash_details')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
-        }
-    };
-
     if (editData.payment_type?.trim().toLowerCase() !== 'cash') {
         return (
             <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center text-xs font-semibold text-amber-700 animate-in fade-in duration-300">
@@ -63,17 +57,7 @@ export default function CashTab(props) {
                 subtitle="Manage deal valuation, payment modes, and balance reconciliation."
                 icon={Banknote}
                 tone="green"
-                actions={isEditable && (
-                    <button
-                        type="button"
-                        onClick={toggleEditing}
-                        aria-pressed={isSectionEditing}
-                        aria-label={isSectionEditing ? 'Stop editing cash payments' : 'Edit cash payments'}
-                        className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-100 hover:text-amber-600"
-                    >
-                        {isSectionEditing ? <X size={16} aria-hidden="true" /> : <Edit3 size={15} aria-hidden="true" />}
-                    </button>
-                )}
+                actions={isEditable && <EditToggle id="cash_details" label="cash payments" editingSection={editingSection} setEditingSection={setEditingSection} />}
             >
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <FieldRenderer

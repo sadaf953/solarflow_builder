@@ -1,103 +1,5 @@
 {
-  "source": "User-supplied metadata_rows.csv, bom_rows.csv and bom_items_rows.csv; no source IDs, customer links, dates or notes retained. Units come from existing BOM templates because the supplied items CSV has no unit column.",
-  "metadata": {
-    "channel_partner": [
-      "Demo Cedar Solar",
-      "Demo Maple Solar",
-      "Demo Willow Solar",
-      "Demo Cobalt Solar",
-      "Demo Juniper Solar",
-      "Demo Meadow Solar",
-      "Demo Quartz Solar",
-      "Demo Pebble Solar",
-      "Demo Saffron Solar",
-      "Demo Aspen Solar",
-      "Demo Birch Solar",
-      "Demo Clover Solar",
-      "Demo Coral Solar",
-      "Demo Dune Solar",
-      "Demo Elm Solar",
-      "Demo Fern Solar",
-      "Demo Glade Solar",
-      "Demo Hazel Solar",
-      "Demo Indigo Solar",
-      "Demo Jade Solar",
-      "Demo Lotus Solar",
-      "Demo Moss Solar",
-      "Demo Orchid Solar",
-      "Demo Pine Solar",
-      "Demo Reed Solar",
-      "Demo Sage Solar",
-      "Demo Spruce Solar",
-      "Demo Thistle Solar",
-      "Demo Vale Solar",
-      "Demo Wren Solar",
-      "Demo Zephyr Solar"
-    ],
-    "module_wp": [
-      "585",
-      "580",
-      "590",
-      "570",
-      "600",
-      "545",
-      "610",
-      "550",
-      "575",
-      "540",
-      "615",
-      "620"
-    ],
-    "registration_by": [
-      "Demo Registration 1 Office",
-      "Demo Registration 2",
-      "Demo Registration 3",
-      "Demo Registration 4",
-      "Demo Registration 5 Office",
-      "Demo Registration 6 Office",
-      "Demo Registration 7 Office",
-      "Demo Registration 8"
-    ],
-    "module_brand": [
-      "ADANI",
-      "GOLDI",
-      "AATMANIRBHAR",
-      "GOLDI/ADANI",
-      "WAAREE",
-      "TATA",
-      "APS"
-    ],
-    "inverter_make": [
-      "Goodwe",
-      "UTL",
-      "Solaryaan",
-      "Solax"
-    ],
-    "roof_shed": [
-      "Roof",
-      "Shed"
-    ],
-    "subsidy_approval_status": [
-      "Returned",
-      "Approved",
-      "Pending",
-      "Rejected"
-    ],
-    "integration_by": [
-      "Ravi",
-      "Nikhil",
-      "Suresh",
-      "Amit",
-      "Priya"
-    ],
-    "payment_method_modes": [
-      "Bank Solar Loan"
-    ],
-    "payment_type": [
-      "Loan",
-      "Cash"
-    ]
-  },
+  "source": "User-supplied bom_rows.csv and bom_items_rows.csv; no source IDs, customer links, staff names, dates or notes retained. Units come from existing BOM templates because the supplied items CSV has no unit column.",
   "templates": {
     "ROOF": [
       {
@@ -585,7 +487,6 @@
     ]
   },
   "source_counts": {
-    "metadata_rows": 85,
     "bom_headers": 105,
     "bom_items": 4685
   },
@@ -594,969 +495,828 @@
       {
         "label": "Roof · 6 modules · reference 1",
         "panel_count": 6,
-        "paper_prepared_by": "Amit",
-        "material_loaded_by": "Nikhil",
         "items": [
           {
             "sr_no": 1,
             "product_name": "Solar Panel",
             "quantity": "6",
-            "uom": "Nos",
-            "integration_by": "Nikhil"
+            "uom": "Nos"
           },
           {
             "sr_no": 2,
             "product_name": "Inverter",
             "quantity": "1",
-            "uom": "Nos",
-            "integration_by": "Suresh"
+            "uom": "Nos"
           },
           {
             "sr_no": 3,
             "product_name": "ACDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 4,
             "product_name": "DCDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 5,
             "product_name": "Dc Cable",
             "quantity": "60",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 6,
             "product_name": "Earthing Cable",
             "quantity": "45",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 7,
             "product_name": "16sq MM LA cabel",
             "quantity": "35",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 8,
             "product_name": "Ac Cable",
             "quantity": "10",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 9,
             "product_name": "Isolation box+MCB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 10,
             "product_name": "Shadel",
             "quantity": "50",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 11,
             "product_name": "Elbow",
             "quantity": "35",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 12,
             "product_name": "Tea",
             "quantity": "7",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 13,
             "product_name": "Wedge Anchor Fast",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 14,
             "product_name": "8 aani 4 inch",
             "quantity": "4",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 15,
             "product_name": "6 aani 6 inch",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 16,
             "product_name": "jasti khila",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 17,
             "product_name": "m c 4 conectar",
             "quantity": "2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 18,
             "product_name": "Screw/ Tape",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 19,
             "product_name": "16 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 20,
             "product_name": "4 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 21,
             "product_name": "4 Sqmm Pin Type Lug",
             "quantity": "10",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 22,
             "product_name": "Red/Black Sleeve",
             "quantity": "5+2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 23,
             "product_name": "5 aani 2inch",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 24,
             "product_name": "Mid Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 25,
             "product_name": "End Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 26,
             "product_name": "GI Clamp",
             "quantity": "24",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 27,
             "product_name": "u bolt+patti",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 28,
             "product_name": "Chaki+Wisher",
             "quantity": "32",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 29,
             "product_name": "Sapot pati",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 30,
             "product_name": "rubar cap",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 31,
             "product_name": "cabale ties",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 32,
             "product_name": "Cable Tie ( Nani )",
             "quantity": "36",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 33,
             "product_name": "Earth Pit Doll",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 34,
             "product_name": "40*40 Pipe Perlin",
             "quantity": "12*4",
-            "uom": "Feet",
-            "integration_by": "Suresh"
+            "uom": "Feet"
           },
           {
             "sr_no": 35,
             "product_name": "60*40 Pipe rafter",
             "quantity": "13*2",
-            "uom": "Feet",
-            "integration_by": "Suresh"
+            "uom": "Feet"
           },
           {
             "sr_no": 36,
             "product_name": "60*40 front leg",
             "quantity": "6*2",
-            "uom": "Feet",
-            "integration_by": "Suresh"
+            "uom": "Feet"
           },
           {
             "sr_no": 37,
             "product_name": "60*40 Rear leg",
             "quantity": "8*2",
-            "uom": "Feet",
-            "integration_by": "Suresh"
+            "uom": "Feet"
           },
           {
             "sr_no": 38,
             "product_name": "LA  insuletar",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 39,
             "product_name": "cabale tre",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 40,
             "product_name": "Earthing Kit + LA",
             "quantity": "3+1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 41,
             "product_name": "chemical",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 42,
             "product_name": "Conduite Pipe",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 43,
             "product_name": "Cement",
             "quantity": "0.5",
-            "uom": "Bag",
-            "integration_by": "Suresh"
+            "uom": "Bag"
           },
           {
             "sr_no": 44,
             "product_name": "Reti",
             "quantity": "2",
-            "uom": "Bag (50 kg)",
-            "integration_by": "Suresh"
+            "uom": "Bag (50 kg)"
           },
           {
             "sr_no": 45,
             "product_name": "Kapachi",
             "quantity": "1",
-            "uom": "Bag (50 kg)",
-            "integration_by": "Suresh"
+            "uom": "Bag (50 kg)"
           }
         ]
       },
       {
         "label": "Roof · 6 modules · reference 2",
         "panel_count": 6,
-        "paper_prepared_by": "Nikhil",
-        "material_loaded_by": "Nikhil",
         "items": [
           {
             "sr_no": 1,
             "product_name": "Solar Panel",
             "quantity": "6",
-            "uom": "Nos",
-            "integration_by": "Nikhil"
+            "uom": "Nos"
           },
           {
             "sr_no": 2,
             "product_name": "Inverter",
             "quantity": "1",
-            "uom": "Nos",
-            "integration_by": "Nikhil"
+            "uom": "Nos"
           },
           {
             "sr_no": 3,
             "product_name": "ACDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 4,
             "product_name": "DCDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 5,
             "product_name": "Dc Cable",
             "quantity": "0",
-            "uom": "MTR",
-            "integration_by": ""
+            "uom": "MTR"
           },
           {
             "sr_no": 6,
             "product_name": "Earthing Cable",
             "quantity": "45",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 7,
             "product_name": "16sq MM LA cabel",
             "quantity": "0",
-            "uom": "MTR",
-            "integration_by": ""
+            "uom": "MTR"
           },
           {
             "sr_no": 8,
             "product_name": "Ac Cable",
             "quantity": "60",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 9,
             "product_name": "Isolation box+MCB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 10,
             "product_name": "Shadel",
             "quantity": "50",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 11,
             "product_name": "Elbow",
             "quantity": "35",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 12,
             "product_name": "Tea",
             "quantity": "7",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 13,
             "product_name": "Wedge Anchor Fast",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 14,
             "product_name": "8 aani 4 inch",
             "quantity": "4",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 15,
             "product_name": "6 aani 6 inch",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 16,
             "product_name": "jasti khila",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 17,
             "product_name": "m c 4 conectar",
             "quantity": "2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 18,
             "product_name": "Screw/ Tape",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 19,
             "product_name": "16 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 20,
             "product_name": "4 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 21,
             "product_name": "4 Sqmm Pin Type Lug",
             "quantity": "10",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 22,
             "product_name": "Red/Black Sleeve",
             "quantity": "5+2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 23,
             "product_name": "5 aani 2inch",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 24,
             "product_name": "Mid Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 25,
             "product_name": "End Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 26,
             "product_name": "GI Clamp",
             "quantity": "24",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 27,
             "product_name": "u bolt+patti",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 28,
             "product_name": "Chaki+Wisher",
             "quantity": "32",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 29,
             "product_name": "Sapot pati",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 30,
             "product_name": "rubar cap",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 31,
             "product_name": "cabale ties",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 32,
             "product_name": "Cable Tie ( Nani )",
             "quantity": "36",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 33,
             "product_name": "Earth Pit Doll",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 34,
             "product_name": "40*40 Pipe Perlin",
             "quantity": "12*4",
-            "uom": "Feet",
-            "integration_by": "Suresh"
+            "uom": "Feet"
           },
           {
             "sr_no": 35,
             "product_name": "60*40 Pipe rafter",
             "quantity": "13*2",
-            "uom": "Feet",
-            "integration_by": "Suresh"
+            "uom": "Feet"
           },
           {
             "sr_no": 36,
             "product_name": "60*40 front leg",
             "quantity": "6*2",
-            "uom": "Feet",
-            "integration_by": "Suresh"
+            "uom": "Feet"
           },
           {
             "sr_no": 37,
             "product_name": "60*40 Rear leg",
             "quantity": "8*2",
-            "uom": "Feet",
-            "integration_by": "Suresh"
+            "uom": "Feet"
           },
           {
             "sr_no": 38,
             "product_name": "LA  insuletar",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 39,
             "product_name": "cabale tre",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 40,
             "product_name": "Earthing Kit + LA",
             "quantity": "3+1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 41,
             "product_name": "chemical",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 42,
             "product_name": "Conduite Pipe",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 43,
             "product_name": "Cement",
             "quantity": "0.5",
-            "uom": "Bag",
-            "integration_by": "Suresh"
+            "uom": "Bag"
           },
           {
             "sr_no": 44,
             "product_name": "Reti",
             "quantity": "2",
-            "uom": "Bag (50 kg)",
-            "integration_by": "Suresh"
+            "uom": "Bag (50 kg)"
           },
           {
             "sr_no": 45,
             "product_name": "Kapachi",
             "quantity": "1",
-            "uom": "Bag (50 kg)",
-            "integration_by": "Suresh"
+            "uom": "Bag (50 kg)"
           }
         ]
       },
       {
         "label": "Roof · 6 modules · reference 3",
         "panel_count": 6,
-        "paper_prepared_by": "Amit",
-        "material_loaded_by": "Nikhil",
         "items": [
           {
             "sr_no": 1,
             "product_name": "Solar Panel",
             "quantity": "6",
-            "uom": "Nos",
-            "integration_by": ""
+            "uom": "Nos"
           },
           {
             "sr_no": 2,
             "product_name": "Inverter",
             "quantity": "1",
-            "uom": "Nos",
-            "integration_by": ""
+            "uom": "Nos"
           },
           {
             "sr_no": 3,
             "product_name": "ACDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 4,
             "product_name": "DCDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 5,
             "product_name": "Dc Cable",
             "quantity": "60",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 6,
             "product_name": "Earthing Cable",
             "quantity": "45",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 7,
             "product_name": "16sq MM LA cabel",
             "quantity": "35",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 8,
             "product_name": "Ac Cable",
             "quantity": "10",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 9,
             "product_name": "Isolation box+MCB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 10,
             "product_name": "Shadel",
             "quantity": "50",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 11,
             "product_name": "Elbow",
             "quantity": "35",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 12,
             "product_name": "Tea",
             "quantity": "7",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 13,
             "product_name": "Wedge Anchor Fast",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 14,
             "product_name": "8 aani 4 inch",
             "quantity": "4",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 15,
             "product_name": "6 aani 6 inch",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 16,
             "product_name": "jasti khila",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 17,
             "product_name": "m c 4 conectar",
             "quantity": "2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 18,
             "product_name": "Screw/ Tape",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 19,
             "product_name": "16 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 20,
             "product_name": "4 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 21,
             "product_name": "4 Sqmm Pin Type Lug",
             "quantity": "10",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 22,
             "product_name": "Red/Black Sleeve",
             "quantity": "5+2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 23,
             "product_name": "5 aani 2inch",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 24,
             "product_name": "Mid Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 25,
             "product_name": "End Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 26,
             "product_name": "GI Clamp",
             "quantity": "24",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 27,
             "product_name": "u bolt+patti",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 28,
             "product_name": "Chaki+Wisher",
             "quantity": "32",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 29,
             "product_name": "Sapot pati",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 30,
             "product_name": "rubar cap",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 31,
             "product_name": "cabale ties",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 32,
             "product_name": "Cable Tie ( Nani )",
             "quantity": "36",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 33,
             "product_name": "Earth Pit Doll",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 34,
             "product_name": "40*40 Pipe Perlin",
             "quantity": "12*4",
-            "uom": "Feet",
-            "integration_by": ""
+            "uom": "Feet"
           },
           {
             "sr_no": 35,
             "product_name": "60*40 Pipe rafter",
             "quantity": "13*4",
-            "uom": "Feet",
-            "integration_by": ""
+            "uom": "Feet"
           },
           {
             "sr_no": 36,
             "product_name": "60*40 front leg",
             "quantity": "8*2",
-            "uom": "Feet",
-            "integration_by": ""
+            "uom": "Feet"
           },
           {
             "sr_no": 37,
             "product_name": "60*40 Rear leg",
             "quantity": "6*2",
-            "uom": "Feet",
-            "integration_by": ""
+            "uom": "Feet"
           },
           {
             "sr_no": 38,
             "product_name": "LA  insuletar",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 39,
             "product_name": "cabale tre",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 40,
             "product_name": "Earthing Kit + LA",
             "quantity": "3+1",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 41,
             "product_name": "chemical",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 42,
             "product_name": "Conduite Pipe",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 43,
             "product_name": "Cement",
             "quantity": ".50",
-            "uom": "Bag",
-            "integration_by": ""
+            "uom": "Bag"
           },
           {
             "sr_no": 44,
             "product_name": "Reti",
             "quantity": "2",
-            "uom": "Bag (50 kg)",
-            "integration_by": ""
+            "uom": "Bag (50 kg)"
           },
           {
             "sr_no": 45,
             "product_name": "Kapachi",
             "quantity": "1",
-            "uom": "Bag (50 kg)",
-            "integration_by": ""
+            "uom": "Bag (50 kg)"
           }
         ]
       }
@@ -1565,759 +1325,648 @@
       {
         "label": "Shed · 6 modules · reference 1",
         "panel_count": 6,
-        "paper_prepared_by": "Nikhil",
-        "material_loaded_by": "Ravi",
         "items": [
           {
             "sr_no": 1,
             "product_name": "Solar Panel",
             "quantity": "6",
-            "uom": "Nos",
-            "integration_by": ""
+            "uom": "Nos"
           },
           {
             "sr_no": 2,
             "product_name": "Inverter",
             "quantity": "1",
-            "uom": "Nos",
-            "integration_by": ""
+            "uom": "Nos"
           },
           {
             "sr_no": 3,
             "product_name": "ACDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 4,
             "product_name": "DCDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 5,
             "product_name": "Dc Cable",
             "quantity": "60",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 6,
             "product_name": "Earthing Cable",
             "quantity": "45",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 7,
             "product_name": "16sq MM LA Cable",
             "quantity": "35",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 8,
             "product_name": "Ac Cable",
             "quantity": "10",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 9,
             "product_name": "Isolation box+MCB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 10,
             "product_name": "Shadel",
             "quantity": "50",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 11,
             "product_name": "Elbow",
             "quantity": "35",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 12,
             "product_name": "Tea",
             "quantity": "7",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 13,
             "product_name": "Spring + HEX Bolt",
             "quantity": "32+32",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 14,
             "product_name": "L And Key",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 15,
             "product_name": "80*40 J bolt mota",
             "quantity": "30",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 16,
             "product_name": "Damar roll",
             "quantity": "2",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 17,
             "product_name": "jasti khila",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 18,
             "product_name": "m c 4 conectar",
             "quantity": "2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 19,
             "product_name": "16 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 20,
             "product_name": "4 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 21,
             "product_name": "4 Sqmm Pin Type Lug",
             "quantity": "10",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 22,
             "product_name": "Red/Black Sleeve",
             "quantity": "5+2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 23,
             "product_name": "5 aani 2inch",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 24,
             "product_name": "Mid Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 25,
             "product_name": "End Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 26,
             "product_name": "LA  insuletar",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 27,
             "product_name": "cabale ties",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 28,
             "product_name": "Earthing ડોલ / ઢાંકણા",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 29,
             "product_name": "C Chanel",
             "quantity": "4",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 30,
             "product_name": "Z mota",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 31,
             "product_name": "Z nana",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 32,
             "product_name": "cabale tre",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 33,
             "product_name": "Earthing Kit + LA",
             "quantity": "3+1",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 34,
             "product_name": "chemical",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 35,
             "product_name": "Condute Pipe",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           }
         ]
       },
       {
         "label": "Shed · 6 modules · reference 2",
         "panel_count": 6,
-        "paper_prepared_by": "Nikhil",
-        "material_loaded_by": "Nikhil",
         "items": [
           {
             "sr_no": 1,
             "product_name": "Solar Panel",
             "quantity": "6",
-            "uom": "Nos",
-            "integration_by": "Suresh"
+            "uom": "Nos"
           },
           {
             "sr_no": 2,
             "product_name": "Inverter",
             "quantity": "1",
-            "uom": "Nos",
-            "integration_by": "Nikhil"
+            "uom": "Nos"
           },
           {
             "sr_no": 3,
             "product_name": "ACDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 4,
             "product_name": "DCDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 5,
             "product_name": "Dc Cable",
             "quantity": "0",
-            "uom": "MTR",
-            "integration_by": ""
+            "uom": "MTR"
           },
           {
             "sr_no": 6,
             "product_name": "Earthing Cable",
             "quantity": "45",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 7,
             "product_name": "16sq MM LA Cable",
             "quantity": "0",
-            "uom": "MTR",
-            "integration_by": ""
+            "uom": "MTR"
           },
           {
             "sr_no": 8,
             "product_name": "Ac Cable",
             "quantity": "60",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 9,
             "product_name": "Isolation box+MCB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 10,
             "product_name": "Shadel",
             "quantity": "50",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 11,
             "product_name": "Elbow",
             "quantity": "35",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 12,
             "product_name": "Tea",
             "quantity": "7",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 13,
             "product_name": "Spring + HEX Bolt",
             "quantity": "32+32",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 14,
             "product_name": "L And Key",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 15,
             "product_name": "80*40 J bolt mota",
             "quantity": "30",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 16,
             "product_name": "Damar roll",
             "quantity": "2",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 17,
             "product_name": "jasti khila",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 18,
             "product_name": "m c 4 conectar",
             "quantity": "2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 19,
             "product_name": "16 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 20,
             "product_name": "4 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 21,
             "product_name": "4 Sqmm Pin Type Lug",
             "quantity": "10",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 22,
             "product_name": "Red/Black Sleeve",
             "quantity": "5+2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 23,
             "product_name": "5 aani 2inch",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 24,
             "product_name": "Mid Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 25,
             "product_name": "End Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 26,
             "product_name": "LA  insuletar",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 27,
             "product_name": "cabale ties",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 28,
             "product_name": "Earthing ડોલ / ઢાંકણા",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 29,
             "product_name": "C Chanel",
             "quantity": "4",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 30,
             "product_name": "Z mota",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 31,
             "product_name": "Z nana",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 32,
             "product_name": "cabale tre",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 33,
             "product_name": "Earthing Kit + LA",
             "quantity": "3+1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 34,
             "product_name": "chemical",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 35,
             "product_name": "Condute Pipe",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           }
         ]
       },
       {
         "label": "Shed · 6 modules · reference 3",
         "panel_count": 6,
-        "paper_prepared_by": "Nikhil",
-        "material_loaded_by": "Nikhil",
         "items": [
           {
             "sr_no": 1,
             "product_name": "Solar Panel",
             "quantity": "6",
-            "uom": "Nos",
-            "integration_by": "Nikhil"
+            "uom": "Nos"
           },
           {
             "sr_no": 2,
             "product_name": "Inverter",
             "quantity": "1",
-            "uom": "Nos",
-            "integration_by": "Nikhil"
+            "uom": "Nos"
           },
           {
             "sr_no": 3,
             "product_name": "ACDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 4,
             "product_name": "DCDB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 5,
             "product_name": "Dc Cable",
             "quantity": "",
-            "uom": "MTR",
-            "integration_by": ""
+            "uom": "MTR"
           },
           {
             "sr_no": 6,
             "product_name": "Earthing Cable",
             "quantity": "",
-            "uom": "MTR",
-            "integration_by": ""
+            "uom": "MTR"
           },
           {
             "sr_no": 7,
             "product_name": "16sq MM LA Cable",
             "quantity": "",
-            "uom": "MTR",
-            "integration_by": ""
+            "uom": "MTR"
           },
           {
             "sr_no": 8,
             "product_name": "Ac Cable",
             "quantity": "",
-            "uom": "MTR",
-            "integration_by": ""
+            "uom": "MTR"
           },
           {
             "sr_no": 9,
             "product_name": "Isolation box+MCB",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 10,
             "product_name": "Shadel",
             "quantity": "50",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 11,
             "product_name": "Elbow",
             "quantity": "35",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 12,
             "product_name": "Tea",
             "quantity": "7",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 13,
             "product_name": "Spring + HEX Bolt",
             "quantity": "32+32",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 14,
             "product_name": "L And Key",
             "quantity": "16",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 15,
             "product_name": "80*40 J bolt mota",
             "quantity": "30",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 16,
             "product_name": "Damar roll",
             "quantity": "2",
-            "uom": "MTR",
-            "integration_by": "Ravi"
+            "uom": "MTR"
           },
           {
             "sr_no": 17,
             "product_name": "jasti khila",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 18,
             "product_name": "m c 4 conectar",
             "quantity": "2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 19,
             "product_name": "16 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 20,
             "product_name": "4 sq MM Round LUG",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 21,
             "product_name": "4 Sqmm Pin Type Lug",
             "quantity": "10",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 22,
             "product_name": "Red/Black Sleeve",
             "quantity": "5+2",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 23,
             "product_name": "5 aani 2inch",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 24,
             "product_name": "Mid Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 25,
             "product_name": "End Clamp",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 26,
             "product_name": "LA  insuletar",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 27,
             "product_name": "cabale ties",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Ravi"
+            "uom": "No."
           },
           {
             "sr_no": 28,
             "product_name": "Earthing ડોલ / ઢાંકણા",
             "quantity": "3",
-            "uom": "No.",
-            "integration_by": ""
+            "uom": "No."
           },
           {
             "sr_no": 29,
             "product_name": "C Chanel",
             "quantity": "4",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 30,
             "product_name": "Z mota",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 31,
             "product_name": "Z nana",
             "quantity": "8",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 32,
             "product_name": "cabale tre",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 33,
             "product_name": "Earthing Kit + LA",
             "quantity": "3+1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 34,
             "product_name": "chemical",
             "quantity": "1",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           },
           {
             "sr_no": 35,
             "product_name": "Condute Pipe",
             "quantity": "15",
-            "uom": "No.",
-            "integration_by": "Suresh"
+            "uom": "No."
           }
         ]
       }

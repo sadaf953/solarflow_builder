@@ -31,6 +31,7 @@ export default function DiscomSubmissionTab({
     setSaving,
     onGenerateAgreement,
     onAddAgreementToDocuments,
+    canDeleteDocs = false,
     documents = [],
     onFileUpload,
     onFileDelete,
@@ -41,7 +42,6 @@ export default function DiscomSubmissionTab({
     const baseId = useId();
     const save = useStageSave({ customer, user, onUpdate, logActivity, fetchLogs, setSaving });
     const userType = user?.userType;
-    const canDeleteDocs = ['admin', 'sales'].includes(userType);
     const canEditDetails = isEditable || ['admin', 'sales', 'channel_partner_office'].includes(userType);
     const company = BRANDING.companyName.toUpperCase();
 

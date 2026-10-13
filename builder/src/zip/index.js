@@ -27,13 +27,13 @@ export function loadTemplateFiles() {
     return templatePromise;
 }
 
-export async function generateClientZip({ submission, adminOverrides = {}, slug, ownerEmail, generatedAt } = {}) {
+export async function generateClientZip({ submission, adminOverrides = {}, slug, ownerEmail, branding, generatedAt } = {}) {
     const templateFiles = await loadTemplateFiles();
-    return createClientZip({ templateFiles, schemaSql, submission, adminOverrides, slug, ownerEmail, generatedAt });
+    return createClientZip({ templateFiles, schemaSql, submission, adminOverrides, slug, ownerEmail, branding, generatedAt });
 }
 
-export function generateSetupSql({ submission, adminOverrides = {}, slug, ownerEmail } = {}) {
-    return createSetupSql({ schemaSql, submission, adminOverrides, slug, ownerEmail });
+export function generateSetupSql({ submission, adminOverrides = {}, slug, ownerEmail, branding } = {}) {
+    return createSetupSql({ schemaSql, submission, adminOverrides, slug, ownerEmail, branding });
 }
 
 export function downloadBytes(bytes, fileName, mime = 'application/zip') {

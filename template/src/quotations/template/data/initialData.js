@@ -7,6 +7,8 @@ import { BRANDING, METADATA_DEFAULTS } from '../../../config/index.js';
 
 const companyName = BRANDING.companyName || BRANDING.appName || '';
 const discom = BRANDING.discomName || 'DISCOM';
+// Only an https logo is used; without one the company name is printed instead.
+const logoUrl = /^https:\/\//i.test(BRANDING.logoUrl || '') ? BRANDING.logoUrl : '';
 
 // The three price options start as the first three configured panel brands.
 const tierNames = [0, 1, 2].map(i => (METADATA_DEFAULTS.module_brand || [])[i] || `Option ${i + 1}`);
@@ -21,6 +23,7 @@ export const INITIAL_QUOTATION = {
     cinNo: '',
     email: BRANDING.email || '',
     phone: BRANDING.phone || '',
+    logoUrl,
   },
 
   page1: {
@@ -110,13 +113,13 @@ export const INITIAL_QUOTATION = {
     otherChargesText:
       `* The 50% advance includes the ${discom} registration charges. If a customer cancels after the registration has been paid, the advance is refunded after deducting the ${discom} charges, with a receipt and account statement.`,
 
-    // Shown on the quotation only when filled in.
+    // Shown on the quotation only when the account number is filled in.
     bankDetails: {
-      accountName: '',
-      accountNumber: '',
-      bankName: '',
-      branchName: '',
-      ifscCode: '',
+      accountName: BRANDING.bankAccountName || '',
+      accountNumber: BRANDING.bankAccountNumber || '',
+      bankName: BRANDING.bankName || '',
+      branchName: BRANDING.bankBranch || '',
+      ifscCode: BRANDING.bankIfsc || '',
     },
   },
 
@@ -124,6 +127,6 @@ export const INITIAL_QUOTATION = {
     authorizedPartner: companyName,
     corporateOffice: BRANDING.address || '',
     branchOffice: '',
-    contact: [BRANDING.phone, BRANDING.email].filter(Boolean).join(' · '),
+    contact: [BRANDING.phone, BRANDING.email, BRANDING.website].filter(Boolean).join(' · '),
   },
 };

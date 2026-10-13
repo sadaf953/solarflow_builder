@@ -148,6 +148,7 @@ The client's own fresh Supabase project is set up by one idempotent script, foll
   There is **no `demo_profiles` table**. Every former `demo_profiles` reader uses `profiles`.
 - **`admin`**: the projects/customers table. It keeps all demo columns except `demo_session_id`, `demo_seed_key` and `demo_scenario_version`, and adds:
   - `custom_fields jsonb not null default '{}'`
+  - `discom_agreement boolean not null default false`
   - `google_drive_link, location_link`
   - `bom_data jsonb`, `bom_stock_issued_at`
   - `lead_creator_profile_id → profiles on delete set null`
@@ -176,9 +177,9 @@ The client's own fresh Supabase project is set up by one idempotent script, foll
 |---|---|
 | `move_stage(p_customer_id uuid, p_new_stage text, p_old_stage text, p_remark text default '')` | validates the stage against `app_settings.pipeline`; sets completed_at; logs activity |
 | `merge_custom_fields(p_customer_id uuid, p_values jsonb) returns jsonb` | `custom_fields = custom_fields || p_values`; keys with null value are removed |
-| metrics | `get_dashboard_metrics_scoped(...)`, `get_dashboard_metrics(...)`, `get_cpo_dashboard_metrics(...)` |
+| metrics | `get_dashboard_metrics_scoped(...)`, `get_dashboard_metrics(...)`, `get_cpo_dashboard_metrics(...)`; partner and dealer match the whole name ignoring case |
 | inventory | `record_inventory_movement(...)`, `bom_stock_document`, `get_inventory_bom_lines`, `set_bom_stock_quantity` |
-| delivery batches | `save_delivery_batch_atomic`, `delete_delivery_batch_atomic`, `update_delivery_batch_status_atomic` (same signatures as the demo) |
+| delivery batches | `save_delivery_batch_atomic`, `delete_delivery_batch_atomic`, `update_delivery_batch_status_atomic` (same signatures as the demo; a batch without a vendor keeps each project's installer) |
 
 **Security:**
 - Helper functions live in schema `solarflow_private` (security definer, `search_path=''`): `my_role()`, `is_active()`, `is_admin()`, `is_head_office()` (admin|sales), `current_cpo()`, `can_view_lead(uuid)`.
@@ -186,12 +187,15 @@ The client's own fresh Supabase project is set up by one idempotent script, foll
   - head office sees everything
   - CPO and its office2/agent2 see their own scope
   - agent/agent2 see their own leads (`lead_creator_profile_id = auth.uid()`) or their `channel_partner`/`sub_channel_partner` name
-  - vendor sees rows where `admin.vendor` matches their vendors row (`vendors.profile_id = auth.uid()` or the name match)
-- **profiles:** non-admins cannot change `user_type`, `status`, `channel_partner` or `parent_profile_id` (guard trigger).
+  - agent: leads they created or whose `channel_partner` equals their admin-set `profiles.channel_partner`; agent2: their own leads, or `sub_channel_partner` = their name within their channel partner (names can only be changed by an admin, or by a CPO for its own office)
+  - vendor sees rows where `admin.vendor` is the name of a vendors row linked to them (`vendors.profile_id = auth.uid()` only; admins link rows on the Operations page, and add_user links an unclaimed row on creation)
+- **profiles:** non-admins cannot change `name`, `user_type`, `role`, `status`, `email`, `channel_partner` or `parent_profile_id` (guard trigger; a CPO may rename its own office's logins). At least one active admin always remains.
+- **admin columns:** a guard trigger stops non-head-office logins changing payment, stock and trash columns (`vendor_quote`, `vendor_payment_status`, `vendor_paid_*`, `bom_stock_issued_at`, `deleted_at`, `delivery_batch_id`, `lead_creator_profile_id`); `delivery_status` may be changed only by head office and vendors.
+- **attribution:** triggers fill `calendar_events.created_by_name`, `team_chat_messages.sender_*` and a vendor's `unavailable` `vendor_name` from the caller's profile; linked customer ids must be visible to the writer; activity entries can only be logged against visible customers.
 - **Bootstrap:** trigger `on_auth_user_created` on `auth.users` runs `solarflow_private.handle_new_user()`.
   1. The first user whose email = `app_settings.owner_email`, or if that is blank the first user while no active admin exists, becomes the active `admin`.
   2. Users created by `add_user` (`app_metadata.created_via = 'add_user'`) take `user_type`, `channel_partner` and `parent_profile_id` from app_metadata.
-  3. Anyone else is created `inactive`.
+  3. Anyone else is created as user_type `pending`, `inactive` (no access; an admin chooses a role and activates them in Staff logins).
 - **Edge Function `add_user`:** actions `create | update_password | update_email | delete | set_status`.
   - It verifies the caller's JWT, then loads the caller's profile: the caller must be an active admin, or a CPO creating office2/agent2 under itself.
   - It refuses roles that are disabled in `app_roles`, writes the role into `app_metadata`, and restricts CORS to `ALLOWED_ORIGIN` if set.
@@ -219,6 +223,7 @@ Build every new screen from these. When you touch existing code, replace a hand-
 | `db.js` | `fetchAllPages`, `customerSource(isCpo)` |
 | `download.js` | `toCsv`, `downloadBlob` |
 | `lazy.js` | `lazyWithRetry`, `LazyBoundary` |
+| `env.js` | `jwtClaims`, `projectRef`, `supabaseEnvProblem` (pure; shared by the app, check-env and the builder) |
 | `metadata.js` | `useMetadataOptions(category)`, cached and invalidatable |
 
 ## 5. Ownership and conventions for agents

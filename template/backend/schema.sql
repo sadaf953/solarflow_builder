@@ -94,6 +94,7 @@ create table if not exists public.admin (
   delivery_batch_id text,
   delivery_status text default 'PENDING',
   digital_certificate boolean default false,
+  discom_agreement boolean not null default false,
   discom_inspection text,
   discom_submission jsonb default '{}'::jsonb,
   district text,
@@ -179,6 +180,8 @@ create table if not exists public.admin (
   warranty_card boolean default false,
   warranty_card_text text
 );
+-- Added after the first release; projects set up earlier get it on a re-run.
+alter table public.admin add column if not exists discom_agreement boolean not null default false;
 
 -- Dropdown lists (Operations page). Load with is_active = true, order by sort_order.
 create table if not exists public.metadata (
@@ -1155,7 +1158,8 @@ begin
     driver_name = p_batch->>'driver_name',
     driver_phone_number = p_batch->>'driver_phone',
     vehicle_number = p_batch->>'vehicle_number',
-    vendor = p_batch->>'vendor',
+    -- A batch without a vendor keeps each project's own installer.
+    vendor = coalesce(nullif(trim(p_batch->>'vendor'), ''), vendor),
     delivery_status = coalesce(p_batch->>'status', 'IN_TRANSIT'),
     updated_at = now()
   where id = any(selected);
@@ -1236,12 +1240,14 @@ end $$;
 -- ═══ Dashboard metrics and stage moves ══════════════════════════════════
 -- COMPLETED, LOST PROJECT and INSTALLATION STATUS are fixed stage ids.
 
+-- The partner and dealer filters match the whole name, ignoring case, as the
+-- Dashboard customer lists do, so the totals agree with the lists.
 create or replace function public.get_dashboard_metrics_scoped(p_channel_partner text default null, p_dealer text default null)
 returns jsonb language sql stable security invoker set search_path = '' as $$
   with rows as (
     select * from public.admin where deleted_at is null
-      and (nullif(p_channel_partner, '') is null or channel_partner = p_channel_partner)
-      and (nullif(p_dealer, '') is null or sub_channel_partner = p_dealer)
+      and (nullif(trim(p_channel_partner), '') is null or lower(channel_partner) = lower(trim(p_channel_partner)))
+      and (nullif(trim(p_dealer), '') is null or lower(sub_channel_partner) = lower(trim(p_dealer)))
   ), counts as (select stage, count(*) as n from rows group by stage)
   select jsonb_build_object(
     'totalProjects', count(*),
@@ -1588,6 +1594,15 @@ create trigger on_auth_user_app_metadata after update of raw_app_meta_data on au
   when (new.raw_app_meta_data->>'created_via' = 'add_user'
         and old.raw_app_meta_data->>'created_via' is distinct from 'add_user')
   execute function solarflow_private.handle_new_user();
+
+-- Earlier versions stored a sign-up as a switched-off Office login. One that
+-- is still exactly as the trigger wrote it (no creator, never updated, not
+-- made by add_user) becomes a sign-up waiting for approval. Any login someone
+-- has changed since, including a real Office login switched off, stays as it is.
+update public.profiles p set user_type = 'pending', role = 'Not set up'
+where p.user_type = 'sales' and p.role = 'Office' and p.status = 'inactive'
+  and p.created_by is null and p.updated_at = p.created_at
+  and not exists(select 1 from auth.users u where u.id = p.id and u.raw_app_meta_data->>'created_via' = 'add_user');
 
 -- Users that existed before this script ran, oldest first. Waits for the
 -- seed on a first run so the owner email is known.

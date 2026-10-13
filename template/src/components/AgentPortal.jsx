@@ -355,15 +355,17 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
             || (displayedStage === STAGE_IDS.METER_INSTALLATION && String(docType).includes('meter'));
         if (!allowed) {
             showAlert('Lead documents can only be added during the Leads and Registration stages.', { title: 'Upload not allowed', type: 'error' });
-            return;
+            return false;
         }
         const file = event.target.files?.[0];
-        if (!file || !selectedCust?.id) return;
+        if (!file || !selectedCust?.id) return false;
         try {
             await uploadDocument(file, selectedCust.id, docType, user?.id);
             setCustDocs(await getCustomerDocuments(selectedCust.id) || []);
+            return true;
         } catch (err) {
             showError('Upload failed', err, 'The document could not be uploaded.');
+            return false;
         }
     };
 

@@ -24,7 +24,7 @@ export function monthFilterValue(month, year, now = new Date()) {
         const [y, m] = current.split('-').map(Number);
         return m === 1 ? `${y - 1}-12` : `${y}-${String(m - 1).padStart(2, '0')}`;
     }
-    return /^\d{2}$/.test(month) ? `${year || current.slice(0, 4)}-${month}` : '';
+    return /^(0[1-9]|1[0-2])$/.test(month) ? `${year || current.slice(0, 4)}-${month}` : '';
 }
 
 /**
@@ -36,13 +36,15 @@ export function stageDateFilters(stageId, { year = '', month = '' } = {}, now = 
     const isLeads = stageId === STAGE_IDS.LEADS;
     const field = isLeads ? 'created_at' : 'registration_date';
     const ranges = [];
-    if (/^\d{4}$/.test(year)) {
+    const monthApplies = Boolean(month) && (isLeads || stageId === STAGE_IDS.REGISTRATION);
+    // 'This month' / 'Last month' already name a year, so the year filter steps aside.
+    if (/^\d{4}$/.test(year) && !(monthApplies && ['this-month', 'last-month'].includes(month))) {
         const next = Number(year) + 1;
         ranges.push(isLeads
             ? { start: `${year}-01-01T00:00:00+05:30`, end: `${next}-01-01T00:00:00+05:30` }
             : { start: `${year}-01-01`, end: `${next}-01-01` });
     }
-    if (month && (isLeads || stageId === STAGE_IDS.REGISTRATION)) {
+    if (monthApplies) {
         const bounds = getMonthBounds(monthFilterValue(month, year, now), isLeads);
         if (bounds) ranges.push(bounds);
     }

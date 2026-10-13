@@ -21,7 +21,7 @@ export const Page1: React.FC<Page1Props> = ({
   onOpenAssetSlot,
 }) => {
   const { company, page1, footer, assets } = data;
-  const bannerUrl = assets?.bannerUrl || (page1.showSchemeBanner ? `${import.meta.env.BASE_URL}banner.png` : '');
+  const bannerUrl = assets?.bannerUrl || (page1.showSchemeBanner ? `${import.meta.env.BASE_URL}banner.jpg` : '');
 
   const isFieldChanged = (key: string) => changedFields.has(key);
 

@@ -15,7 +15,7 @@ test('Lead Creation via Add Lead modal (direct admin insertion)', async () => {
         system_capacity_kwp: 3.3,
         payment_type: 'Loan',
         stage: 'LEADS',
-        channel_partner: 'Demo Aurora Solar',
+        channel_partner: 'Partner A',
         application_done_by: adminUser.name,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
@@ -45,8 +45,8 @@ test('Lead Creation via Quotation conversion', async () => {
         capacity_kw: 5.0,
         solar_panel_qty: 9,
         panel_wattage: 550,
-        solar_panel_make: 'SolarFlow Pro',
-        inverter_brand: 'DemoVolt',
+        solar_panel_make: 'Panel A',
+        inverter_brand: 'Inverter A',
         options: ['Option A', 'Option B', 'Option C'].map(brandName => ({
             brandName,
             baseValue: 220000,
@@ -92,7 +92,7 @@ test('Lead Creation via Dealer / Agent Portal (with channel partner scoping)', a
         name: 'Rajesh Solar Dealer',
         user_type: 'agent2',
         role: 'Dealer',
-        channel_partner: 'Demo Aurora Solar'
+        channel_partner: 'Partner A'
     };
 
     const dealerLead = {
@@ -111,7 +111,7 @@ test('Lead Creation via Dealer / Agent Portal (with channel partner scoping)', a
     const { data: created, error } = await client.from('admin').insert(dealerLead).select().single();
     assert.equal(error, null);
     assert.equal(created.customer_name, 'Bhavesh Shah');
-    assert.equal(created.channel_partner, 'Demo Aurora Solar');
+    assert.equal(created.channel_partner, 'Partner A');
     assert.equal(created.sub_channel_partner, 'Rajesh Solar Dealer');
     assert.equal(created.application_done_by, 'Rajesh Solar Dealer');
 
@@ -125,7 +125,6 @@ test('Lead Creation via Dealer / Agent Portal (with channel partner scoping)', a
 
 test('User Management: Profile ID is immutable anchor; name and email changes preserve lead ownership and relationships', async () => {
     const client = memoryClient();
-    client.state.tables.demo_profiles = client.state.tables.demo_profiles || [];
     const dealerProfileId = 'dealer-uuid-001';
 
     // 1. Initial dealer profile
@@ -135,10 +134,10 @@ test('User Management: Profile ID is immutable anchor; name and email changes pr
         email: 'initial.dealer@solarflow.example',
         user_type: 'agent2',
         role: 'Dealer',
-        channel_partner: 'Demo Aurora Solar',
+        channel_partner: 'Partner A',
         status: 'active'
     };
-    client.state.tables.demo_profiles.push(initialProfile);
+    client.state.tables.profiles.push(initialProfile);
 
     // 2. Dealer creates a lead tied to their Profile ID
     const lead = {
@@ -159,7 +158,7 @@ test('User Management: Profile ID is immutable anchor; name and email changes pr
     const updatedEmail = 'rajesh.new@solarflow.example';
 
     // Update by ID
-    const profileInTable = client.state.tables.demo_profiles.find(p => p.id === dealerProfileId);
+    const profileInTable = client.state.tables.profiles.find(p => p.id === dealerProfileId);
     assert.ok(profileInTable);
     profileInTable.name = updatedName;
     profileInTable.email = updatedEmail;
@@ -183,9 +182,7 @@ test('Load Test: High volume lead ingestion, sorting, filtering, and indexing pe
     const client = memoryClient();
     const BATCH_SIZE = 1000;
     const stages = ['LEADS', 'REGISTRATION', 'LOAN', 'MATERIAL ORDER', 'INSTALLATION STATUS', 'COMPLETED'];
-    const partners = ['Demo Aurora Solar', 'Surat Solar Hub', 'Baroda Green Energy'];
-
-    const startTime = performance.now();
+    const partners = ['Partner A', 'Partner B', 'Partner C'];
 
     // 1. Bulk insertion simulation
     for (let i = 1; i <= BATCH_SIZE; i++) {
@@ -208,7 +205,6 @@ test('Load Test: High volume lead ingestion, sorting, filtering, and indexing pe
         });
     }
 
-    const insertionDuration = performance.now() - startTime;
     assert.equal(client.state.tables.admin.length, BATCH_SIZE);
 
     // 2. Query Test: Sort by updated_at descending (latest first)
@@ -225,7 +221,7 @@ test('Load Test: High volume lead ingestion, sorting, filtering, and indexing pe
     // 3. Filtering Test: Filter by stage and channel partner
     const filterStart = performance.now();
     const filtered = client.state.tables.admin.filter(
-        r => r.stage === 'LEADS' && r.channel_partner === 'Demo Aurora Solar' && !r.deleted_at
+        r => r.stage === 'LEADS' && r.channel_partner === 'Partner A' && !r.deleted_at
     );
     const filterDuration = performance.now() - filterStart;
     assert.ok(filtered.length > 0);
@@ -240,12 +236,6 @@ test('Load Test: High volume lead ingestion, sorting, filtering, and indexing pe
     assert.equal(searchResults.length, 1);
     assert.equal(searchResults[0].id, 'lead-bulk-500');
     assert.ok(searchDuration < 15, `Search should take < 15ms, took ${searchDuration.toFixed(2)}ms`);
-
-    console.log(`\n--- Load Test Metrics (${BATCH_SIZE} Leads) ---`);
-    console.log(`• Ingestion time: ${insertionDuration.toFixed(2)}ms`);
-    console.log(`• Sorting by updated_at: ${sortDuration.toFixed(2)}ms`);
-    console.log(`• Multi-facet filtering: ${filterDuration.toFixed(2)}ms`);
-    console.log(`• Substring search: ${searchDuration.toFixed(2)}ms`);
 });
 
 test('Enterprise Scale Load Test: 5,000 customers pagination, search, and memory stability', async () => {
@@ -253,8 +243,6 @@ test('Enterprise Scale Load Test: 5,000 customers pagination, search, and memory
     const ENTERPRISE_SIZE = 5000;
     const stages = ['LEADS', 'REGISTRATION', 'LOAN', 'CASH', 'MATERIAL ORDER', 'MATERIAL INTEGRATION', 'MATERIAL DELIVERY', 'INSTALLATION STATUS', 'COMPLETED'];
     const cities = ['Surat', 'Ahmedabad', 'Vadodara', 'Rajkot', 'Bhavnagar', 'Gandhinagar'];
-
-    const startTime = performance.now();
 
     for (let i = 1; i <= ENTERPRISE_SIZE; i++) {
         client.state.tables.admin.push({
@@ -264,14 +252,13 @@ test('Enterprise Scale Load Test: 5,000 customers pagination, search, and memory
             city: cities[i % cities.length],
             system_capacity_kwp: 3 + (i % 10) * 0.5,
             stage: stages[i % stages.length],
-            channel_partner: i % 3 === 0 ? 'Demo Aurora Solar' : 'Surat Solar Hub',
+            channel_partner: i % 3 === 0 ? 'Partner A' : 'Partner B',
             updated_at: new Date(Date.now() - (ENTERPRISE_SIZE - i) * 5000).toISOString(),
             created_at: new Date(Date.now() - 86400000 * 60).toISOString(),
             deleted_at: null
         });
     }
 
-    const ingestionTime = performance.now() - startTime;
     assert.equal(client.state.tables.admin.length, ENTERPRISE_SIZE);
 
     // 1. Paginated chunks of 50 (first page load)
@@ -292,10 +279,5 @@ test('Enterprise Scale Load Test: 5,000 customers pagination, search, and memory
     assert.equal(matched.length, 1);
     assert.equal(matched[0].id, 'enterprise-cust-4999');
     assert.ok(searchDuration < 25, `Search across 5,000 records should take < 25ms, took ${searchDuration.toFixed(2)}ms`);
-
-    console.log(`\n--- Enterprise Scale Test (${ENTERPRISE_SIZE} Customers) ---`);
-    console.log(`• 5,000 customer ingestion: ${ingestionTime.toFixed(2)}ms`);
-    console.log(`• First page chunk (50 of 5,000) with sort: ${page0Duration.toFixed(2)}ms`);
-    console.log(`• Substring search across 5,000 items: ${searchDuration.toFixed(2)}ms`);
 });
 

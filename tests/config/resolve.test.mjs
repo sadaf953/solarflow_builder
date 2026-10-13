@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
     defaultClientConfig, resolveClientConfig, resolveFeaturesAndPipeline, validateClientConfig, resolveDropdowns,
-    keyFromLabel, slugify, isAllowedSheetUrl,
+    keyFromLabel, slugify, isAllowedSheetUrl, brandingErrors, isHttpsUrl,
 } from '../../template/src/config/resolve.js';
 import { FEATURE_REGISTRY } from '../../template/src/config/catalog/features.js';
 import { BUILTIN_STAGE_IDS } from '../../template/src/config/catalog/stages.js';
@@ -136,6 +136,44 @@ test('helpers for names, keys and sheet links', () => {
     assert.ok(isAllowedSheetUrl('https://contoso.sharepoint.com/:x:/g/abc'));
     assert.ok(!isAllowedSheetUrl('http://docs.google.com/spreadsheets/d/abc'));
     assert.ok(!isAllowedSheetUrl('https://evil.example.com/spreadsheets'));
+});
+
+test('company details for documents are optional and default to empty', () => {
+    const { branding } = defaultClientConfig();
+    for (const key of ['logoUrl', 'website', 'epcCode', 'bankAccountName', 'bankAccountNumber', 'bankName', 'bankBranch', 'bankIfsc']) {
+        assert.equal(branding[key], '', key);
+    }
+    assert.deepEqual(brandingErrors(branding), {});
+    assert.equal(resolveClientConfig(config({ branding: { companyName: 'Acme' } })).branding.bankIfsc, '', 'older configs get the new fields');
+});
+
+test('company details are validated: IFSC, https logo, lengths and text only', () => {
+    const withBranding = patch => config({ branding: { ...defaultClientConfig().branding, ...patch } });
+    const good = withBranding({
+        logoUrl: 'https://cdn.example.com/logo.png', website: 'www.example.com', epcCode: 'EPC-123',
+        bankAccountName: 'Acme Solar', bankAccountNumber: '001234567890', bankName: 'State Bank of India', bankBranch: 'Surat', bankIfsc: 'SBIN0001234',
+    });
+    assert.deepEqual(validateClientConfig(good), { errors: [], warnings: [] });
+
+    for (const bankIfsc of ['SBIN1001234', 'sbin0001234', 'SBIN000123', 'SB1N0001234']) {
+        assert.ok(brandingErrors({ bankIfsc }).bankIfsc, bankIfsc);
+        assert.ok(validateClientConfig(withBranding({ bankIfsc })).errors.some(message => /IFSC code must be 11 characters/.test(message)), bankIfsc);
+    }
+    assert.deepEqual(brandingErrors({ bankIfsc: 'HDFC0ABC123' }), {});
+
+    for (const logoUrl of ['http://example.com/logo.png', 'javascript:alert(1)', 'data:image/png;base64,AAAA', 'logo.png']) {
+        assert.match(brandingErrors({ logoUrl }).logoUrl || '', /https:\/\//, logoUrl);
+    }
+    assert.ok(isHttpsUrl('https://example.com/a.png') && !isHttpsUrl('ftp://example.com') && !isHttpsUrl(''));
+
+    const long = validateClientConfig(withBranding({ epcCode: 'x'.repeat(61), address: 'y'.repeat(301), gstin: 'Z'.repeat(16) })).errors;
+    for (const pattern of [/EPC code must be at most 60/, /Address must be at most 300/, /GSTIN must be at most 15/]) assert.ok(long.some(message => pattern.test(message)), String(pattern));
+    assert.match(brandingErrors({ bankAccountNumber: 1234 }).bankAccountNumber, /Account number must be text/);
+    assert.ok(validateClientConfig(withBranding({ companyName: 42 })).errors.some(message => /companyName/.test(message)));
+
+    const noAccount = validateClientConfig(withBranding({ bankName: 'State Bank of India' }));
+    assert.deepEqual(noAccount.errors, []);
+    assert.ok(noAccount.warnings.some(message => /until the account number is filled in/.test(message)));
 });
 
 test('serialized config round-trips through a module import', async () => {

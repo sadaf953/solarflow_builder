@@ -87,8 +87,8 @@ async function embedImage(pdf, source) {
     try { return await pdf.embedPng(bytes); } catch { return await pdf.embedJpg(bytes); }
 }
 
-// The company's EPC code and bank details are not part of the client config,
-// so those lines are printed blank for the vendor to fill in by hand.
+// The EPC code and bank details come from the client's company details;
+// any left blank in the config are printed blank to fill in by hand.
 export async function createFeasibilityPdf(data, { stampUrl = null, highlightMapped = false } = {}) {
     const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
     const pdf = await PDFDocument.create();
@@ -122,6 +122,11 @@ export async function createFeasibilityPdf(data, { stampUrl = null, highlightMap
         }
         page.drawText(shown, { x, y, size: 10, font: bold, color: black, maxWidth: 470 - x });
     };
+    // One line inside a printed box, shrunk to fit its width.
+    const boxed = (page, value, x, y, width) => {
+        const shown = pdfSafe(value);
+        if (shown) page.drawText(shown, { x, y, size: Math.min(10, width / bold.widthOfTextAtSize(shown, 1)), font: bold, color: black });
+    };
 
     const p1 = pdf.addPage(A4);
     const title1 = 'Residential Roof Top Solar Installation Vendor';
@@ -137,15 +142,17 @@ export async function createFeasibilityPdf(data, { stampUrl = null, highlightMap
         ['7. District of Installation:', data.district, true], ['8. State of Installation:', data.state, true],
         ['9. Pin Code of Installation:', data.pincode, true], ['10. OEM Name:', '', false],
         ['11. Channel Partner, if any:', '', false], ['12. EPC Contractor Address:', clean(BRANDING.address).replace(/\s*\n\s*/g, ', '), false],
-        ['13. EPC:', '', false]
+        ['13. EPC:', BRANDING.epcCode, false]
     ];
     let y = 742;
     rows.forEach(([label, value, mapped]) => { field(p1, label, value, y, mapped); y -= 25; });
     p1.drawText('14. EPC Contractor Bank Details:', { x: 56, y, size: 10, font: regular }); y -= 23;
     p1.drawText('A/c No :-', { x: 72, y, size: 10, font: regular });
     p1.drawRectangle({ x: 126, y: y - 6, width: 135, height: 20, borderWidth: 1, borderColor: black });
+    boxed(p1, BRANDING.bankAccountNumber, 131, y, 125);
     p1.drawText('IFSC CODE :-', { x: 274, y, size: 10, font: regular });
-    p1.drawRectangle({ x: 351, y: y - 6, width: 128, height: 20, borderWidth: 1, borderColor: black }); y -= 25;
+    p1.drawRectangle({ x: 351, y: y - 6, width: 128, height: 20, borderWidth: 1, borderColor: black });
+    boxed(p1, BRANDING.bankIfsc, 356, y, 118); y -= 25;
     field(p1, '14. RTS Capacity in KW Applied:', data.capacity, y, true); y -= 25;
     field(p1, '15. Actual RTS Capacity to be installed:', data.capacity, y, true); y -= 25;
     field(p1, '16. Is the vendor registered in MNRE Portal:', 'Yes / No', y); y -= 18;
@@ -188,7 +195,7 @@ export async function createFeasibilityPdf(data, { stampUrl = null, highlightMap
     const p3 = pdf.addPage(A4);
     p3.drawText('Site Photos:', { x: 56, y: 790, size: 15, font: bold });
     p3.drawLine({ start: { x: 56, y: 787 }, end: { x: 56 + bold.widthOfTextAtSize('Site Photos:', 15), y: 787 }, thickness: 1 });
-    p3.drawText('EPC Code: ________________________', { x: 56, y: 105, size: 9, font: regular });
+    p3.drawText(`EPC Code: ${pdfSafe(BRANDING.epcCode) || '________________________'}`, { x: 56, y: 105, size: 9, font: regular });
     p3.drawText('Authorised Signatory of the vendor with Stamp', { x: 315, y: 82, size: 9, font: bold });
     footer(p3, 3);
     return new Blob([await pdf.save()], { type: 'application/pdf' });

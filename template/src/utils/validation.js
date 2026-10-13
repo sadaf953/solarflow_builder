@@ -77,6 +77,3 @@ export const leadSchema = {
         return result.data;
     },
 };
-
-/** @deprecated Use leadSchema. */
-export const demoLeadSchema = leadSchema;

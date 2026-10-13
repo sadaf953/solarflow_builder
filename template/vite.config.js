@@ -10,14 +10,19 @@ const root = fileURLToPath(new URL('.', import.meta.url))
 function contentSecurityPolicy(supabaseUrl, dev) {
   let origin = ''
   try { origin = new URL(supabaseUrl).origin } catch { /* not configured yet */ }
+  let logoOrigin = ''
+  try {
+    const logo = new URL(clientConfig.branding?.logoUrl || '')
+    if (logo.protocol === 'https:') logoOrigin = logo.origin
+  } catch { /* no logo */ }
   const socket = origin.replace(/^http/, 'ws')
   return [
     "default-src 'self'",
-    `connect-src 'self' ${origin} ${socket}${dev ? ' ws://127.0.0.1:* ws://localhost:*' : ''}`,
+    `connect-src 'self' ${origin} ${socket}${logoOrigin && logoOrigin !== origin ? ` ${logoOrigin}` : ''}${dev ? ' ws://127.0.0.1:* ws://localhost:*' : ''}`,
     `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''}`,
     "worker-src 'self' blob:",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    `img-src 'self' ${origin} data: blob:`,
+    `img-src 'self' ${origin}${logoOrigin && logoOrigin !== origin ? ` ${logoOrigin}` : ''} data: blob:`,
     "font-src 'self' data: https://fonts.gstatic.com",
     "frame-src 'self' blob:",
     "object-src 'none'",

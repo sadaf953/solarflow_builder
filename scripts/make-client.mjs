@@ -21,6 +21,7 @@ export function makeClient({ submissionPath, outDir = './client-zips', slug, own
         schemaSql: readFileSync(join(TEMPLATE_DIR, 'backend', 'schema.sql'), 'utf8'),
         submission: parsed.submission,
         adminOverrides: parsed.adminOverrides,
+        branding: parsed.branding,
         slug: slug ?? parsed.slug,
         ownerEmail: ownerEmail ?? parsed.ownerEmail,
         generatedAt,

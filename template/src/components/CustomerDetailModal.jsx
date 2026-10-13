@@ -304,10 +304,11 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
     // ── Permissions: decided by the login type only ──────────────────────────
     const userType = user?.userType;
     const isAdmin = userType === 'admin';
-    const isOffice = userType === 'sales';
+    // Head office: the only logins the database lets delete documents or use Trash.
+    const isHeadOffice = isAdmin || userType === 'sales';
     const isChannelPartnerManager = userType === 'office2';
     const isChannelPartnerOfficeOrManager = userType === 'channel_partner_office' || isChannelPartnerManager;
-    const canDeleteDocs = isAdmin || isOffice;
+    const canDeleteDocs = isHeadOffice;
     const isCompleted = customer.stage === STAGE_IDS.COMPLETED;
     const [adminUnlocked, setAdminUnlocked] = useState(false);
     // Frozen for ALL users when completed. Admin can temporarily unlock.
@@ -415,68 +416,59 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
         }
     }, [customer?.id]);
 
-    const handleFileUpload = async (e, docType = null, replacingDocId = null) => {
-        const rawFile = e.target.files?.[0];
-        if (!rawFile) return;
-
-        if (e.target) e.target.value = '';
-
-        let file = rawFile;
-        if (showImageCropper) {
-            file = await showImageCropper(rawFile, { title: `Crop & Adjust ${getDocTypeLabel(docType) || 'Document'}` });
-            if (!file) return; // User cancelled upload
-        }
-
+    // Stores one file as a document of `docType` and resolves true once it is
+    // saved. With replaceExisting, the older documents of that type are removed
+    // afterwards, so a failed upload never loses them. Checklist items crop
+    // the image and remove the file they replace themselves.
+    const storeDocument = async (file, docType = null, { replaceExisting = false } = {}) => {
+        if (!file) return false;
         setUploading(true);
         try {
-            // Upload first; delete the old file only once the new one exists.
             const newDoc = await uploadDocument(file, customer.id, docType, user?.id);
-            if (newDoc) {
-                const supersededDocs = replacingDocId
-                    ? documents.filter(d => d.id === replacingDocId)
-                    : (docType ? documents.filter(d => d.doc_type === docType && d.id !== newDoc.id) : []);
-                for (const oldDoc of supersededDocs) {
-                    try {
-                        await deleteDocument(oldDoc.id, oldDoc.storage_path);
-                    } catch (delErr) {
-                        // The new file is safely stored; a stale old row is a tidiness problem, not data loss.
-                        console.warn('New document saved, but removing the previous one failed:', delErr);
-                    }
-                }
-                setDocuments(prev => [
-                    newDoc,
-                    ...prev.filter(d => replacingDocId ? d.id !== replacingDocId : (docType ? d.doc_type !== docType : true))
-                ]);
-                getViewUrl(newDoc.storage_path).then(url => {
-                    if (url) urlCacheRef.current[newDoc.storage_path] = url;
-                });
-                // Tick the matching checklist column. onUpdate resolves false on
-                // failure, so untick and tell the user if it was refused.
-                const flagColumn = docType ? DOC_TYPE_FLAG_COLUMN[docType] : null;
-                if (flagColumn) {
-                    setEditData(prev => ({ ...prev, [flagColumn]: true }));
-                    const flagOk = await onUpdate(customer.id, { [flagColumn]: true });
-                    if (flagOk === false) {
-                        setEditData(prev => ({ ...prev, [flagColumn]: false }));
-                        showAlert(
-                            `The document uploaded, but its checklist tick could not be saved. Please tick "${getDocTypeLabel(docType)}" manually.`,
-                            { title: 'Checklist not updated', type: 'warning' }
-                        );
-                    }
-                }
-                logActivity(user.id, 'update', `${customer.customer_name}: Uploaded document (${file.name})`, '', customer.id).catch(console.error);
-                fetchLogs();
+            if (!newDoc) return false;
+            const removedIds = new Set();
+            const superseded = replaceExisting && docType ? documents.filter(d => d.doc_type === docType && d.id !== newDoc.id) : [];
+            for (const oldDoc of superseded) {
+                const res = await deleteDocument(oldDoc.id, oldDoc.storage_path);
+                // The new file is stored; an old one left behind is untidy, not data loss.
+                if (res?.ok) removedIds.add(oldDoc.id);
+                else console.warn('New document saved, but removing the previous one failed:', res?.error);
             }
-            return Boolean(newDoc);
+            setDocuments(prev => [newDoc, ...prev.filter(d => !removedIds.has(d.id))]);
+            getViewUrl(newDoc.storage_path).then(url => {
+                if (url) urlCacheRef.current[newDoc.storage_path] = url;
+            });
+            // Tick the matching checklist column, and say so if that was refused.
+            const flagColumn = docType ? DOC_TYPE_FLAG_COLUMN[docType] : null;
+            if (flagColumn && await handleSectionUpdate(customer.id, { [flagColumn]: true }) === false) {
+                showAlert(
+                    `The document uploaded, but its checklist tick could not be saved. Please tick "${getDocTypeLabel(docType)}" manually.`,
+                    { title: 'Checklist not updated', type: 'warning' }
+                );
+            }
+            logActivity(user.id, 'update', `${customer.customer_name}: Uploaded document (${file.name})`, '', customer.id).catch(console.error);
+            fetchLogs();
+            return true;
         } catch (err) {
             console.error('Document upload failed:', err);
             showAlert('Document upload failed: ' + (err.message || 'Please check your connection and try again.'), { type: 'error' });
             return false;
         } finally {
             setUploading(false);
-            if (e.target) e.target.value = '';
         }
     };
+
+    // The Documents tab's own file input: crop an image, then store it.
+    const handleFileUpload = async (e) => {
+        const rawFile = e.target.files?.[0];
+        if (e.target) e.target.value = '';
+        if (!rawFile) return false;
+        const file = await showImageCropper(rawFile, { title: 'Crop & Adjust Document' });
+        return file ? storeDocument(file) : false;
+    };
+
+    // For the stage tabs: event.target.files[0] arrives ready to store.
+    const handleTabUpload = (e, docType = null, options) => storeDocument(e.target.files?.[0], docType, options);
 
     const handleDownloadDoc = async (doc) => {
         const url = await getDownloadUrl(doc.storage_path, doc.file_name);
@@ -937,25 +929,16 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
         activeTab, customer: savedDataRef.current, editData, setEditData: handleEditDataChange, handleChange,
         onCustomFieldChange: handleCustomFieldChange,
         isEditable, editingSection, setEditingSection, channel_partners, subAgents, isAdmin,
-        isOffice, canDeleteDocs, meta, user,
+        canDeleteDocs, meta, user,
         isRegChecklistDirty: isChecklistDirty(REG_CHECKLIST_FIELDS),
         handleSaveRegChecklist: () => saveChecklist(REG_CHECKLIST_FIELDS, 'Registration checklist'),
         isOperationalChecklistDirty: isChecklistDirty(OPERATIONAL_CHECKLIST),
         handleSaveOperationalChecklist: () => saveChecklist(OPERATIONAL_CHECKLIST, 'Operational checklist'),
         documents,
         uploading,
-        // Several names for the same handlers: tabs still use different ones.
-        onFileUpload: handleFileUpload,
-        onUpload: handleFileUpload,
+        onFileUpload: handleTabUpload,
         onFileDelete: handleDeleteDoc,
-        onDelete: handleDeleteDoc,
-        onDeleteDocument: handleDeleteDoc,
         onFilePreview: handlePreviewDoc,
-        onPreview: handlePreviewDoc,
-        onViewDocument: handlePreviewDoc,
-        onDownloadDocument: handleDownloadDoc,
-        onFileDownload: handleDownloadDoc,
-        onDownload: handleDownloadDoc,
         onUpdateRemark: handleUpdateDocRemark,
         onUpdate: handleSectionUpdate, logActivity, fetchLogs, saving, setSaving, handleAdvanceStage,
         saveBomRef, onDirty: () => setIsFormDirty(true), onGenerateAgreement: () => handleGenerateAgreement(false),
@@ -1081,7 +1064,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
                                 {adminUnlocked ? <><Lock size={12} /> Re-lock</> : <><Unlock size={12} /> Unlock to Edit</>}
                             </button>
                         )}
-                        {isOn('trash') && isAdmin && onDelete && (
+                        {isOn('trash') && isHeadOffice && onDelete && (
                             <button type="button" onClick={handleMoveToTrash} aria-label="Move to Trash" title="Move to Trash" className="p-2 text-white/30 hover:text-red-400"><Trash2 size={18} /></button>
                         )}
                         <button type="button" aria-label="Close" onClick={async () => {
@@ -1330,7 +1313,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
                         autoAdd={agreement.autoAdd}
                         onAddToDocuments={async (file) => {
                             const replacing = documents.some(doc => doc?.doc_type === 'discom_agreement');
-                            const uploaded = await handleFileUpload({ target: { files: [file], value: '' } }, 'discom_agreement');
+                            const uploaded = await storeDocument(file, 'discom_agreement', { replaceExisting: true });
                             if (uploaded) {
                                 setAgreement(null);
                                 showAlert(

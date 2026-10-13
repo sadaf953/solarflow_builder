@@ -22,16 +22,11 @@ test('daily godown report uses India dates and preserves opening plus in minus o
  assert.deepEqual(dailyStock(items,moves,'2026-09-16'),[{id:'a',opening:90,incoming:5,outgoing:2,closing:93},{id:'b',opening:0,incoming:0,outgoing:0,closing:0}]);
  assert.equal(dailyStock(items,moves,'2026-09-14')[0].opening,100);
 });
-test('reference partner, staff and office labels are explicitly fictional or common names',()=>{
- const indianNames = new Set(['Ravi', 'Nikhil', 'Suresh', 'Amit', 'Priya']);
- for(const category of ['channel_partner','registration_by']){
-  assert.ok(ref.metadata[category].length>0);
-  for(const label of ref.metadata[category])assert.ok(label.startsWith('Demo '));
- }
- assert.ok(ref.metadata.integration_by.length>0);
- for(const label of ref.metadata.integration_by)assert.ok(label.startsWith('Demo ') || indianNames.has(label));
+test('reference BOMs keep only item columns: no dropdown rows or staff names',()=>{
+ assert.equal(ref.metadata,undefined);
  for(const designs of Object.values(ref.scenarios))for(const design of designs){
-  for(const field of ['paper_prepared_by','material_loaded_by'])if(design[field])assert.ok(design[field].startsWith('Demo ') || indianNames.has(design[field]));
-  for(const line of design.items)if(line.integration_by)assert.ok(line.integration_by.startsWith('Demo ') || indianNames.has(line.integration_by));
+  assert.deepEqual(Object.keys(design).sort(),['items','label','panel_count']);
+  assert.ok(design.items.length>0);
+  for(const line of design.items)assert.deepEqual(Object.keys(line).sort(),['product_name','quantity','sr_no','uom']);
  }
 });

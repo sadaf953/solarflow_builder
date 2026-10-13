@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { supabase, isSupabaseConfigured, supabaseSetupProblem } from './supabase';
 import { BRANDING, isOn, isRoleEnabled } from './config/index.js';
 import LoginScreen from './components/LoginScreen';
+import OfflineBanner from './components/OfflineBanner';
 const PasswordRecoveryModal = lazy(() => import('./components/PasswordRecoveryModal'));
 const TeamChatDrawer = lazy(() => import('./components/TeamChatDrawer'));
 const Dashboard = lazy(() => import('./components/Dashboard'));
@@ -11,11 +12,15 @@ const StampPortal = isRoleEnabled('stamp') ? lazy(() => import('./components/Sta
 
 const Loader = () => <div className="p-12 text-center text-stone-500" role="status">Opening your workspace…</div>;
 
+const DASHBOARD_TYPES = new Set(['admin', 'sales', 'channel_partner_office', 'office2']);
+
+// null for 'pending' and any login type this app does not know.
 function portalFor(userType) {
+    if (DASHBOARD_TYPES.has(userType)) return Dashboard;
     if (userType === 'agent' || userType === 'agent2') return AgentPortal;
     if (userType === 'vendor') return VendorPortal;
-    if (userType === 'stamp' && StampPortal) return StampPortal;
-    return Dashboard;
+    if (userType === 'stamp') return StampPortal;
+    return null;
 }
 
 function Notice({ title, children, action }) {
@@ -64,8 +69,12 @@ function clearSessionKeys() {
 }
 
 export default function App() {
-    if (!isSupabaseConfigured) return <ConnectSupabase />;
-    return <Workspace />;
+    return (
+        <>
+            <OfflineBanner />
+            {isSupabaseConfigured ? <Workspace /> : <ConnectSupabase />}
+        </>
+    );
 }
 
 function Workspace() {
@@ -87,6 +96,7 @@ function Workspace() {
                 return null;
             }
             await supabase.auth.signOut();
+            if (profile?.user_type === 'pending') return 'Your login is waiting for approval. An admin will give you access soon.';
             return profile
                 ? 'This login has been switched off. Ask your administrator to turn it back on.'
                 : 'This email has no account in this workspace yet. Ask your administrator to add you.';
@@ -138,16 +148,25 @@ function Workspace() {
 
     if (!user) return <>{passwordModal}<LoginScreen notice={notice} onSignedIn={loadUser} /></>;
 
+    const signOut = <button type="button" onClick={logout} className="sf-btn-primary min-h-11">Sign out</button>;
+
     if (!isRoleEnabled(user.userType)) {
         return (
-            <Notice title="Your login type is not enabled"
-                action={<button type="button" onClick={logout} className="sf-btn-primary min-h-11">Sign out</button>}>
+            <Notice title="Your login type is not enabled" action={signOut}>
                 <p>Logins of type “{user.role || user.userType}” are switched off for {BRANDING.companyName}. Ask your administrator to change your login type.</p>
             </Notice>
         );
     }
 
     const Portal = portalFor(user.userType);
+    if (!Portal) {
+        return (
+            <Notice title="Waiting for access" action={signOut}>
+                <p>An admin needs to approve your login before you can use {BRANDING.appName}. Once they have, sign out and sign in again.</p>
+            </Notice>
+        );
+    }
+
     return (
         <>
             {passwordModal}

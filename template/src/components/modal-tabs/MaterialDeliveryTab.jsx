@@ -1,12 +1,12 @@
 import { useEffect, useId, useState } from 'react';
-import { AlertTriangle, Building2, CalendarDays, Edit3, IndianRupee, Printer, Truck, X } from 'lucide-react';
+import { AlertTriangle, Building2, CalendarDays, IndianRupee, Printer, Truck } from 'lucide-react';
 import { supabase } from '../../supabase';
 import { STAGE_IDS, isOn, stageLabel } from '../../config/index.js';
 import { formatDate, todayIST } from '../../lib/format.js';
 import { LazyBoundary, lazyWithRetry } from '../../lib/lazy.js';
-import { Field, FieldRenderer, SectionCard, Select } from '../../ui/index.js';
+import { Field, FieldList, FieldRenderer, SectionCard, Select } from '../../ui/index.js';
 import { useGlobalPopup } from '../GlobalPopup';
-import { EditableDetailItem, fetchVendorNames } from './shared';
+import { EditableDetailItem, EditToggle, fetchVendorNames } from './shared';
 import useStageSave from './useStageSave';
 
 const DeliveryNoteModal = lazyWithRetry(() => import('./DeliveryNoteModal.jsx'));
@@ -32,6 +32,15 @@ const DETAIL_FIELDS = [
     { field: 'driver_phone_number', label: 'Driver phone' },
 ];
 const QUOTE_FIELD = { key: 'vendor_quote', label: 'Commission / vendor quote', type: 'money' };
+const PAYMENT_FIELDS = [QUOTE_FIELD, { key: 'vendor_payment_status', label: 'Vendor payment' }];
+// Only head office may change the delivery status, vendor quote and vendor
+// payment; the database refuses anyone else (the installer sets the status
+// from their own portal).
+const HEAD_OFFICE = new Set(['admin', 'sales']);
+
+const paidText = record => (record.vendor_paid_date
+    ? `Paid on ${formatDate(record.vendor_paid_date, 'short')}${record.vendor_paid_by ? ` by ${record.vendor_paid_by}` : ''}`
+    : undefined);
 
 // The "unavailable" calendar entry that covers `day` for this vendor, if any.
 async function findVendorUnavailability(vendorName, day) {
@@ -68,14 +77,15 @@ export default function MaterialDeliveryTab({
     const baseId = useId();
     const save = useStageSave({ customer, user, onUpdate, logActivity, fetchLogs, setSaving });
     const { showConfirm } = useGlobalPopup();
-    const isAdmin = user?.userType === 'admin';
+    const isHeadOffice = HEAD_OFFICE.has(user?.userType);
     const batchesOn = isOn('deliveryBatches');
     const calendarOn = isOn('calendar');
     const commissionOn = isOn('installationCommission') || isOn('vendorCommission');
     // With truck deliveries on, the delivery details are entered there, which
-    // also keeps delivery_batches.project_ids in step; only the admin may
+    // also keeps delivery_batches.project_ids in step; only head office may
     // override them here.
-    const canEditDelivery = isEditable && (!batchesOn || isAdmin);
+    const canEditDelivery = isEditable && (!batchesOn || isHeadOffice);
+    const canEditHeadOfficeFields = isEditable && isHeadOffice;
     const editing = editingSection === SECTION_ID;
 
     const [vendors, setVendors] = useState([]);
@@ -180,59 +190,60 @@ export default function MaterialDeliveryTab({
                 icon={Truck}
                 actions={(
                     <>
-                        {batchesOn && (
+                        {batchesOn && (canEditHeadOfficeFields ? (
                             <select
                                 aria-label="Delivery status"
-                                disabled={!canEditDelivery || saving}
+                                disabled={saving}
                                 value={deliveryStatus}
                                 onChange={event => changeStatus(event.target.value)}
                                 className={`min-h-11 rounded-xl border px-2.5 text-xs font-bold disabled:cursor-not-allowed ${STATUS_STYLES[deliveryStatus] || STATUS_STYLES.PENDING}`}
                             >
                                 {STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
                             </select>
-                        )}
-                        {canEditDelivery && (
-                            <button
-                                type="button"
-                                onClick={() => setEditingSection?.(editing ? null : SECTION_ID)}
-                                aria-label={editing ? 'Stop editing delivery details' : 'Edit delivery details'}
-                                aria-pressed={editing}
-                                className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-100 hover:text-orange-600"
-                            >
-                                {editing ? <X size={16} aria-hidden="true" /> : <Edit3 size={14} aria-hidden="true" />}
-                            </button>
-                        )}
+                        ) : (
+                            <span className={`inline-flex min-h-11 items-center rounded-xl border px-2.5 text-xs font-bold ${STATUS_STYLES[deliveryStatus] || STATUS_STYLES.PENDING}`}>
+                                <span className="sr-only">Delivery status: </span>
+                                {STATUS_OPTIONS.find(option => option.value === deliveryStatus)?.label || deliveryStatus}
+                            </span>
+                        ))}
+                        {canEditDelivery && <EditToggle id={SECTION_ID} label="delivery details" editingSection={editingSection} setEditingSection={setEditingSection} />}
                     </>
                 )}
             >
-                {batchesOn && !isAdmin && (
+                {batchesOn && !isHeadOffice && (
                     <p className="text-[11px] font-medium text-stone-500">Delivery details are filled in from Truck deliveries.</p>
                 )}
 
-                {isAdmin && commissionOn && (
+                {commissionOn && (canEditHeadOfficeFields ? (
                     <div className="grid grid-cols-1 gap-4 rounded-2xl border border-stone-100 bg-stone-50/60 p-3 sm:grid-cols-2">
                         <FieldRenderer
                             id={`${baseId}-quote`}
                             field={QUOTE_FIELD}
                             value={editData.vendor_quote}
-                            disabled={!isEditable}
                             onChange={value => setEditData(prev => ({ ...prev, vendor_quote: value }))}
                         />
                         <Field
                             label={<span className="inline-flex items-center gap-1"><IndianRupee size={12} aria-hidden="true" /> Vendor payment</span>}
                             htmlFor={`${baseId}-paid`}
-                            hint={editData.vendor_paid_date ? `Paid on ${formatDate(editData.vendor_paid_date, 'short')}${editData.vendor_paid_by ? ` by ${editData.vendor_paid_by}` : ''}` : undefined}
+                            hint={paidText(editData)}
                         >
                             <Select
                                 id={`${baseId}-paid`}
                                 options={[{ value: 'Pending', label: 'Unpaid' }, { value: 'Paid', label: 'Paid' }]}
-                                disabled={!isEditable}
                                 value={editData.vendor_payment_status === 'Paid' ? 'Paid' : 'Pending'}
                                 onChange={event => setPaymentStatus(event.target.value)}
                             />
                         </Field>
                     </div>
-                )}
+                ) : (
+                    <FieldList
+                        fields={PAYMENT_FIELDS}
+                        record={editData}
+                        getValue={(record, field) => (field.key === 'vendor_quote'
+                            ? record.vendor_quote
+                            : record.vendor_payment_status === 'Paid' ? (paidText(record) || 'Paid') : 'Unpaid')}
+                    />
+                ))}
 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-5">
                     {DETAIL_FIELDS.map(({ field, label, type }) => (

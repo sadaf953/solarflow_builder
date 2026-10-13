@@ -11,6 +11,10 @@ export function stageMoveProblem(record, newStage) {
         return { title: 'Stage not in use', message: `${stageLabel(newStage)} is not one of your pipeline stages.` };
     }
     if (target.parking) return null;
+    // A parked project resumes into the pipeline; it cannot jump straight to the end.
+    if (STAGE_BY_ID[record?.stage]?.parking && target.terminal) {
+        return { title: 'Resume the project first', message: `Move this customer back to a pipeline stage before marking it ${target.label}.` };
+    }
     if (!isStageApplicable(target, record)) {
         return {
             title: 'Stage does not apply',
@@ -28,5 +32,8 @@ export function stageMoveProblem(record, newStage) {
     };
 }
 
-/** Stages offered in the card's override menu: those that apply to this customer, plus the one it is in. */
-export const overrideStages = record => PRIMARY_STAGES.filter(stage => stage.id === record?.stage || isStageApplicable(stage, record));
+/** Stages offered in the card's override menu: those that apply to this customer, plus the one it is in. A parked project is not offered the end stages. */
+export const overrideStages = record => {
+    const parked = Boolean(STAGE_BY_ID[record?.stage]?.parking);
+    return PRIMARY_STAGES.filter(stage => stage.id === record?.stage || (isStageApplicable(stage, record) && !(parked && stage.terminal)));
+};

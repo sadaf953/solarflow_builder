@@ -1,9 +1,9 @@
-import { User, ClipboardList, Edit3, X } from 'lucide-react';
-import { EditableDetailItem, CheckboxRemarkItem } from './shared';
+import { User, ClipboardList } from 'lucide-react';
+import { EditableDetailItem, CheckboxRemarkItem, EditToggle } from './shared';
 import { useGlobalPopup } from '../GlobalPopup';
 import { calculateSystemCapacityKwp } from '../../utils/capacity';
 import { DOC_TYPE_LABELS } from '../../constants';
-import { documentMode, dropdownOptions, isOn } from '../../config/index.js';
+import { dropdownOptions, isOn, paymentTypeOptions } from '../../config/index.js';
 import { Field, SectionCard, Select } from '../../ui/index.js';
 
 // Lead documents; the identity and property papers are not collected from cash customers.
@@ -17,11 +17,6 @@ const LEAD_DOCUMENTS = [
     { field: 'bank_details', label: 'Bank Details' },
     { field: 'extra_docs', label: 'Extra Documents' },
 ];
-
-// Only the payment routes this client tracks (Loan and Cash stages).
-const PAYMENT_TYPES = [['Loan', 'loanTracking'], ['Cash', 'cashPayments']];
-const enabledPaymentTypes = PAYMENT_TYPES.filter(([, feature]) => isOn(feature)).map(([label]) => label);
-const PAYMENT_TYPE_OPTIONS = enabledPaymentTypes.length ? enabledPaymentTypes : PAYMENT_TYPES.map(([label]) => label);
 
 const showPartnerField = isOn('channelPartners') || isOn('cpos');
 const showDealerField = isOn('dealers');
@@ -39,15 +34,11 @@ export default function LeadsTab({
     isEditable,
     isRegChecklistDirty,
     handleSaveRegChecklist,
+    canDeleteDocs = false,
     documents = [],
     onFileUpload,
-    onUpload,
-    onViewDocument,
     onFilePreview,
-    onPreview,
-    onDeleteDocument,
     onFileDelete,
-    onDelete,
     onUpdateRemark,
 }) {
     const { showAlert } = useGlobalPopup();
@@ -61,11 +52,6 @@ export default function LeadsTab({
         handleChange('system_capacity_kwp', String(kwp));
     };
 
-    const filesOn = documentMode() !== 'checklist';
-    const handlePreview = onPreview || onFilePreview || onViewDocument;
-    const handleDelete = onDelete || onFileDelete || onDeleteDocument;
-    const handleUpload = onUpload || onFileUpload;
-    const canDeleteDocs = user?.userType === 'admin' || user?.userType === 'sales';
     // Agent 2 records always belong to that agent, so the field is filled from
     // their account and locked rather than being an optional free choice.
     const isAgent2 = user?.userType === 'agent2';
@@ -74,30 +60,13 @@ export default function LeadsTab({
     const isEditingInfo = editingSection === 'cus';
     const paymentType = String(editData.payment_type || '').trim().toLowerCase();
 
-    const toggleInfoEditing = () => {
-        setEditingSection?.(isEditingInfo ? null : 'cus');
-        if (!isEditingInfo) {
-            setTimeout(() => document.getElementById('section-cus')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
-        }
-    };
-
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
             <SectionCard
                 id="section-cus"
                 title="Customer Info"
                 icon={User}
-                actions={isEditable && (
-                    <button
-                        type="button"
-                        onClick={toggleInfoEditing}
-                        aria-pressed={isEditingInfo}
-                        aria-label={isEditingInfo ? 'Stop editing customer info' : 'Edit customer info'}
-                        className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-100 hover:text-amber-600"
-                    >
-                        {isEditingInfo ? <X size={16} aria-hidden="true" /> : <Edit3 size={15} aria-hidden="true" />}
-                    </button>
-                )}
+                actions={isEditable && <EditToggle id="cus" label="customer info" editingSection={editingSection} setEditingSection={setEditingSection} />}
             >
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                     <EditableDetailItem label="Customer Name *" field="customer_name" value={editData.customer_name} onChange={handleChange} isEditing={isEditingInfo} />
@@ -166,7 +135,7 @@ export default function LeadsTab({
                         <Field label="Payment Type" htmlFor="lead-payment-type" className="md:w-1/3">
                             <Select
                                 id="lead-payment-type"
-                                options={PAYMENT_TYPE_OPTIONS}
+                                options={paymentTypeOptions()}
                                 placeholder="Select payment type…"
                                 value={editData.payment_type}
                                 onChange={e => handleChange('payment_type', e.target.value)}
@@ -190,9 +159,9 @@ export default function LeadsTab({
                                 onChange={handleChange}
                                 isEditing={isEditable}
                                 documents={documents}
-                                onUpload={filesOn ? handleUpload : undefined}
-                                onDelete={filesOn ? handleDelete : undefined}
-                                onPreview={handlePreview}
+                                onUpload={onFileUpload}
+                                onDelete={onFileDelete}
+                                onPreview={onFilePreview}
                                 onUpdateRemark={onUpdateRemark}
                                 canDelete={canDeleteDocs}
                             />

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import { ClipboardList, Printer, ShoppingBag, User, Clock, Edit3, X, Layers, Zap, Copy, Check, ClipboardPaste, Plus, Trash2, ScanLine } from 'lucide-react';
+import { ClipboardList, Printer, ShoppingBag, User, Clock, Layers, Zap, Copy, Check, ClipboardPaste, Plus, Trash2, ScanLine } from 'lucide-react';
 import { supabase } from '../../supabase';
-import { EditableDetailItem } from './shared';
+import { EditableDetailItem, EditToggle } from './shared';
 import { dropdownOptions, isOn } from '../../config/index.js';
 import { DROPDOWN_CATALOG } from '../../config/catalog/dropdowns.js';
 import { lazyWithRetry, LazyBoundary } from '../../lib/lazy.js';
@@ -65,24 +65,6 @@ const cacheBomDocument = document => {
         localStorage.setItem(`solarflow_bom_${document.bom.admin_id}`, JSON.stringify(document));
     } catch { /* ignore */ }
 };
-
-function EditToggle({ id, label, editingSection, setEditingSection }) {
-    const open = editingSection === id;
-    return (
-        <button
-            type="button"
-            aria-pressed={open}
-            aria-label={open ? `Stop editing ${label}` : `Edit ${label}`}
-            onClick={() => {
-                setEditingSection?.(open ? null : id);
-                if (!open) setTimeout(() => document.getElementById(`section-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
-            }}
-            className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-100 hover:text-amber-600"
-        >
-            {open ? <X size={16} aria-hidden="true" /> : <Edit3 size={15} aria-hidden="true" />}
-        </button>
-    );
-}
 
 export default function MaterialIntegrationTab({
     customer,

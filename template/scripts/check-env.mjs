@@ -6,7 +6,7 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnv } from 'vite';
-import { supabaseEnvProblem } from '../src/supabase.js';
+import { supabaseEnvProblem } from '../src/lib/env.js';
 
 const mode = process.argv[2] || 'production';
 const envDir = process.env.SF_ENV_DIR ? resolve(process.env.SF_ENV_DIR) : resolve(fileURLToPath(new URL('..', import.meta.url)));

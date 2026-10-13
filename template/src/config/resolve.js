@@ -37,6 +37,50 @@ export function readPath(record, path) {
     return String(path).split('.').reduce((value, key) => (value == null ? undefined : value[key]), record);
 }
 
+// Company details printed on quotations and feasibility reports, with the
+// longest text each may have. All optional.
+export const BRANDING_FIELDS = Object.freeze({
+    address: { label: 'Address', max: 300 },
+    gstin: { label: 'GSTIN', max: 15 },
+    website: { label: 'Website', max: 200 },
+    logoUrl: { label: 'Logo link', max: 500 },
+    epcCode: { label: 'EPC code', max: 60 },
+    bankAccountName: { label: 'Account name', max: 120 },
+    bankAccountNumber: { label: 'Account number', max: 34 },
+    bankName: { label: 'Bank name', max: 120 },
+    bankBranch: { label: 'Branch', max: 120 },
+    bankIfsc: { label: 'IFSC code', max: 11 },
+});
+export const IFSC_PATTERN = /^[A-Z]{4}0[A-Z0-9]{6}$/;
+
+export function isHttpsUrl(value) {
+    try {
+        const url = new URL(value);
+        return url.protocol === 'https:' && Boolean(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
+// What is wrong with the company details, by field; empty when nothing is.
+export function brandingErrors(branding) {
+    const source = branding && typeof branding === 'object' ? branding : {};
+    const errors = {};
+    for (const [key, value] of Object.entries(source)) {
+        if (value != null && typeof value !== 'string') errors[key] = `${BRANDING_FIELDS[key]?.label || `Company detail "${key}"`} must be text.`;
+    }
+    for (const [key, { label, max }] of Object.entries(BRANDING_FIELDS)) {
+        if (!errors[key] && text(source[key]).length > max) errors[key] = `${label} must be at most ${max} characters.`;
+    }
+    const logoUrl = text(source.logoUrl);
+    if (!errors.logoUrl && logoUrl && !isHttpsUrl(logoUrl)) errors.logoUrl = 'The logo link must be a web address starting with https://.';
+    const ifsc = text(source.bankIfsc);
+    if (!errors.bankIfsc && ifsc && !IFSC_PATTERN.test(ifsc)) {
+        errors.bankIfsc = 'The IFSC code must be 11 characters: 4 capital letters, a zero, then 6 letters or numbers (for example SBIN0001234).';
+    }
+    return errors;
+}
+
 // ── Defaults ──────────────────────────────────────────────────────────────
 export function defaultClientConfig() {
     return {
@@ -45,6 +89,8 @@ export function defaultClientConfig() {
         branding: {
             appName: 'SolarFlow', companyName: 'SolarFlow Solar Energy', address: '', phone: '', email: '',
             gstin: '', state: 'Gujarat', discomName: 'DISCOM', chargesLabel: 'GEB / GEDA',
+            logoUrl: '', website: '', epcCode: '',
+            bankAccountName: '', bankAccountNumber: '', bankName: '', bankBranch: '', bankIfsc: '',
         },
         features: Object.fromEntries(Object.entries(FEATURE_REGISTRY)
             .filter(([, feature]) => feature.status === 'available')
@@ -267,6 +313,12 @@ export function validateClientConfig(config) {
     if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(text(config.client?.slug))) errors.push('Client slug must be lowercase letters, numbers and dashes.');
     const ownerEmail = text(config.client?.ownerEmail);
     if (ownerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) errors.push('Owner email is not a valid email address.');
+
+    const branding = config.branding && typeof config.branding === 'object' ? config.branding : {};
+    errors.push(...Object.values(brandingErrors(branding)));
+    if (!text(branding.bankAccountNumber) && ['bankAccountName', 'bankName', 'bankBranch', 'bankIfsc'].some(key => text(branding[key]))) {
+        warnings.push('Bank details are left off quotations until the account number is filled in.');
+    }
 
     for (const [id, value] of Object.entries(config.features || {})) {
         const feature = FEATURE_REGISTRY[id];

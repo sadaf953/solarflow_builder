@@ -18,9 +18,9 @@ You need:
 
 Go to **Authentication → Sign In / Providers**:
 
-1. **Email**: on.
+1. **Email**: on. Supabase refuses passwords shorter than 6 characters; use at least 8 for every login.
 2. **Confirm email**: off. Turn it on only if you have set up your own email (SMTP) under Authentication → Emails.
-3. **Allow new users to sign up**: off. This is required, not optional. Staff logins are created inside SolarFlow. While sign-ups are on, anyone who knows your app address can make an account; until the owner login exists, someone signing up with the owner's email address would become the admin.
+3. **Allow new users to sign up**: off. This is required, not optional. Staff logins are created inside SolarFlow. While sign-ups are on, anyone who knows your app address can make an account; until the owner login exists, someone signing up with the owner's email address (or, if no owner email was given, whoever signs up first) would become the admin.
 4. **Allow anonymous sign-ins**: off.
 
 Then go to **Authentication → URL Configuration**:
@@ -48,6 +48,8 @@ SolarFlow creates and manages staff logins through a small server function calle
 3. Replace the sample code with everything in `backend/functions/add_user/index.ts`, then click **Deploy**.
 
 **Option B: command line**
+
+The command line tool looks for functions in a `supabase/functions` folder, so first copy the `backend/functions/add_user` folder to `supabase/functions/add_user` in this folder. Then run:
 ```
 npx supabase login
 npx supabase functions deploy add_user --project-ref <your-project-ref>
@@ -59,10 +61,10 @@ Optional: under **Edge Functions → Secrets**, add `ALLOWED_ORIGIN` with your a
 ## 5. Create the owner login
 
 1. Go to **Authentication → Users → Add user → Create new user**.
-2. Email: **{{OWNER_EMAIL}}**. Choose a password and tick **Auto Confirm User**.
+2. Email: **{{OWNER_EMAIL}}**. Choose a password of at least 8 characters and tick **Auto Confirm User**.
 3. This login becomes the SolarFlow admin. Create everyone else from inside SolarFlow, under Staff logins.
 
-Do this before you share the app's address with anyone. Any other account added here (or by a sign-up) starts as "Not set up": it has no access at all until the admin gives it a login type and activates it.
+Do this before you share the app's address with anyone. People who sign up on their own, and any other account added here, wait for approval in Staff logins: they have no access until the admin chooses what they can do and clicks **Approve**.
 
 ## 6. Connect the app to your project
 
@@ -91,11 +93,28 @@ Open your site and sign in as {{OWNER_EMAIL}}.
 
 ## If something goes wrong
 
-- **"Your account is inactive"** for the owner: open SQL Editor and run this, with the owner's email between the quotes:
+- **The owner sees "This email has no account in this workspace yet"**: run `backend/setup.sql` again (step 3). It adds the missing profile.
+- **The owner is told the login is switched off or waiting for approval**: the owner login was made with another email address, or after another admin. Open SQL Editor and run this, with the owner's email between the quotes:
   `update public.profiles set user_type = 'admin', role = 'Admin', status = 'active' where lower(email) = lower('{{OWNER_EMAIL}}');`
 - **"Could not reach the account-creation service"** when adding staff: the `add_user` function is not deployed. Repeat step 4.
 - **Password-reset link does nothing or says it has expired**: check that your app's address is in **Site URL** and **Redirect URLs** (step 2), open the newest email only, and open it in the same browser where you asked for the reset. If emails stop arriving, set up your own SMTP (step 2).
-- **Changes after an update**: run the new `backend/setup.sql` again in the SQL Editor. It adds what the update needs and keeps your data.
+- **Changes after an update**: follow "Upgrading an existing install" below.
+
+## Upgrading an existing install
+
+When you get a new SolarFlow download for a project that is already running:
+
+1. Copy your `.env` file from the old folder into the new one.
+2. Run the new `backend/setup.sql` in the SQL Editor, as in step 3. It adds what the update needs (for example the "PM Surya Ghar model agreement" checklist item) and keeps your customers and logins. Your admins stay admins; the owner email only matters while there is no admin.
+3. Deploy `add_user` again (step 4), replacing the old code.
+4. Build and publish the app again (step 7).
+5. Open **Staff logins**. Accounts that were added by hand or signed up on their own, and that nobody has set up yet, now show as **Waiting for approval**. An older account that someone already edited stays a switched-off login: edit or delete it there.
+
+Channel partner logins made by an older version may have no partner name set, so they see only the leads they added themselves, not the ones filed under their name. Run this once in the SQL Editor to use each login's own name, as SolarFlow now does for new channel partner logins:
+```sql
+update public.profiles set channel_partner = name
+where user_type = 'agent' and coalesce(trim(channel_partner), '') = '';
+```
 
 ## Not included
 

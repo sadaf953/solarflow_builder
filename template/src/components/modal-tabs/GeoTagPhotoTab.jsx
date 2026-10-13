@@ -14,6 +14,7 @@ export default function GeoTagPhotoTab({
     setEditData,
     isEditable,
     user,
+    canDeleteDocs = false,
     documents = [],
     onFileUpload,
     onFileDelete,
@@ -27,7 +28,6 @@ export default function GeoTagPhotoTab({
     // only upload the photo (which sets the status to Proceed by itself).
     const canEditStatus = isVendor || (isEditable && ['admin', 'channel_partner_office'].includes(userType));
     const canUploadImage = canEditStatus || (isEditable && isOffice);
-    const canDeleteDocs = ['admin', 'sales'].includes(userType);
     const statusEditors = ['the admin', isRoleEnabled('vendor') && 'the assigned vendor', isRoleEnabled('channel_partner_office') && 'partner offices']
         .filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' or $1');
     const title = `${stageLabel(STAGE_IDS.GEO_TAG_PHOTO)} status`;

@@ -30,7 +30,6 @@ const CalendarView = isOn('calendar') ? lazyWithRetry(() => import('./CalendarVi
 const BomPrintModal = isOn('bomMaker') ? lazyWithRetry(() => import('./BomPrintModal')) : null;
 const payoutsOn = isOn('vendorCommission');
 
-const LIST_COLUMNS = `${VENDOR_LIST_COLUMNS}, inverter_serial_no, panel_serial_no`;
 
 // The installer's part of the pipeline, one tab per stage. Where the customer
 // goes after Geo Tag Photo follows the client's configured pipeline.
@@ -132,7 +131,7 @@ export default function VendorPortal({ user, onLogout, onChangePassword }) {
         if (silent) setRefreshing(true);
         else setLoading(true);
         try {
-            const rows = await fetchAllPages(() => supabase.from('admin').select(LIST_COLUMNS).is('deleted_at', null)
+            const rows = await fetchAllPages(() => supabase.from('admin').select(VENDOR_LIST_COLUMNS).is('deleted_at', null)
                 .order('created_at', { ascending: false }).order('id'));
             setCustomers(rows.filter(belongs));
             setLoadError('');

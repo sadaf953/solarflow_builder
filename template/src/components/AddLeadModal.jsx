@@ -12,10 +12,11 @@ import { useGlobalPopup } from './GlobalPopup';
 import { calculateSystemCapacityKwp } from '../utils/capacity';
 import {
     STAGE_IDS, isOn, documentMode, dropdownOptions, addLeadCustomFields, getStageRequirements, missingStageRequirements,
+    paymentTypeOptions,
 } from '../config/index.js';
 import { Field, Input, Select, Textarea, ErrorBanner, FieldRenderer } from '../ui/index.js';
 
-const PAYMENT_TYPES = ['Cash', 'Loan'];
+const PAYMENT_TYPES = paymentTypeOptions();
 
 // Lead documents; `loan` ones are asked for only when the customer is not paying cash.
 const LEAD_DOCUMENTS = [

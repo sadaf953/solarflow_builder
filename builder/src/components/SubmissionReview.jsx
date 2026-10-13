@@ -1,10 +1,10 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { Download, ExternalLink, FileCode2, FileJson, ListChecks, Settings2, User, Workflow } from 'lucide-react';
 import { DROPDOWN_CATALOG, CUSTOM_FIELD_TYPES } from '../../../template/src/config/catalog/dropdowns.js';
-import { isAllowedSheetUrl, resolveClientConfig, slugify } from '../../../template/src/config/resolve.js';
-import { Badge, ErrorBanner, Field, Input, SectionCard, Spinner, SuccessBanner } from '../../../template/src/ui/index.js';
+import { BRANDING_FIELDS, brandingErrors, isAllowedSheetUrl, resolveClientConfig, slugify } from '../../../template/src/config/resolve.js';
+import { Badge, ErrorBanner, Field, Input, SectionCard, Spinner, SuccessBanner, Textarea, describedBy } from '../../../template/src/ui/index.js';
 import { QUESTION_STEPS, describeAnswer, isVisible } from '../catalog/questions.js';
-import { submissionFeatures, submissionToClientConfig } from '../catalog/submission.js';
+import { brandingOverrides, submissionFeatures, submissionToClientConfig } from '../catalog/submission.js';
 import { checkClientConfig, downloadBytes, generateClientZip, generateSetupSql } from '../zip/index.js';
 import { FeatureColumns, FeatureToggles } from './FeatureViews.jsx';
 import { Expander, MessageList } from './common.jsx';
@@ -120,10 +120,65 @@ function WorkflowSummary({ submission, config }) {
     );
 }
 
+// Company details the admin adds for the client's documents. Labels and
+// length limits come from BRANDING_FIELDS.
+const COMPANY_FIELDS = [
+    { key: 'address', multiline: true, hint: 'Printed in the quotation footer and as the EPC contractor address on feasibility reports.' },
+    { key: 'gstin', upper: true, hint: 'Printed at the top of quotations.' },
+    { key: 'website', placeholder: 'www.example.com', hint: 'Printed in the quotation footer.' },
+    { key: 'logoUrl', type: 'url', placeholder: 'https://', hint: 'A direct https:// link to a PNG or JPG image. Without one, the company name is printed in its place.' },
+    { key: 'epcCode', hint: 'Printed on feasibility reports.' },
+];
+const BANK_FIELDS = [
+    { key: 'bankAccountName' },
+    { key: 'bankAccountNumber', inputMode: 'numeric' },
+    { key: 'bankName' },
+    { key: 'bankBranch' },
+    { key: 'bankIfsc', upper: true, placeholder: 'SBIN0001234' },
+];
+
+function CompanyDetails({ value, errors, onChange }) {
+    const id = useId();
+    const [touched, setTouched] = useState({});
+    const filled = Object.keys(brandingOverrides(value)).length;
+    const renderField = ({ key, multiline, upper, hint, ...props }) => {
+        const fieldId = `${id}-${key}`;
+        const error = touched[key] ? errors[key] : '';
+        const Control = multiline ? Textarea : Input;
+        return (
+            <Field key={key} label={BRANDING_FIELDS[key].label} htmlFor={fieldId} hint={hint} error={error} className={multiline ? 'sm:col-span-2' : ''}>
+                <Control id={fieldId} value={value[key] || ''} maxLength={BRANDING_FIELDS[key].max} {...props}
+                    aria-invalid={error ? true : undefined} aria-describedby={describedBy(fieldId, { hint, error })}
+                    onBlur={() => setTouched(current => ({ ...current, [key]: true }))}
+                    onChange={event => onChange({ ...value, [key]: upper ? event.target.value.toUpperCase() : event.target.value })} />
+            </Field>
+        );
+    };
+    return (
+        <Expander title="Company details for documents"
+            subtitle={filled ? `${filled} filled in · used on quotations and feasibility reports` : 'Optional · used on quotations and feasibility reports'}>
+            <div className="space-y-4">
+                <p className="text-sm text-stone-600">
+                    These are printed on the client’s quotations and feasibility reports. All are optional: anything left empty is left off,
+                    or printed blank to fill in by hand. They are built into the app, so changing them later needs a new zip.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2">{COMPANY_FIELDS.map(renderField)}</div>
+                <div>
+                    <p className="sf-kicker">Bank account</p>
+                    <p className="mt-1 text-xs text-stone-500">
+                        Quotations show the bank details once the account number is filled in. Feasibility reports print the account number and IFSC code.
+                    </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">{BANK_FIELDS.map(renderField)}</div>
+            </div>
+        </Expander>
+    );
+}
+
 /**
  * Everything the agency needs about one submission, plus the downloads.
- * Admin feature switches, slug and owner email are kept per `storageKey`
- * in this browser (seeded from `initial`).
+ * Admin feature switches, slug, owner email and company details are kept
+ * per `storageKey` in this browser (seeded from `initial`).
  */
 export function SubmissionReview({ submission, storageKey, initial = {}, onDownloaded }) {
     const id = useId();
@@ -133,6 +188,7 @@ export function SubmissionReview({ submission, storageKey, initial = {}, onDownl
             adminOverrides: saved?.adminOverrides || initial.adminOverrides || {},
             slug: saved?.slug ?? initial.slug ?? '',
             ownerEmail: saved?.ownerEmail ?? initial.ownerEmail ?? '',
+            branding: saved?.branding || initial.branding || {},
         };
     });
     const [busy, setBusy] = useState('');
@@ -144,9 +200,11 @@ export function SubmissionReview({ submission, storageKey, initial = {}, onDownl
         adminOverrides: settings.adminOverrides,
         slug: settings.slug.trim() || undefined,
         ownerEmail: settings.ownerEmail.trim() || undefined,
+        branding: settings.branding,
     }), [settings]);
     const config = useMemo(() => submissionToClientConfig(submission, options), [submission, options]);
     const validation = useMemo(() => checkClientConfig(config), [config]);
+    const companyErrors = useMemo(() => brandingErrors(config.branding), [config]);
     const featureResult = submissionFeatures(submission, settings.adminOverrides);
     const baseline = submissionFeatures(submission).features;
     const contact = submission.contact || {};
@@ -218,6 +276,7 @@ export function SubmissionReview({ submission, storageKey, initial = {}, onDownl
                             onChange={event => update({ slug: event.target.value.toLowerCase() })} />
                     </Field>
                 </div>
+                <CompanyDetails value={settings.branding} errors={companyErrors} onChange={branding => update({ branding })} />
                 {validation.errors.length > 0 && <ErrorBanner title="Fix these before downloading"><MessageList items={validation.errors} /></ErrorBanner>}
                 {validation.warnings.length > 0 && (
                     <div role="status" className="rounded-xl border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">

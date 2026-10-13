@@ -66,7 +66,18 @@ export function submissionFeatures(submission, adminOverrides = {}) {
     return { features, reasons, discuss, unanswered };
 }
 
-export function submissionToClientConfig(submission, { adminOverrides = {}, slug, ownerEmail } = {}) {
+// Company details the admin adds for documents (address, bank, logo, ...).
+// Only known branding keys with text are kept; a blank keeps what the
+// submission gave.
+export function brandingOverrides(branding) {
+    const known = new Set(Object.keys(defaultClientConfig().branding));
+    if (!branding || typeof branding !== 'object') return {};
+    return Object.fromEntries(Object.entries(branding)
+        .filter(([key, value]) => known.has(key) && typeof value === 'string' && value.trim())
+        .map(([key, value]) => [key, value.trim()]));
+}
+
+export function submissionToClientConfig(submission, { adminOverrides = {}, slug, ownerEmail, branding } = {}) {
     const base = defaultClientConfig();
     const contact = submission.contact || {};
     const company = String(contact.company || '').trim() || 'SolarFlow Client';
@@ -95,6 +106,7 @@ export function submissionToClientConfig(submission, { adminOverrides = {}, slug
             phone: String(contact.phone || '').trim(),
             email: String(contact.email || '').trim(),
             state: String(contact.state || '').trim() || base.branding.state,
+            ...brandingOverrides(branding),
         },
         features,
         pipeline: { groups: base.pipeline.groups, stages },

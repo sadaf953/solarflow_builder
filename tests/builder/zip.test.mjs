@@ -10,7 +10,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { SUPABASE_STUB } from '../backend/supabaseStub.mjs';
 import { makeClient } from '../../scripts/make-client.mjs';
 import { collectTemplateFiles } from '../../scripts/pack-template.mjs';
-import { createClientZip, buildClientFiles, makeZip, parseSubmissionJson } from '../../builder/src/zip/build.js';
+import { createClientZip, createSetupSql, buildClientFiles, makeZip, parseSubmissionJson } from '../../builder/src/zip/build.js';
 import { submissionToClientConfig } from '../../builder/src/catalog/submission.js';
 import { validateClientConfig, defaultClientConfig } from '../../template/src/config/resolve.js';
 
@@ -61,8 +61,8 @@ test('make-client writes a complete client zip', async () => {
     assert.equal(shipped.features.teamChat, true, 'the client override is kept');
     assert.equal(shipped.pipeline.stages[1].id, 'SITE SURVEY');
 
-    const banner = readFileSync(join(repoRoot, 'template/public/banner.png'));
-    assert.ok(Buffer.from(entries[`${ROOT}public/banner.png`]).equals(banner), 'binary files survive');
+    const banner = readFileSync(join(repoRoot, 'template/public/banner.jpg'));
+    assert.ok(Buffer.from(entries[`${ROOT}public/banner.jpg`]).equals(banner), 'binary files survive');
     const logo = readFileSync(join(repoRoot, 'template/src/assets/solarflow-logo-blue.svg'));
     assert.ok(Buffer.from(entries[`${ROOT}src/assets/solarflow-logo-blue.svg`]).equals(logo));
 
@@ -93,7 +93,7 @@ test('the zip is reproducible and matches what the website builds from the packe
 
     // The website gets the template as JSON (client-template.json).
     const packed = JSON.parse(JSON.stringify(collectTemplateFiles()));
-    assert.equal(packed['public/banner.png'].encoding, 'base64');
+    assert.equal(packed['public/banner.jpg'].encoding, 'base64');
     assert.equal(packed['src/assets/solarflow-logo-blue.svg'].encoding, 'utf8');
     assert.ok(packed['README.client.md'], 'the readme template is packed for buildClientFiles');
     assert.ok(!packed['src/config/client.config.js'] && !Object.keys(packed).some(path => path.startsWith('node_modules/')));
@@ -119,6 +119,31 @@ test('--slug and --owner-email override the submission; wrapped exports keep adm
     assert.deepEqual(wrapped.adminOverrides, { attendance: true });
     assert.equal(wrapped.slug, 'wrapped');
     assert.throws(() => parseSubmissionJson('{"hello": 1}'), /not a SolarFlow setup submission/);
+});
+
+test('admin company details reach the zip, setup.sql and saved exports', async () => {
+    const branding = {
+        address: 'Plot 4, GIDC, Surat', website: 'www.surya.example', logoUrl: 'https://cdn.example.com/surya.png', epcCode: 'EPC-9',
+        bankAccountName: "Surya O'Neil Solar", bankAccountNumber: '50100012345678', bankName: 'HDFC Bank', bankBranch: 'Adajan', bankIfsc: 'HDFC0001234',
+    };
+    const templateFiles = collectTemplateFiles();
+    const schemaSql = readFileSync(join(repoRoot, 'template/backend/schema.sql'), 'utf8');
+    const result = createClientZip({ templateFiles, schemaSql, submission: fixture, branding, generatedAt: GENERATED_AT });
+    const entries = unzipSync(result.bytes);
+    const configDir = tmp();
+    writeFileSync(join(configDir, 'client.config.mjs'), strFromU8(entries[`${ROOT}src/config/client.config.js`]));
+    const shipped = (await import(pathToFileURL(join(configDir, 'client.config.mjs')).href)).default;
+    assert.deepEqual(validateClientConfig(shipped).errors, []);
+    assert.deepEqual(shipped.branding, { ...submissionToClientConfig(fixture).branding, ...branding });
+    assert.deepEqual(shipped, submissionToClientConfig(fixture, { branding }));
+    assert.equal(createSetupSql({ schemaSql, submission: fixture, branding }).config.branding.bankIfsc, 'HDFC0001234');
+
+    const wrapped = parseSubmissionJson(JSON.stringify({ payload: fixture, slug: 'wrapped', branding }));
+    assert.deepEqual(wrapped.branding, branding);
+    assert.deepEqual(parseSubmissionJson(JSON.stringify(fixture)).branding, {}, 'a bare payload has no admin details');
+
+    assert.throws(() => createClientZip({ templateFiles, schemaSql, submission: fixture, branding: { ...branding, bankIfsc: 'HDFC1234' } }),
+        error => error.code === 'invalid_config' && error.validation.errors.some(message => /IFSC/.test(message)));
 });
 
 test('invalid configs are refused with the reasons', () => {

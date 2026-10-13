@@ -13,7 +13,7 @@
 import { supabase } from '../supabase.js';
 import reference from '../inventory/reference.json' with { type: 'json' };
 
-// The reference rows also carry sample staff names; only the item columns are used.
+// Only the item columns of the first reference BOM are used.
 export const getBomTemplateForType = (type) => reference.scenarios[type === 'SHED' ? 'SHED' : 'ROOF'][0].items
     .map(({ sr_no, product_name, quantity, uom }) => ({ sr_no, product_name, quantity, uom, quantity_editable: true }));
 

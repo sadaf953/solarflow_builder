@@ -21,6 +21,7 @@ export default function SubsidyStatusTab({
     user,
     saving,
     setSaving,
+    canDeleteDocs = false,
     documents = [],
     onFileUpload,
     onFileDelete,
@@ -33,7 +34,6 @@ export default function SubsidyStatusTab({
     const [draftStatus, setDraftStatus] = useState(() => editData.subsidy_tag || SUBSIDY_TAGS[0]?.id || '');
     const [draftDate, setDraftDate] = useState(todayIST);
     const [draftRemark, setDraftRemark] = useState('');
-    const canDeleteDocs = ['admin', 'sales'].includes(user?.userType);
     // A final status (Received) locks the tag for everyone except the admin.
     const isFinal = isFinalTagValue(customer.subsidy_tag, SUBSIDY_TAGS);
     const locked = isFinal && user?.userType !== 'admin';

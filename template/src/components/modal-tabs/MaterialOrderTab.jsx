@@ -1,5 +1,5 @@
-import { ShoppingBag, ShieldAlert, User, Edit3, X } from 'lucide-react';
-import { EditableDetailItem } from './shared';
+import { ShoppingBag, ShieldAlert, User } from 'lucide-react';
+import { EditableDetailItem, EditToggle } from './shared';
 import { isOn } from '../../config/index.js';
 import { Badge, FieldList, SectionCard, Textarea } from '../../ui/index.js';
 
@@ -69,17 +69,7 @@ export default function MaterialOrderTab({
                 id="section-mat_order"
                 title="Material Order Specifications"
                 icon={ShoppingBag}
-                actions={canEdit && (
-                    <button
-                        type="button"
-                        onClick={() => setEditingSection(isEditingOrder ? null : 'mat_order')}
-                        aria-pressed={isEditingOrder}
-                        aria-label={isEditingOrder ? 'Stop editing the material order' : 'Edit the material order'}
-                        className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-100 hover:text-amber-600"
-                    >
-                        {isEditingOrder ? <X size={16} aria-hidden="true" /> : <Edit3 size={15} aria-hidden="true" />}
-                    </button>
-                )}
+                actions={canEdit && <EditToggle id="mat_order" label="the material order" editingSection={editingSection} setEditingSection={setEditingSection} />}
             >
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
                     <EditableDetailItem label="Roof / Shed *" field="roof_shed" value={editData.roof_shed} onChange={handleLocalChange} options={ROOF_SHED_OPTIONS} isEditing={isEditingOrder} />

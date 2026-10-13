@@ -444,12 +444,40 @@ test('delivery batch RPCs work for head office and are refused to partners', asy
     await as(db, people.sales, tx => tx.query('select public.delete_delivery_batch_atomic($1, $2)', [batch.id, [customers.agent.id]]));
 });
 
+test('a delivery batch without a vendor keeps each project installer', async () => {
+    const id = customers.vendor2.id;
+    const batch = { id: randomUUID(), batch_no: 'T-2', status: 'IN_TRANSIT' };
+    const save = values => as(db, people.sales, tx => tx.query('select public.save_delivery_batch_atomic($1, $2, $3)', [JSON.stringify({ ...batch, ...values }), [id], []]));
+    const installer = async () => (await one(db, 'select vendor from public.admin where id = $1', [id])).vendor;
+    for (const vendor of [undefined, '', '   ']) {
+        await save({ vendor });
+        assert.equal(await installer(), 'Vendor Two');
+    }
+    await save({ vendor: ' Vendor One ' });
+    assert.equal(await installer(), 'Vendor One');
+    await as(db, people.sales, tx => tx.query('select public.delete_delivery_batch_atomic($1, $2)', [batch.id, [id]]));
+    await as(db, people.owner, tx => tx.query("update public.admin set vendor = 'Vendor Two' where id = $1", [id]));
+});
+
 test('metrics RPCs are scoped by row-level security', async () => {
     const metrics = (uid, fn = 'get_dashboard_metrics_scoped') => as(db, uid, async tx => (await one(tx, `select public.${fn}() as m`)).m);
     assert.equal((await metrics(people.owner)).totalProjects, 7);
     assert.equal((await metrics(people.dealer)).totalProjects, 1);
     assert.equal((await metrics(people.cpo, 'get_cpo_dashboard_metrics')).totalProjects, 3);
     await assert.rejects(metrics(people.dealer, 'get_cpo_dashboard_metrics'), /partner office/);
+});
+
+test('metrics match the partner and dealer by whole name, ignoring case, like the lists', async () => {
+    const total = (uid, sql, ...params) => as(db, uid, async tx => (await one(tx, `select (${sql})->>'totalProjects' as n`, params)).n);
+    const scoped = 'public.get_dashboard_metrics_scoped($1, $2)';
+    assert.equal(await total(people.owner, scoped, 'SUNRISE', null), '3');
+    assert.equal(await total(people.owner, scoped, ' sunrise ', null), '3');
+    assert.equal(await total(people.owner, scoped, 'SUN', null), '0', 'part of a name matches nothing');
+    assert.equal(await total(people.owner, scoped, 'Sunrise', 'dealer one'), '1');
+    assert.equal(await total(people.owner, scoped, '', ''), '7');
+    assert.equal(await total(people.owner, 'public.get_dashboard_metrics($1)', 'moon'), '1');
+    assert.equal(await total(people.cpo, 'public.get_cpo_dashboard_metrics($1)', 'Dealer One'), '1');
+    assert.equal(await total(people.cpo, 'public.get_cpo_dashboard_metrics($1)', 'DEALER'), '0');
 });
 
 test('deleting a login keeps its quotations and customers', async () => {

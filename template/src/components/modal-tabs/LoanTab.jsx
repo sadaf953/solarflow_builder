@@ -1,7 +1,7 @@
 import { useEffect, useId, useState } from 'react';
 import { History, Paperclip, IndianRupee, CheckCircle2, Lock, Edit3, X, ClipboardList, Upload, Eye, Download, Tag } from 'lucide-react';
 import { LOAN_TAGS, LOAN_TAG_COLORS, isFinalTagValue } from '../../constants';
-import { CheckboxRemarkItem } from './shared';
+import { CheckboxRemarkItem, EditToggle } from './shared';
 import { formatInputValue, parseIndianNumber } from '../../utils';
 import { documentMode, dropdownOptions, tagLabel } from '../../config/index.js';
 import { formatINR, todayIST } from '../../lib/format.js';
@@ -27,6 +27,7 @@ const LOAN_DOCUMENTS = [
     { field: 'digital_certificate', label: 'Digital Certificate' },
 ];
 
+const APP_DETAILS_SECTION = 'loan_app_details';
 const APP_DETAIL_FIELDS = [
     { key: 'loan_by', label: 'Loan By' },
     { key: 'quotation_amount', label: 'Total Quotation Amount (₹)', type: 'money' },
@@ -74,13 +75,12 @@ function PaymentCard({ title, entry, amount, editable, lockNote, amountPlacehold
 
 export default function LoanTab(props) {
     const {
-        customer, editData, setEditData, handleChange, isEditable, user, meta,
-        documents = [], onFileUpload, onFileDelete, onFilePreview, onUpdateRemark,
+        customer, editData, setEditData, handleChange, isEditable, user, meta, editingSection, setEditingSection,
+        canDeleteDocs = false, documents = [], onFileUpload, onFileDelete, onFilePreview, onUpdateRemark,
     } = props;
     const save = useStageSave(props);
     const { showAlert } = useGlobalPopup();
     const filesOn = documentMode() !== 'checklist';
-    const canDeleteDocs = user?.userType === 'admin' || user?.userType === 'sales';
     const today = todayIST();
     const loanStaff = dropdownOptions('registration_by', meta);
     const [loanDraftStatus, setLoanDraftStatus] = useState(DEFAULT_DRAFT_STATUS);
@@ -89,7 +89,7 @@ export default function LoanTab(props) {
     const [isCustomEditing, setIsCustomEditing] = useState(false);
     const [savedSuccess, setSavedSuccess] = useState(false);
     const [isPaymentsDirty, setIsPaymentsDirty] = useState(false);
-    const [isEditingAppDetails, setIsEditingAppDetails] = useState(false);
+    const isEditingAppDetails = editingSection === APP_DETAILS_SECTION;
     const [feasibilityBusy, setFeasibilityBusy] = useState(false);
     const [feasibilityPreviewUrl, setFeasibilityPreviewUrl] = useState('');
     const [feasibilityPreviewInputs, setFeasibilityPreviewInputs] = useState(null);
@@ -294,7 +294,7 @@ export default function LoanTab(props) {
                 return;
             }
             const file = new File([blob], fileName, { type: 'application/pdf' });
-            const uploaded = await onFileUpload({ target: { files: [file], value: '' } }, 'site_feasibility');
+            const uploaded = await onFileUpload({ target: { files: [file], value: '' } }, 'site_feasibility', { replaceExisting: true });
             if (uploaded) {
                 setFeasibilityPreviewUrl('');
                 showAlert(
@@ -328,19 +328,10 @@ export default function LoanTab(props) {
     return (
         <div className="space-y-5 animate-in fade-in duration-300">
             <SectionCard
+                id={`section-${APP_DETAILS_SECTION}`}
                 title="Application Details"
                 icon={ClipboardList}
-                actions={isEditable && (
-                    <button
-                        type="button"
-                        onClick={() => setIsEditingAppDetails(open => !open)}
-                        aria-pressed={isEditingAppDetails}
-                        aria-label={isEditingAppDetails ? 'Stop editing application details' : 'Edit application details'}
-                        className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-100 hover:text-amber-600"
-                    >
-                        {isEditingAppDetails ? <X size={16} aria-hidden="true" /> : <Edit3 size={15} aria-hidden="true" />}
-                    </button>
-                )}
+                actions={isEditable && <EditToggle id={APP_DETAILS_SECTION} label="application details" editingSection={editingSection} setEditingSection={setEditingSection} />}
             >
                 {isEditingAppDetails ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
@@ -431,8 +422,8 @@ export default function LoanTab(props) {
                             onChange={handleLocalChange}
                             isEditing={isEditable}
                             documents={documents}
-                            onUpload={filesOn ? onFileUpload : undefined}
-                            onDelete={filesOn ? onFileDelete : undefined}
+                            onUpload={onFileUpload}
+                            onDelete={onFileDelete}
                             onPreview={onFilePreview}
                             onUpdateRemark={onUpdateRemark}
                             canDelete={canDeleteDocs}

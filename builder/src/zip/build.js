@@ -121,9 +121,9 @@ export function checkClientConfig(config) {
     return { errors, warnings };
 }
 
-function configFor(submission, { adminOverrides, slug, ownerEmail }) {
+function configFor(submission, { adminOverrides, slug, ownerEmail, branding }) {
     if (!submission || typeof submission !== 'object') throw new Error('There is no submission to build from.');
-    const config = submissionToClientConfig(submission, { adminOverrides, slug, ownerEmail });
+    const config = submissionToClientConfig(submission, { adminOverrides, slug, ownerEmail, branding });
     const validation = checkClientConfig(config);
     if (validation.errors.length) {
         const error = new Error(`This setup cannot be built yet: ${validation.errors.join(' ')}`);
@@ -134,9 +134,9 @@ function configFor(submission, { adminOverrides, slug, ownerEmail }) {
     return { config, validation };
 }
 
-export function createClientZip({ templateFiles, schemaSql, submission, adminOverrides = {}, slug, ownerEmail, generatedAt }) {
+export function createClientZip({ templateFiles, schemaSql, submission, adminOverrides = {}, slug, ownerEmail, branding, generatedAt }) {
     const at = isoTime(generatedAt);
-    const { config, validation } = configFor(submission, { adminOverrides, slug, ownerEmail });
+    const { config, validation } = configFor(submission, { adminOverrides, slug, ownerEmail, branding });
     const summaryMarkdown = setupSummaryMarkdown({ submission, adminOverrides, config, validation, generatedAt: at });
     const files = buildClientFiles({ templateFiles, config, schemaSql, generatedAt: at, summaryMarkdown });
     const folder = `${config.client.slug}-solarflow`;
@@ -144,13 +144,13 @@ export function createClientZip({ templateFiles, schemaSql, submission, adminOve
     return { fileName: `${folder}.zip`, bytes, config, validation, summaryMarkdown };
 }
 
-export function createSetupSql({ schemaSql, submission, adminOverrides = {}, slug, ownerEmail }) {
-    const { config } = configFor(submission, { adminOverrides, slug, ownerEmail });
+export function createSetupSql({ schemaSql, submission, adminOverrides = {}, slug, ownerEmail, branding }) {
+    const { config } = configFor(submission, { adminOverrides, slug, ownerEmail, branding });
     return { fileName: `${config.client.slug}-setup.sql`, sql: setupSql({ schema: schemaSql, config }), config };
 }
 
 // A submission file: either the payload itself, or an export that wraps it
-// as {payload | submission, adminOverrides?, slug?, ownerEmail?}.
+// as {payload | submission, adminOverrides?, slug?, ownerEmail?, branding?}.
 export function parseSubmissionJson(text) {
     let data;
     try { data = JSON.parse(text); } catch { throw new Error('This file is not valid JSON.'); }
@@ -165,5 +165,6 @@ export function parseSubmissionJson(text) {
         adminOverrides: wrapped && data.adminOverrides && typeof data.adminOverrides === 'object' ? data.adminOverrides : {},
         slug: wrapped ? pick(data.slug) : undefined,
         ownerEmail: wrapped ? pick(data.ownerEmail) : undefined,
+        branding: wrapped && data.branding && typeof data.branding === 'object' ? data.branding : {},
     };
 }
