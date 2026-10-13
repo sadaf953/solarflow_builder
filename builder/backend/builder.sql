@@ -9,8 +9,17 @@
 -- never granted to anon or authenticated. Nothing here touches any other
 -- public table, so this project can also host a test client CRM.
 --
--- Add another builder admin (they sign in with Supabase Auth email + password):
---   insert into setup_private.admins(email) values ('someone@example.com') on conflict do nothing;
+-- Before running it, in Authentication:
+--   1. Sign In / Providers: turn OFF "Allow new users to sign up".
+--   2. Users -> Add user: create the admin login (Auto Confirm).
+-- This script then makes that existing login (admin@crm.com) a builder admin.
+-- Admin rights are tied to the login's user id, so nobody can gain them by
+-- signing up later with the same email.
+--
+-- Add another builder admin: create their login first, then run
+--   insert into setup_private.admins(email, user_id)
+--   select lower(btrim(email)), id from auth.users where lower(btrim(email)) = 'someone@example.com'
+--   on conflict (email) do update set user_id = coalesce(setup_private.admins.user_id, excluded.user_id);
 
 create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
@@ -25,6 +34,9 @@ grant usage on schema setup_private to anon, authenticated;
 create table if not exists setup_private.admins (
   email text primary key check (email = lower(btrim(email)) and email <> '')
 );
+-- Admin rights follow the login's user id; a row without one grants nothing.
+alter table setup_private.admins add column if not exists user_id uuid;
+create unique index if not exists admins_user_id_key on setup_private.admins(user_id);
 
 create table if not exists setup_private.invites (
   id uuid primary key default gen_random_uuid(),
@@ -76,11 +88,15 @@ alter table setup_private.events enable row level security;
 revoke all on all tables in schema setup_private from public, anon, authenticated;
 revoke all on all sequences in schema setup_private from public, anon, authenticated;
 
-insert into setup_private.admins(email) values ('admin@crm.com') on conflict do nothing;
+-- Bind admin@crm.com to the login that exists right now. Once bound, a row
+-- never moves to a different user id.
+insert into setup_private.admins(email, user_id)
+select lower(btrim(u.email)), u.id from auth.users u where lower(btrim(u.email)) = 'admin@crm.com'
+on conflict (email) do update set user_id = coalesce(setup_private.admins.user_id, excluded.user_id);
 
 -- ── Helpers ──────────────────────────────────────────────────────────────
 
--- True for a signed-in, non-anonymous user whose email is in admins.
+-- True for a signed-in, non-anonymous user whose user id is in admins.
 create or replace function setup_private.is_admin()
 returns boolean
 language sql stable security definer
@@ -88,7 +104,7 @@ set search_path = ''
 as $$
   select auth.uid() is not null
     and coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false) = false
-    and exists (select 1 from setup_private.admins a where a.email = lower(btrim(auth.jwt() ->> 'email')));
+    and exists (select 1 from setup_private.admins a where a.user_id = auth.uid());
 $$;
 
 create or replace function setup_private.require_admin()

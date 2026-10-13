@@ -13,9 +13,13 @@ const ADMIN = { sub: randomUUID(), role: 'authenticated', email: 'Admin@CRM.com'
 const STRANGER = { sub: randomUUID(), role: 'authenticated', email: 'someone@else.test' };
 const ANON_ADMIN = { ...ADMIN, is_anonymous: true };
 
+// The admin login exists before builder.sql runs (README order), so the
+// script binds admin@crm.com to its user id.
+const addLogin = (db, { sub, email }) => db.query('insert into auth.users(id, email) values ($1, $2)', [sub, email]);
 const newDb = async () => {
     const db = new PGlite({ extensions: { pgcrypto } });
     await db.exec(SUPABASE_STUB);
+    await addLogin(db, ADMIN);
     await db.exec(builderSql);
     return db;
 };
@@ -152,13 +156,34 @@ test('only admins (non-anonymous, listed email) can call admin RPCs', async () =
         await fails(call(db, STRANGER, sql, params), /not_admin/);
         await fails(call(db, ANON_ADMIN, sql, params), /not_admin/);
     }
+    // An email alone grants nothing: a stranger who signs up with a listed email is still refused.
     await db.query("insert into setup_private.admins(email) values ('someone@else.test')");
+    await fails(call(db, STRANGER, 'select * from public.setup_admin_list()', []), /not_admin/);
+    await db.query('update setup_private.admins set user_id = $1 where email = $2', [STRANGER.sub, 'someone@else.test']);
     assert.equal((await as(db, STRANGER, tx => tx.query('select * from public.setup_admin_list()'))).rows.length, 1);
+});
+
+test('the seeded admin is bound to the login that existed when the script ran', async () => {
+    const db = new PGlite({ extensions: { pgcrypto } });
+    await db.exec(SUPABASE_STUB);
+    await db.exec(builderSql);
+    // No login yet: nobody is admin, even someone who later signs up as admin@crm.com.
+    const squatter = { sub: randomUUID(), role: 'authenticated', email: 'admin@crm.com' };
+    await addLogin(db, squatter);
+    await fails(call(db, squatter, 'select * from public.setup_admin_list()', []), /not_admin/);
+    // Re-running after the real login exists binds it once; later runs never move it.
+    await db.exec(builderSql);
+    assert.equal((await db.query('select user_id from setup_private.admins where email = $1', ['admin@crm.com'])).rows[0].user_id, squatter.sub);
+    await db.query('delete from auth.users where id = $1', [squatter.sub]);
+    await addLogin(db, ADMIN);
+    await db.exec(builderSql);
+    assert.equal((await db.query('select user_id from setup_private.admins where email = $1', ['admin@crm.com'])).rows[0].user_id, squatter.sub);
 });
 
 test('builder.sql is idempotent and leaves the client CRM tables alone', async () => {
     const db = new PGlite({ extensions: { pgcrypto } });
     await db.exec(SUPABASE_STUB);
+    await addLogin(db, ADMIN);
     await db.exec(schemaSql);
     const tables = async () => (await db.query("select table_name from information_schema.tables where table_schema = 'public' order by 1")).rows;
     const before = await tables();
