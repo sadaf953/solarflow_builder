@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://qduonewmquwayrnwyzvc.supabase.co wss://qduonewmquwayrnwyzvc.supabase.co 'self' ws://127.0.0.1:5186 ws://localhost:5186; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src https://qduonewmquwayrnwyzvc.supabase.co 'self' data: blob:; font-src 'self' data:; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='%23f7a01d'/%3E%3Cg stroke='%23f7a01d' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M16 2v3.5M16 26.5V30M2 16h3.5M26.5 16h3.5'/%3E%3Cpath d='M6.1 6.1l2.5 2.5M23.4 23.4l2.5 2.5M6.1 25.9l2.5-2.5M23.4 8.6l2.5-2.5'/%3E%3C/g%3E%3C/svg%3E" />
+<title>Page Not Found - SolarFlow CRM</title>
+<script>
+  // Automatic SPA fallback: if opened with auth tokens, recovery hash, or invalid subpath,
+  // redirect immediately to the application root preserving hash and search params.
+  (function() {
+    var loc = window.location;
+    var isGitHub = loc.pathname.startsWith('/CRM');
+    var base = isGitHub ? '/CRM/' : '/';
+    
+    // If the path is not the root or contains hash/search (e.g. recovery tokens or /CRM/ on custom domain)
+    if (loc.hash || loc.search || (loc.pathname !== '/' && loc.pathname !== '/CRM/')) {
+      loc.replace(loc.origin + base + loc.search + loc.hash);
+    }
+  })();
+</script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #fafaf9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    padding: 24px;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: #ffffff;
+    border-radius: 28px;
+    box-shadow: 0 10px 40px rgba(28, 25, 23, 0.08);
+    padding: 48px 32px;
+    text-align: center;
+  }
+  .icon {
+    width: 44px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 18px;
+  }
+  /* Sun mark only - no plate behind it, matching the browser tab icon. */
+  .icon svg { width: 44px; height: 44px; color: #f7a01d; }
+  h1 {
+    font-size: 22px;
+    font-weight: 900;
+    color: #1c1917;
+    letter-spacing: -0.01em;
+    margin: 0 0 6px;
+  }
+  .brand {
+    font-size: 12px;
+    font-weight: 700;
+    color: #a8a29e;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin: 0 0 24px;
+  }
+  p.reason {
+    font-size: 13px;
+    font-weight: 500;
+    color: #78716c;
+    line-height: 1.6;
+    margin: 0 0 32px;
+  }
+  a.home-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    padding: 14px;
+    background: #1c1917;
+    color: #ffffff;
+    text-decoration: none;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 700;
+    transition: background 0.15s;
+    cursor: pointer;
+  }
+  a.home-btn:hover { background: #292524; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4"></circle>
+        <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"></path>
+      </svg>
+    </div>
+    <div class="brand">SolarFlow CRM</div>
+    <h1>This page doesn't exist</h1>
+    <p class="reason">
+      The link you followed doesn't lead anywhere in this app - it may be
+      outdated, mistyped, or the page it pointed to has been removed.
+      SolarFlow CRM runs as a single application, so the page you're
+      looking for is usually just one click away from the home screen.
+    </p>
+    <a class="home-btn" href="javascript:void(0)" onclick="var isGH=location.pathname.startsWith('/CRM'); location.href=location.origin + (isGH?'/CRM/':'/');">
+      &#8592; Return to SolarFlow CRM
+    </a>
+  </div>
+</body>
+</html>

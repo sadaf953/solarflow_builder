@@ -1,0 +1,19 @@
+.env
+node_modules
+backup-repo/
+dist/
+.DS_Store
+*.log
+.vscode/
+.idea/
+
+# Database backups - real customer data, never commit
+backups/
+
+.env.*
+!.env.example
+output/
+scratch/
+supabase/.temp/
+.vercel/
+.netlify/

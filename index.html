@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src https://qduonewmquwayrnwyzvc.supabase.co wss://qduonewmquwayrnwyzvc.supabase.co 'self' ws://127.0.0.1:5186 ws://localhost:5186; script-src 'self' 'unsafe-inline' 'unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src https://qduonewmquwayrnwyzvc.supabase.co 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; frame-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'none'" />
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='7' fill='%23f7a01d'/%3E%3Cg stroke='%23f7a01d' stroke-width='2.6' stroke-linecap='round'%3E%3Cpath d='M16 2v3.5M16 26.5V30M2 16h3.5M26.5 16h3.5'/%3E%3Cpath d='M6.1 6.1l2.5 2.5M23.4 23.4l2.5 2.5M6.1 25.9l2.5-2.5M23.4 8.6l2.5-2.5'/%3E%3C/g%3E%3C/svg%3E" />
+    <title>SolarFlow Demo</title>
+    <meta name="description"
+        content="CRM &amp; Project Management for SolarFlow Solar Energy - Track customers through the solar installation pipeline" />
+    <script>
+        // Stale-index.html rescue.
+        //
+        // GitHub Pages serves index.html with `cache-control: max-age=600`, and
+        // a deploy DELETES the previous hashed bundle. So for up to 10 minutes a
+        // browser can hold an index.html pointing at a bundle that now 404s -
+        // the app renders nothing, and no JS runs, so the in-app update banner
+        // cannot help. This catches that one case and reloads once.
+        //
+        // sessionStorage guards against a reload loop: if the second attempt
+        // also fails the problem is not staleness, and we stop.
+        (function () {
+            window.addEventListener('error', function (e) {
+                var el = e && e.target;
+                if (!el || el.tagName !== 'SCRIPT' || !el.src) return;
+
+                // Only OUR OWN bundle failing indicates a stale index.html.
+                // Third-party scripts - the Cloudflare Insights beacon injected
+                // at the edge, ad blockers, browser extensions - fail for
+                // reasons that have nothing to do with staleness, and a reload
+                // will never fix them. Reloading on those costs every visitor a
+                // second full page load on first visit.
+                try {
+                    if (new URL(el.src, location.href).origin !== location.origin) return;
+                } catch (_) { return; }
+
+                try {
+                    if (sessionStorage.getItem('ws_stale_reload')) return;
+                    sessionStorage.setItem('ws_stale_reload', '1');
+                } catch (_) { return; }   // private mode: do nothing rather than loop
+                location.reload();
+            }, true);
+
+            // The app loaded, so clear the flag for next time.
+            window.addEventListener('load', function () {
+                try { sessionStorage.removeItem('ws_stale_reload'); } catch (_) { /* ignore */ }
+            });
+        })();
+    </script>
+</head>
+
+<body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+</body>
+
+</html>

@@ -1,0 +1,380 @@
+
+
+/* Modern, clean sans-serif quotation typography */
+.quotation-paper .a4-page,
+.quotation-doc,
+.font-roman,
+.quotation-paper .a4-page table,
+.quotation-paper .a4-page th,
+.quotation-paper .a4-page td,
+.quotation-paper .a4-page p,
+.quotation-paper .a4-page h1,
+.quotation-paper .a4-page h2,
+.quotation-paper .a4-page h3,
+.quotation-paper .a4-page span,
+.quotation-paper .a4-page div {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+.quotation-paper .a4-page {
+  letter-spacing: 0.005em;
+  -webkit-font-smoothing: antialiased;
+  /* Base typography scaled up by 10% */
+  font-size: 15.4px;
+}
+
+/* Precise 10% Font Size Increase Across All Three Pages */
+.quotation-paper .a4-page .text-\[7px\] { font-size: 7.7px !important; }
+.quotation-paper .a4-page .text-\[7\.5px\] { font-size: 8.25px !important; }
+.quotation-paper .a4-page .text-\[8px\] { font-size: 8.8px !important; }
+.quotation-paper .a4-page .text-\[8\.5px\] { font-size: 9.35px !important; }
+.quotation-paper .a4-page .text-\[9px\] { font-size: 9.9px !important; }
+.quotation-paper .a4-page .text-\[9\.5px\] { font-size: 10.45px !important; }
+.quotation-paper .a4-page .text-\[10px\] { font-size: 11px !important; }
+.quotation-paper .a4-page .text-\[10\.5px\] { font-size: 11.55px !important; }
+.quotation-paper .a4-page .text-\[11px\] { font-size: 12.1px !important; }
+.quotation-paper .a4-page .text-\[11\.5px\] { font-size: 12.65px !important; }
+.quotation-paper .a4-page .text-\[12px\] { font-size: 13.2px !important; }
+.quotation-paper .a4-page .text-\[12\.5px\] { font-size: 13.75px !important; }
+.quotation-paper .a4-page .text-\[13px\] { font-size: 14.3px !important; }
+.quotation-paper .a4-page .text-\[13\.5px\] { font-size: 14.85px !important; }
+.quotation-paper .a4-page .text-\[14px\] { font-size: 15.4px !important; }
+.quotation-paper .a4-page .text-\[14\.5px\] { font-size: 16px !important; }
+.quotation-paper .a4-page .text-\[15px\] { font-size: 16.5px !important; }
+.quotation-paper .a4-page .text-\[16px\] { font-size: 17.6px !important; }
+.quotation-paper .a4-page .text-\[17px\] { font-size: 18.7px !important; }
+.quotation-paper .a4-page .text-\[18px\] { font-size: 19.8px !important; }
+.quotation-paper .a4-page .text-\[20px\] { font-size: 22px !important; }
+.quotation-paper .a4-page .text-\[24px\] { font-size: 26.4px !important; }
+
+.quotation-paper .a4-page .text-xs { font-size: 13.2px !important; }
+.quotation-paper .a4-page .text-sm { font-size: 15.4px !important; }
+.quotation-paper .a4-page .text-base { font-size: 17.6px !important; }
+.quotation-paper .a4-page .text-lg { font-size: 19.8px !important; }
+.quotation-paper .a4-page .text-xl { font-size: 22px !important; }
+.quotation-paper .a4-page .text-2xl { font-size: 26.4px !important; }
+.quotation-paper .a4-page .text-3xl { font-size: 33px !important; }
+
+/* Contact rows use one predictable flex layout in preview and html2canvas. */
+.quotation-paper .q-document-header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 8px;
+}
+
+.quotation-paper .q-document-logo {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.quotation-paper .q-company-details {
+  display: flex;
+  flex: 0 1 360px;
+  min-width: 0;
+  width: min(360px, 100%);
+  max-width: 100%;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  text-align: right;
+}
+
+.quotation-paper .q-company-id,
+.quotation-paper .q-company-email {
+  max-width: 100%;
+  line-height: 1.15;
+}
+
+.quotation-paper .q-contact-line {
+  display: block;
+  min-width: 0;
+}
+
+.quotation-paper .q-contact-content {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.15;
+}
+
+.quotation-paper .q-contact-icon {
+  display: inline-flex;
+  flex: 0 0 auto;
+  width: 1.15em;
+  height: 1.15em;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.quotation-paper .q-contact-icon svg {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.quotation-paper .q-contact-value {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.quotation-paper .q-company-email {
+  align-self: flex-end;
+  white-space: normal;
+  text-align: right;
+}
+
+.quotation-paper .q-company-email .q-contact-content {
+  justify-content: flex-end;
+}
+
+.quotation-paper .q-company-email .q-contact-value {
+  display: block;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  line-height: 1.15;
+  text-align: right;
+}
+
+.quotation-paper .q-customer-info,
+.quotation-paper .q-customer-phone,
+.quotation-paper .q-customer-email {
+  max-width: 100%;
+}
+
+.quotation-paper .q-customer-contact-details {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.quotation-paper .q-customer-phone,
+.quotation-paper .q-customer-email {
+  align-self: flex-start;
+}
+
+.quotation-paper .q-customer-phone .q-contact-value {
+  white-space: nowrap;
+}
+
+.quotation-paper .q-customer-email .q-contact-value {
+  overflow-wrap: anywhere;
+}
+
+/* Keep table rules clear of glyphs in both the preview and html2canvas PDF.
+   The 10% type enlargement above needs a matching line box and cell inset;
+   otherwise wrapped rows can place their text directly on a collapsed rule. */
+.quotation-paper .quotation-financial-table th,
+.quotation-paper .quotation-financial-table td {
+  line-height: 1.3;
+  vertical-align: middle;
+}
+
+.quotation-paper .quotation-financial-table thead th {
+  padding-top: 4px;
+  padding-bottom: 8px;
+}
+
+.quotation-paper .quotation-financial-summary-row td {
+  padding-top: 2px;
+  padding-bottom: 7px;
+}
+
+.quotation-paper .quotation-detail-table th,
+.quotation-paper .quotation-detail-table td {
+  line-height: 1.28;
+  vertical-align: middle;
+  padding-top: 1.5px;
+  padding-bottom: 6.5px;
+}
+
+.quotation-paper .quotation-detail-table thead th {
+  padding-top: 2px;
+  padding-bottom: 7px;
+}
+
+.quotation-paper .quotation-bom-table th,
+.quotation-paper .quotation-bom-table td {
+  line-height: 1.24;
+  padding-top: 1px;
+  padding-bottom: 5.5px;
+}
+
+.quotation-paper .quotation-section-label {
+  position: relative;
+  z-index: 1;
+  display: inline-block;
+  padding: 0 8px 2px;
+  background: #fff;
+  line-height: 1.25;
+}
+
+.quotation-paper .quotation-other-charges-title {
+  padding-top: 2px;
+  padding-bottom: 7px;
+  line-height: 1.25;
+}
+
+
+/* CRM controls are scoped so existing portals and printed agreements retain their styles. */
+.q-module { position:fixed; inset:0; z-index:50; background:#fcfbfa; color:#1c1917; overflow:auto; overflow-x:hidden; font-family:inherit; }
+.q-module.q-module-embedded { position:relative; inset:auto; z-index:auto; min-height:calc(100dvh - 7rem); overflow:visible; border:0; border-radius:0; background:transparent; }
+.q-module-embedded .q-content { max-width:none; padding:0 0 100px; }
+.q-module button { min-height:44px; padding:10px 14px; border-radius:12px; display:inline-flex; align-items:center; justify-content:center; gap:7px; font-size:13px; font-weight:700; border:1px solid #e7e5e4; background:white; cursor:pointer; }
+.q-module button:hover { background:#f5f5f4; }
+.q-module button:disabled { opacity:.5; cursor:default; }
+.q-module button:focus-visible,.q-module input:focus-visible,.q-module textarea:focus-visible,.q-module select:focus-visible { outline:3px solid #ff8a00; outline-offset:2px; }
+.q-module .q-primary { background:#059669; color:white; border-color:#059669; }
+.q-module .q-primary:hover { background:#047857; }
+.q-header { position:sticky; top:0; z-index:5; background:#ffffffed; backdrop-filter:blur(12px); border-bottom:1px solid #e7e5e4; padding:12px max(16px,calc((100vw - 1080px)/2)); display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.q-header h1 { font-size:18px; font-weight:800; color:#1c1917; }
+.q-header p { font-size:11px; color:#78716c; }
+.q-header>div { min-width:0; }
+.q-header h1,.q-header p { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.q-content { max-width:1080px; margin:auto; padding:24px 16px 100px; }
+.q-list-head { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:0 0 18px; }
+.q-list-heading { display:flex; align-items:center; gap:10px; min-width:0; }
+.q-list-heading h2 { color:#1c1917; font-size:18px; font-weight:800; letter-spacing:-.25px; }
+.q-list-heading p { color:#78716c; font-size:12px; font-weight:600; }
+.q-module .q-list-back { width:42px; min-width:42px; padding:0; border-color:#e7e5e4; color:#57534e; }
+.q-module .q-create { flex:0 0 auto; background:#ff8a00; border-color:#ff8a00; color:#1c1917; box-shadow:0 4px 12px rgba(255,138,0,0.22); font-weight:800; }
+.q-module .q-create:hover { background:#ff8a00; border-color:#ff8a00; color:#1c1917; }
+.q-subnav { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:0 0 16px; padding-bottom:14px; border-bottom:1px solid #e7e5e4; }
+.q-subnav span { color:#78716c; font-size:12px; font-weight:700; text-transform:capitalize; }
+.q-toolbar { display:flex; flex-wrap:wrap; gap:12px; margin:18px 0; }
+.q-search { flex:1; min-width:180px; padding:12px 16px; border:1px solid #e7e5e4; border-radius:12px; background:white; font-size:16px; }
+.q-filters { display:flex; flex-wrap:wrap; gap:6px; margin:12px 0 20px; }
+.q-filters button[aria-pressed=true] { background:#059669; color:white; border-color:#059669; }
+.q-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px; }
+.q-card,.q-panel { padding:22px; border-radius:16px; background:white; border:1px solid #e7e5e4; box-shadow:0 1px 3px rgba(0,0,0,0.03); min-width:0; }
+.q-card-heading { display:flex; justify-content:space-between; gap:10px; align-items:center; font-size:12px; color:#78716c; }
+.q-status { padding:5px 10px; border-radius:99px; font-size:11px; font-weight:800; text-transform:capitalize; background:#f5f5f4; color:#57534e; }
+.q-status-issued { background:#eff6ff; color:#1e40af; }.q-status-converted { background:#ecfdf5; color:#065f46; }.q-status-lost { background:#fff1f2; color:#9f1239; }
+.q-card h3 { font-size:18px; font-weight:800; margin:14px 0 6px; overflow-wrap:anywhere; color:#1c1917; }
+.q-card p { font-size:13px; color:#78716c; margin:5px 0; }
+.q-card dl { display:flex; justify-content:space-between; gap:12px; padding:15px 0; }
+.q-card dt { font-size:11px; color:#78716c; }.q-card dd { font-weight:800; font-size:17px; color:#1c1917; }
+.q-actions { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+.q-actions button { flex:1; white-space:nowrap; font-size:12px; }
+.q-muted { color:#78716c; font-size:13px; margin:8px 0; }
+.q-empty { text-align:center; padding:50px 20px; border:1px dashed #d6d3d1; border-radius:20px; background:white; }
+.q-error,.q-notice { padding:16px; border-radius:12px; margin:12px 0; font-size:14px; white-space:pre-line; overflow-wrap:anywhere; }
+.q-error { background:#fff1f2; color:#9f1239; border:1px solid #fecdd3; }.q-notice { background:#fff0d9; color:#92400e; border:1px solid #ffdcad; }.q-notice button { margin:8px 8px 0 0; }
+.q-pagination { display:flex; justify-content:center; align-items:center; gap:14px; margin-top:24px; font-size:13px; color:#78716c; }
+.q-editor { max-width:820px; margin:auto; }
+.q-stepper { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:6px; }
+.q-stepper button { flex-direction:column; font-size:12px; padding:10px 3px; background:transparent; border:0; }
+.q-stepper span { display:flex; align-items:center; justify-content:center; width:28px; height:28px; border-radius:50%; background:#f5f5f4; color:#78716c; }
+.q-stepper [aria-current=step] { color:#059669; font-weight:700; }.q-stepper [aria-current=step] span { background:#059669; color:white; }
+.q-stepper small { font-size:11px; }
+.q-save-state { text-align:right; font-size:12px; color:#78716c; min-height:32px; padding-top:8px; }
+.q-eyebrow { font-size:10px; font-weight:800; letter-spacing:2px; color:#ff8a00; margin-bottom:6px; }
+.q-panel h2 { font-size:24px; font-weight:800; margin-bottom:24px; color:#1c1917; }.q-panel h3 { font-size:15px; font-weight:800; margin-bottom:12px; color:#1c1917; }
+.q-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:18px; }
+.q-field { display:flex; flex-direction:column; gap:7px; min-width:0; }.q-field>span { font-size:12px; font-weight:700; color:#44403c; }
+.q-field input,.q-field select,.q-field textarea { width:100%; min-width:0; min-height:46px; border:1px solid #d6d3d1; border-radius:10px; background:#fff; padding:10px 12px; font-size:16px; }
+.q-field input[readonly],.q-field textarea[readonly] { background:#f5f5f4; color:#78716c; cursor:not-allowed; }
+.q-auto-field { position:relative; display:block; }
+.q-auto-field input { padding-right:72px; }
+.q-auto-field button { position:absolute; right:4px; top:4px; bottom:4px; min-height:0; padding:6px 12px; border-radius:8px; background:#ff8a00; border-color:#ff8a00; color:#1c1917; font-weight:800; text-transform:uppercase; font-size:10px; }
+.q-option { border:1px solid #e7e5e4; padding:18px; border-radius:16px; margin:14px 0; }.q-option dl { margin-top:14px; }.q-option dl div { display:flex; justify-content:space-between; padding:7px 0; font-size:13px; }.q-option dd { font-weight:800; color:#059669; }.q-option p { font-size:13px; margin-top:8px; }
+.q-editor-actions { position:sticky; bottom:0; padding:12px 0 max(12px,env(safe-area-inset-bottom)); background:#f6f7f9f5; display:flex; gap:8px; justify-content:space-between; z-index:3; }
+.q-standard-notes { list-style:disc; padding-left:20px; margin:12px 0 24px; font-size:13px; line-height:1.8; }
+.q-note { display:flex; gap:8px; align-items:end; margin:12px 0; }.q-note .q-field { flex:1; }.q-note button { margin-bottom:2px; }
+.q-summary-title { margin-top:30px; }.q-summary div { display:grid; grid-template-columns:1fr 1fr; padding:9px 0; gap:20px; font-size:13px; border-bottom:1px solid #eef1f5; }.q-summary dt { color:#68788b; }.q-summary dd { overflow-wrap:anywhere; }
+.q-template-summary { font:12px/1.6 inherit; white-space:pre-wrap; overflow-wrap:anywhere; margin-top:12px; }
+.q-leads { display:flex; flex-direction:column; gap:8px; }.q-leads button { text-align:left; justify-content:space-between; }.q-leads small { color:#68788b; }
+.q-preview-toolbar { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 16px; }.q-preview-scroll { width:100%; overflow:auto; background:#dfe5ee; border-radius:14px; padding:12px; }.q-preview-surface { transform-origin:top left; }
+.quotation-paper .a4-page { width:210mm; height:297mm; min-height:297mm; max-height:297mm; margin:0 0 20px; overflow:hidden; flex-shrink:0; }
+.quotation-paper .a4-page>div:last-child { flex-shrink:0; }
+.quotation-paper table { table-layout:fixed; }.quotation-paper th,.quotation-paper td { overflow-wrap:anywhere; white-space:normal !important; }
+.q-dialog { position:fixed; inset:0; z-index:65; background:#10283c70; display:grid; place-items:center; padding:16px; }.q-dialog .q-panel { width:100%; max-width:520px; max-height:90dvh; overflow:auto; }
+
+/* Agent and dealer portals are intentionally phone-width even on a desktop.
+   Keep Quotation Maker inside the same compact shell instead of switching to
+   the broad two-column admin layout. */
+.q-module-partner .q-content { width:100%; max-width:28rem; margin-inline:auto; }
+.q-module-partner.q-module-embedded { min-height:100dvh; padding:16px; background:#fcfbfa; }
+.q-module-partner .q-content { padding:0 0 max(92px,calc(76px + env(safe-area-inset-bottom))); }
+.q-module-partner .q-cards,
+.q-module-partner .q-grid { grid-template-columns:1fr; }
+.q-module-partner .q-toolbar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+.q-module-partner .q-search { min-width:0; width:100%; }
+.q-module-partner .q-filters { flex-wrap:nowrap; gap:4px; }
+.q-module-partner .q-filters button { flex:1 1 0; min-width:0; padding:9px 5px; font-size:11px; }
+.q-module-partner .q-card dl { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+.q-module-partner .q-card dl>div:last-child { text-align:right; }
+.q-module-partner .q-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+.q-module-partner .q-actions button { width:100%; min-width:0; white-space:normal; line-height:1.2; }
+.q-module-partner .q-preview-toolbar { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+.q-module-partner .q-preview-toolbar button { width:100%; min-width:0; padding-inline:7px; white-space:normal; }
+.q-module-partner .q-preview-toolbar .q-primary { grid-column:span 2; }
+@media(max-width:600px) {
+  .q-content { padding:16px 16px max(92px,calc(76px + env(safe-area-inset-bottom))); }
+  .q-module-embedded .q-content { padding:0 0 max(92px,calc(76px + env(safe-area-inset-bottom))); }
+  .q-header { padding:10px 14px; padding-top:max(10px,env(safe-area-inset-top)); }
+  .q-header h1 { font-size:16px; }
+  .q-header>svg { flex:0 0 auto; }
+  .q-cards,.q-grid { grid-template-columns:1fr; }
+  .q-list-head { align-items:flex-start; margin-bottom:14px; }
+  .q-list-heading h2 { font-size:16px; }
+  .q-module .q-create { min-height:42px; padding-inline:12px; }
+  .q-toolbar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:8px; }
+  .q-search { min-width:0; width:100%; }
+  .q-toolbar button { padding-inline:12px; }
+  .q-filters { flex-wrap:nowrap; gap:4px; width:100%; }
+  .q-filters button { flex:1 1 0; min-width:0; padding:9px 5px; font-size:11px; }
+  .q-card,.q-panel { padding:18px; }
+  .q-card dl { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .q-card dl>div { min-width:0; }
+  .q-card dl>div:last-child { text-align:right; }
+  .q-card dd { font-size:15px; overflow-wrap:anywhere; }
+  .q-actions { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+  .q-actions button { width:100%; min-width:0; padding:10px 8px; white-space:normal; line-height:1.2; }
+  .q-stepper { gap:2px; }
+  .q-stepper button { min-width:0; padding-inline:1px; }
+  .q-stepper small { line-height:1.2; overflow-wrap:anywhere; }
+  .q-option { padding:14px; }
+  .q-summary div { grid-template-columns:minmax(0,.8fr) minmax(0,1.2fr); gap:12px; }
+  .q-summary dd { text-align:right; }
+  .q-preview-toolbar { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .q-preview-toolbar button { width:100%; min-width:0; padding-inline:7px; white-space:normal; }
+  .q-preview-toolbar .q-primary { grid-column:span 2; }
+  .q-preview-scroll { padding:8px; }
+  .q-editor-actions { margin-inline:-16px; padding:10px 16px max(10px,env(safe-area-inset-bottom)); }
+  .q-editor-actions button { min-width:0; font-size:12px; padding:10px 8px; white-space:nowrap; }
+  .q-pagination { gap:8px; }
+  .q-pagination button { padding-inline:10px; }
+  .q-pagination span { text-align:center; line-height:1.3; }
+}
+
+@media(max-width:340px) {
+  .q-content { padding-inline:12px; }
+  .q-header { padding-inline:10px; }
+  .q-card,.q-panel { padding:16px; }
+  .q-list-head { gap:8px; }
+  .q-list-heading { gap:7px; }
+  .q-list-heading p { display:none; }
+  .q-module .q-create { padding-inline:9px; font-size:12px; }
+  .q-filters button { font-size:10px; padding-inline:3px; }
+  .q-editor-actions { margin-inline:-12px; padding-inline:12px; }
+  .q-editor-actions button { font-size:11px; padding-inline:6px; }
+}
+
+/* Keep quotation cards focused, with secondary actions revealed on demand. */
+.q-card-primary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-top:12px; }
+.q-card-actions button { min-width:0; }
+.q-module .q-more-actions { margin-top:8px; width:100%; border-color:transparent; background:transparent; color:#57534e; font-size:12px; }
+.q-module .q-more-actions:hover { background:#f5f5f4; }
+.q-card-secondary { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; padding-top:12px; margin-top:4px; border-top:1px solid #e7e5e4; }
+.q-card-secondary button { white-space:normal; font-size:12px; }
+
+/* Keep the chat launcher clear of the quotation editor's sticky actions. */
+body:has(.q-editor-actions) .team-chat-launcher {
+  bottom: calc(6rem + env(safe-area-inset-bottom));
+}

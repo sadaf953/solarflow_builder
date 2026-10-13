@@ -1,0 +1,611 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* SolarFlow visual foundation: warm neutrals with clear solar accents. */
+:root {
+    --sf-canvas: #FAFAF9;
+    --sf-surface: #FFFFFF;
+    --sf-surface-soft: #F5F5F4;
+    --sf-ink: #1C1917;
+    --sf-ink-secondary: #57534E;
+    --sf-muted: #78716C;
+    --sf-border: #E7E5E4;
+    --sf-border-strong: #D6D3D1;
+    --sf-orange: #FF8A00;
+    --sf-orange-hover: #FFB000;
+    --sf-orange-soft: #FFF4E5;
+    --sf-yellow: #FACC15;
+    --sf-yellow-soft: #FEF9C3;
+    --sf-green: #22C55E;
+    --sf-green-dark: #16A34A;
+    --sf-green-soft: #DCFCE7;
+    --sf-blue: #2563EB;
+    --sf-blue-soft: #EFF6FF;
+    --sf-red: #EF4444;
+    --sf-red-dark: #B91C1C;
+    --sf-red-soft: #FEF2F2;
+    --sf-focus: #FACC15;
+    --sf-radius: 14px;
+}
+
+/* Base Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Nunito Sans', system-ui, sans-serif;
+    background-color: var(--sf-canvas);
+    color: var(--sf-ink);
+    line-height: 1.6;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+    font-family: 'Google Sans Flex', system-ui, sans-serif;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #F5F5F4;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #D6D3D1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #A8A29E;
+}
+
+/* Modal Backdrop */
+.modal-backdrop {
+    backdrop-filter: blur(4px);
+    background-color: rgba(0, 0, 0, 0.4);
+}
+
+/* Card Hover Effect */
+.card-hover {
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
+}
+
+/* Gradient Background for Login */
+.gradient-bg {
+    background: var(--sf-surface-soft);
+}
+
+/* Stage Button Styles */
+.stage-btn {
+    transition: all 0.2s ease;
+}
+
+.stage-btn:hover {
+    background-color: var(--sf-orange-soft);
+    border-left-color: var(--sf-orange);
+}
+
+.stage-btn.active {
+    background-color: var(--sf-orange-soft);
+    border-left-color: var(--sf-orange);
+    color: var(--sf-ink);
+    font-weight: 700;
+}
+
+/* Input Focus States */
+input:focus,
+select:focus,
+textarea:focus {
+    outline: none;
+    border-color: var(--sf-focus);
+    box-shadow: 0 0 0 3px rgba(250, 204, 21, .28);
+}
+
+/* Button Animations */
+.btn-primary {
+    border-color: var(--sf-orange);
+    background: var(--sf-orange);
+    color: var(--sf-ink);
+    transition: background-color .15s ease, border-color .15s ease, box-shadow .15s ease;
+}
+
+.btn-primary:hover {
+    border-color: var(--sf-orange-hover);
+    background: var(--sf-orange-hover);
+    box-shadow: 0 3px 10px rgba(255, 138, 0, .2);
+}
+
+@layer components {
+    .sf-page {
+        @apply min-h-screen bg-stone-50 text-stone-900;
+    }
+
+    .sf-card {
+        @apply rounded-2xl border border-stone-200 bg-white;
+    }
+
+    .sf-btn-primary {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl border border-orange-500 bg-orange-500 px-4 py-2.5 text-xs font-bold text-stone-900 transition-colors hover:border-orange-400 hover:bg-orange-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .sf-btn-secondary {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 py-2.5 text-xs font-bold text-stone-700 transition-colors hover:border-stone-300 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .sf-btn-success {
+        @apply inline-flex items-center justify-center gap-2 rounded-xl border border-green-600 bg-green-600 px-4 py-2.5 text-xs font-bold text-white transition-colors hover:border-green-700 hover:bg-green-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:ring-offset-2;
+    }
+
+    .sf-kicker {
+        @apply text-[10px] font-bold uppercase tracking-[0.16em] text-orange-600;
+    }
+
+    .sf-input {
+        @apply w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:border-yellow-400 focus:outline-none focus:ring-2 focus:ring-yellow-400/30;
+    }
+}
+
+/* Follow-up Chat Style */
+.follow-up-item {
+    animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Pulse Animation for New Items */
+@keyframes pulse-border {
+
+    0%,
+    100% {
+        border-color: var(--sf-orange);
+    }
+
+    50% {
+        border-color: var(--sf-orange-hover);
+    }
+}
+
+.new-item {
+    animation: pulse-border 2s ease-in-out 3;
+}
+
+/* Solar Toolbox business document system */
+.professional-document {
+    width: 100%;
+    min-height: 860px;
+    padding: 38px 42px 30px;
+    border: 1px solid var(--sf-border-strong);
+    border-radius: 4px;
+    box-shadow: 0 8px 28px rgba(28, 25, 23, 0.08);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.professional-document-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 28px;
+    padding-bottom: 18px;
+    border-bottom: 3px solid var(--sf-ink);
+}
+
+.professional-document-brand {
+    color: var(--sf-ink);
+    font-size: 23px;
+    font-weight: 900;
+    letter-spacing: .04em;
+}
+
+.professional-document-header p {
+    margin-top: 3px;
+    color: var(--sf-muted);
+    font-size: 10px;
+}
+
+.professional-document-title {
+    min-width: 235px;
+    text-align: right;
+}
+
+.professional-document-title h3 {
+    margin-bottom: 9px;
+    color: var(--sf-orange);
+    font-size: 18px;
+    font-weight: 900;
+    letter-spacing: .055em;
+    text-transform: uppercase;
+}
+
+.professional-document-title dl > div {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 2px 0;
+}
+
+.professional-document-title dt { color: var(--sf-muted); }
+.professional-document-title dd { color: var(--sf-ink); font-weight: 750; }
+
+.professional-document-parties {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 28px;
+    margin: 22px 0;
+    padding: 15px 17px;
+    border: 1px solid var(--sf-border);
+    background: var(--sf-canvas);
+}
+
+.professional-document-parties > div:last-child { text-align: right; }
+.professional-document h4 {
+    margin-bottom: 6px;
+    color: var(--sf-muted);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+}
+.professional-document-parties p { color: var(--sf-ink-secondary); }
+.professional-document-parties .party-name { color: var(--sf-ink); font-size: 14px; font-weight: 800; }
+
+.professional-document-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+}
+
+.professional-document-table th,
+.professional-document-table td {
+    padding: 11px 12px;
+    border: 1px solid var(--sf-border-strong);
+    vertical-align: top;
+}
+
+.professional-document-table th {
+    background: var(--sf-ink);
+    color: #fff;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: .07em;
+    text-align: left;
+    text-transform: uppercase;
+}
+
+.professional-document-table .serial-column { width: 70px; text-align: center; }
+.professional-document-table .amount-column { width: 170px; text-align: right; font-weight: 750; }
+.professional-document-table td strong { display: block; color: var(--sf-ink); font-size: 12px; }
+.professional-document-table td small { display: block; margin-top: 4px; color: var(--sf-muted); font-size: 10px; line-height: 1.45; }
+.professional-document-table .document-total-row td {
+    border-top: 2px solid var(--sf-ink);
+    background: var(--sf-orange-soft);
+    color: var(--sf-ink);
+    font-size: 13px;
+    font-weight: 900;
+    text-align: right;
+}
+
+.professional-document-notes {
+    margin-top: 20px;
+    padding: 13px 15px;
+    border-left: 3px solid var(--sf-orange);
+    background: var(--sf-canvas);
+}
+.professional-document-notes p { margin-top: 3px; color: var(--sf-ink-secondary); font-size: 10px; }
+
+.professional-document-signatures {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 34px;
+    margin-top: 72px;
+}
+.professional-document-signatures > div { text-align: center; }
+.professional-document-signatures span { display: block; border-top: 1px solid var(--sf-ink); }
+.professional-document-signatures strong { display: block; margin-top: 7px; color: var(--sf-ink); font-size: 10px; }
+.professional-document-signatures small { display: block; margin-top: 2px; color: var(--sf-muted); font-size: 8px; }
+.professional-document-footer { margin-top: 25px; padding-top: 8px; border-top: 1px solid var(--sf-border); color: var(--sf-muted); font-size: 8px; text-align: center; }
+
+@media (max-width: 720px) {
+    .professional-document { min-width: 680px; padding: 30px; }
+    .toolbox-content:has(.professional-document) { overflow-x: auto; }
+}
+
+/* Keep mobile stage drawers touch-scrollable without a scrollbar covering labels. */
+.stage-sidebar-scroll {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.stage-sidebar-scroll::-webkit-scrollbar {
+    display: none;
+}
+
+/* Stage tabs can be swiped horizontally on phones without covering their labels. */
+.customer-stage-tabs {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.customer-stage-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+/* ─── PM Surya Ghar Agreement Print & Document Styles ─── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  /* Reset container backgrounds to pure white/transparent */
+  html, body, #root {
+    background-color: #ffffff !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Hide all non-document UI controls during print */
+  .no-print,
+  .no-print *,
+  header,
+  nav,
+  aside,
+  button,
+  .modal-backdrop,
+  .fixed {
+    display: none !important;
+  }
+
+  .print-only-modal {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: auto !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    z-index: 99999 !important;
+    background: #ffffff !important;
+    display: block !important;
+  }
+
+  /* Strip yellow / custom highlight background colors during print */
+  .doc-page span,
+  .doc-page div,
+  .doc-page p {
+    background-color: transparent !important;
+    background: transparent !important;
+  }
+
+  /* Unconstrain page scroll containers without breaking flexbox */
+  .h-screen, 
+  .w-screen,
+  .overflow-hidden, 
+  .overflow-y-auto {
+    height: auto !important;
+    width: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    padding-top: 0 !important;
+    margin-top: 0 !important;
+  }
+
+  .print-document-container {
+    padding: 0 !important;
+    margin: 0 !important;
+    background: #ffffff !important;
+    box-shadow: none !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Reset zoom transform in print mode */
+  .print-document-container > div {
+    transform: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .doc-page {
+    width: 210mm !important;
+    height: 297mm !important;
+    min-height: 297mm !important;
+    max-height: 297mm !important;
+    margin: 0 auto !important;
+    padding: 12mm 15mm 16mm 15mm !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    box-sizing: border-box !important;
+    position: relative !important;
+    background: #ffffff !important;
+    overflow: hidden !important;
+  }
+
+  /* Footer pinning in print */
+  .doc-page .absolute.bottom-5 {
+    position: absolute !important;
+    bottom: 12mm !important;
+    left: 15mm !important;
+    right: 15mm !important;
+  }
+
+  .solar-toolbox,
+  .toolbox-workspace,
+  .toolbox-content {
+    display: block !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  .professional-document {
+    width: 210mm !important;
+    min-width: 210mm !important;
+    min-height: 297mm !important;
+    margin: 0 auto !important;
+    padding: 14mm 15mm 13mm !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .professional-document-table thead { display: table-header-group !important; }
+  .professional-document-table tr { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .professional-document-signatures { margin-top: 24mm !important; }
+}
+
+/* Screen Document Page view */
+.doc-page {
+  font-family: Calibri, 'Calibri Light', 'Gill Sans', 'Segoe UI', Arial, sans-serif;
+  font-weight: 400;
+  width: 210mm;
+  min-height: 297mm;
+  height: 297mm;
+  padding: 12mm 15mm 16mm 15mm;
+  box-sizing: border-box;
+  position: relative;
+  background: #ffffff;
+  overflow: hidden;
+  color: #1e293b;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Explicit regular font weight for non-bold items */
+.doc-page p,
+.doc-page div,
+.doc-page span,
+.doc-page td,
+.doc-page li {
+  font-weight: 400;
+}
+
+.doc-page .font-normal {
+  font-weight: 400 !important;
+}
+
+.doc-page .font-medium {
+  font-weight: 500 !important;
+}
+
+.doc-page .font-semibold {
+  font-weight: 600 !important;
+}
+
+/* Crisp bold font weight for titles/headers */
+.doc-page .font-bold,
+.doc-page b,
+.doc-page strong {
+  font-weight: 700 !important;
+}
+
+/* Keyboard focus must remain visible even on controls using outline-none. */
+:where(button, a[href], input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 3px solid var(--sf-focus) !important;
+    outline-offset: 2px;
+}
+.delivery-editor-dialog {
+    border: 0;
+    padding: 0;
+    margin: auto;
+    width: calc(100% - 2rem);
+    max-width: 56rem;
+    max-height: 92vh;
+    background: transparent;
+    border-radius: 1.5rem;
+}
+.delivery-editor-dialog::backdrop { background: rgb(28 25 23 / 60%); backdrop-filter: blur(4px); }
+
+/* Solar Toolbox uses one restrained workspace treatment across calculators and documents. */
+.solar-toolbox .toolbox-content > div > div:first-child:not([class*="grid"]) {
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--sf-border);
+}
+
+.solar-toolbox :where(input:not([type="radio"]):not([type="checkbox"]), select, textarea) {
+    border-color: var(--sf-border-strong);
+    border-radius: 10px;
+    background-color: var(--sf-surface);
+    color: var(--sf-ink);
+}
+
+.solar-toolbox :where(input:not([type="radio"]):not([type="checkbox"]), select, textarea):focus {
+    border-color: var(--sf-focus);
+    box-shadow: 0 0 0 3px rgb(250 204 21 / 22%);
+}
+
+.solar-toolbox label {
+    color: var(--sf-ink-secondary);
+}
+
+@media print {
+    .solar-toolbox {
+        max-width: none !important;
+        padding: 0 !important;
+    }
+
+    .solar-toolbox .toolbox-workspace {
+        display: block !important;
+    }
+
+    .solar-toolbox .toolbox-content {
+        padding: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+    }
+}
