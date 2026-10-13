@@ -9,7 +9,7 @@ export async function updateDeliveryStatus(client, batchId, status, projectIds) 
 
 async function batchTransaction(client, name, args) {
     const {data, error} = await client.rpc(name, args);
-    if (error?.code === 'PGRST202') throw new Error('Delivery batch setup is incomplete. Ask the demo owner to apply the updated SQL 07, then try again.');
+    if (error?.code === 'PGRST202') throw new Error('Delivery batches are not set up in the database yet. Ask your administrator to run backend/schema.sql again, then try again.');
     if (error) throw error;
     if (!data?.success) throw new Error('Batch change was not confirmed. Refresh before trying again.');
     return data;

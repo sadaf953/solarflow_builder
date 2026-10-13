@@ -20,7 +20,7 @@ Go to **Authentication → Sign In / Providers**:
 
 1. **Email**: on.
 2. **Confirm email**: off. Turn it on only if you have set up your own email (SMTP) under Authentication → Emails.
-3. **Allow new users to sign up**: off. Staff logins are created inside SolarFlow.
+3. **Allow new users to sign up**: off. This is required, not optional. Staff logins are created inside SolarFlow. While sign-ups are on, anyone who knows your app address can make an account; until the owner login exists, someone signing up with the owner's email address would become the admin.
 4. **Allow anonymous sign-ins**: off.
 
 Then go to **Authentication → URL Configuration**:
@@ -28,11 +28,15 @@ Then go to **Authentication → URL Configuration**:
 5. **Site URL**: your app's address, for example `https://crm.yourcompany.in`.
 6. **Redirect URLs**: add the same address.
 
+Password-reset emails send people back to this address with a one-time `?code=` in the link. The reset only works when the app's address is in both **Site URL** and **Redirect URLs**, and when the link is opened in the same browser where "Forgot password" was clicked.
+
+**Email sending.** Supabase's built-in email is only for testing: it sends a handful of emails per hour, so password-reset emails will soon stop arriving. For real use, add your own email service under **Authentication → Emails → SMTP Settings** (for example Zoho Mail, Google Workspace, Amazon SES or Brevo).
+
 ## 3. Create the database
 
 1. Open **SQL Editor → New query**.
 2. Open `backend/setup.sql` from this folder, copy all of it, paste it into the editor and click **Run**.
-3. You should see "Success". The script is safe to run again if anything was interrupted. It never deletes your data.
+3. You should see "Success". The script is safe to run again: it adds anything that is missing, never deletes your data, and leaves tables you added yourself alone. It is not a migration tool, so do not rely on it to rename or convert columns you changed by hand.
 
 ## 4. Deploy the staff-login function
 
@@ -58,7 +62,7 @@ Optional: under **Edge Functions → Secrets**, add `ALLOWED_ORIGIN` with your a
 2. Email: **{{OWNER_EMAIL}}**. Choose a password and tick **Auto Confirm User**.
 3. This login becomes the SolarFlow admin. Create everyone else from inside SolarFlow, under Staff logins.
 
-Any other account added here starts as inactive until the admin activates it.
+Do this before you share the app's address with anyone. Any other account added here (or by a sign-up) starts as "Not set up": it has no access at all until the admin gives it a login type and activates it.
 
 ## 6. Connect the app to your project
 
@@ -90,4 +94,9 @@ Open your site and sign in as {{OWNER_EMAIL}}.
 - **"Your account is inactive"** for the owner: open SQL Editor and run this, with the owner's email between the quotes:
   `update public.profiles set user_type = 'admin', role = 'Admin', status = 'active' where lower(email) = lower('{{OWNER_EMAIL}}');`
 - **"Could not reach the account-creation service"** when adding staff: the `add_user` function is not deployed. Repeat step 4.
-- **Changes after an update**: run the new `backend/setup.sql` again in the SQL Editor. It updates the database in place.
+- **Password-reset link does nothing or says it has expired**: check that your app's address is in **Site URL** and **Redirect URLs** (step 2), open the newest email only, and open it in the same browser where you asked for the reset. If emails stop arriving, set up your own SMTP (step 2).
+- **Changes after an update**: run the new `backend/setup.sql` again in the SQL Editor. It adds what the update needs and keeps your data.
+
+## Not included
+
+- **Emails to installers.** SolarFlow does not email vendors or installers when a job is assigned. Installers with a login see their jobs in the app.

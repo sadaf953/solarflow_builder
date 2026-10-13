@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "../supabase";
 import {
-    LogOut, Search, Upload, Eye, Loader2, CheckCircle2,
+    Search, Upload, Eye, Loader2, CheckCircle2,
     RefreshCw, X, MessageSquare, ChevronDown, ChevronUp, Save, FileText,
     SendHorizonal, User, AlertTriangle, Check, AlertCircle, FileCheck, Phone
 } from "lucide-react";
@@ -12,6 +12,7 @@ import {
 import { FilePreviewModal } from "./modal-tabs/shared";
 import { useGlobalPopup } from './GlobalPopup';
 import BrandMark from './BrandMark';
+import { PortalHeader } from './portal';
 import { isReturnedDocument } from './modal-tabs/shared';
 
 const uploaderCache = {};
@@ -457,7 +458,7 @@ function CustomerCard({ cust, docs, user, onDocsChange, onCustomerRemoved, onPre
     );
 }
 
-export default function StampPortal({ user, onLogout }) {
+export default function StampPortal({ user, onLogout, onChangePassword }) {
 
     const { showAlert } = useGlobalPopup();
     // Completed-work ledger: the stamp maker's own record of what they finished
@@ -497,7 +498,7 @@ export default function StampPortal({ user, onLogout }) {
                     // wire, readable in the network tab. Exact match is safe
                     // here: assigned_stamp_maker is written from profiles.name
                     // via the dropdown, which is the same value as user.name.
-                    .eq(user?.demo_profile_id ? "discom_submission->>assigned_stamp_maker_id" : "discom_submission->>assigned_stamp_maker", user?.demo_profile_id || (user?.name || '').trim())
+                    .eq("discom_submission->>assigned_stamp_maker_id", user?.id)
                     .is("deleted_at", null)
                     .order("created_at", { ascending: false })
                     .range(from, from + pageSize - 1);
@@ -536,7 +537,7 @@ export default function StampPortal({ user, onLogout }) {
         } finally {
             setLoading(false);
         }
-    }, [user?.name, user?.demo_profile_id]);
+    }, [user?.id, user?.name]);
 
     useEffect(() => {
         fetchCustomers();
@@ -580,7 +581,7 @@ export default function StampPortal({ user, onLogout }) {
         return () => supabase.removeChannel(channel);
         // user?.name is read inside the handler now (assignment check), so it
         // must be a dependency rather than a stale closure.
-    }, [user?.id, user?.demo_profile_id, user?.name, fetchCustomers]);
+    }, [user?.id, user?.name, fetchCustomers]);
 
     const handleDocsChange = useCallback((customerId, updatedDocs) => {
         setCustDocs(prev => ({ ...prev, [customerId]: updatedDocs }));
@@ -682,7 +683,7 @@ export default function StampPortal({ user, onLogout }) {
                 .select("id, customer_name, consumer_no, villages, discom_submission")
                 .eq("discom_submission->>sent_to_stamp_maker", "true")
                 .eq("discom_submission->>stamp_sent", "true")
-                .eq(user?.demo_profile_id ? "discom_submission->>assigned_stamp_maker_id" : "discom_submission->>assigned_stamp_maker", user?.demo_profile_id || (user?.name || '').trim())
+                .eq("discom_submission->>assigned_stamp_maker_id", user?.id)
                 .is("deleted_at", null);
             if (error) throw error;
             const myName = String(user?.name || '').trim().toLowerCase();
@@ -718,7 +719,7 @@ export default function StampPortal({ user, onLogout }) {
         } finally {
             setLoadingRecords(false);
         }
-    }, [showAlert, user?.name]);
+    }, [showAlert, user?.id, user?.name]);
 
     useEffect(() => {
         if (view === 'record' && completedRecords.length === 0) fetchCompletedRecords();
@@ -744,31 +745,8 @@ export default function StampPortal({ user, onLogout }) {
 
     return (
         <div className="min-h-screen bg-[#FCFBFA] text-stone-850 font-sans flex flex-col pb-8">
-            {/* Sticky Header matching Vendor / Agent Portal */}
-            <header className="bg-white border-b border-stone-100 px-4 py-3 sticky top-0 z-30 flex items-center justify-between shadow-sm">
-                <BrandMark label="Stamp Portal" />
-                <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-stone-600 truncate max-w-[120px]">{user?.name || "Stamp Maker"}</span>
-                    <button
-                        type="button"
-                        onClick={fetchCustomers}
-                        disabled={loading}
-                        className="p-2 text-stone-400 hover:text-amber-600 transition-colors rounded-xl hover:bg-amber-50 disabled:opacity-50 cursor-pointer"
-                        title="Refresh list"
-                        aria-label="Refresh"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                    </button>
-                    <button
-                        type="button"
-                        onClick={onLogout}
-                        className="p-2 text-stone-400 hover:text-red-500 transition-colors rounded-xl hover:bg-stone-50 cursor-pointer"
-                        title="Logout"
-                    >
-                        <LogOut className="w-4 h-4" />
-                    </button>
-                </div>
-            </header>
+            <PortalHeader label="Stamp Portal" user={user} onRefresh={fetchCustomers} refreshing={loading} refreshLabel="Refresh list"
+                onLogout={onLogout} onChangePassword={onChangePassword} />
 
             <main className="flex-1 p-4 max-w-md mx-auto w-full space-y-4 animate-in fade-in duration-300">
                 {/* Hero / Welcome Banner */}

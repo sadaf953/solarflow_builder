@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Camera, Check, Keyboard, ScanLine, X } from 'lucide-react';
+import { BRANDING } from '../config/index.js';
 
 export default function SerialScanner({ customerName, initialTarget = 'module', onScan, onClose, moduleCount = 0, expectedModules = 0, inverterSerial = '' }) {
     const [target, setTarget] = useState(initialTarget);
@@ -122,7 +123,7 @@ export default function SerialScanner({ customerName, initialTarget = 'module', 
                 {[['module','Modules'], ['inverter','Inverter']].map(([value,label]) => <button key={value} type="button" onClick={() => { setTarget(value); setFeedback(null); lastSeenRef.current = { value: '', at: 0 }; }} aria-pressed={target === value} className={`flex-1 rounded-xl px-4 py-3 text-sm font-bold ${target === value ? 'bg-amber-500 text-stone-950' : 'bg-stone-100 text-stone-700'}`}>{label}{value === 'module' ? ` (${moduleCount}${expectedModules > 0 ? `/${expectedModules}` : ''})` : inverterSerial ? ' ✓' : ''}</button>)}
             </div>
             <div className="relative bg-black flex-1 min-h-[180px] sm:min-h-[260px] max-h-[55vh] overflow-hidden">
-                <video ref={videoRef} autoPlay muted playsInline onError={() => setCameraError('Camera video cannot play here. Open SolarFlow in Safari or Chrome on your phone, or enter the serial below.')} className="w-full h-full object-cover" aria-label="Camera view for barcode scanning"/>
+                <video ref={videoRef} autoPlay muted playsInline onError={() => setCameraError(`Camera video cannot play here. Open ${BRANDING.appName} in Safari or Chrome on your phone, or enter the serial below.`)} className="w-full h-full object-cover" aria-label="Camera view for barcode scanning"/>
                 <div className="pointer-events-none absolute inset-[18%_9%] border-2 border-amber-400 rounded-2xl opacity-90"/>
                 {!cameraReady && !cameraError && <div className="absolute inset-0 flex items-center justify-center p-5 text-center text-white text-sm font-semibold"><Camera className="mr-2 shrink-0" size={18}/>{cameraWaitingLong ? 'Still waiting for camera access. Allow permission, open this page in your phone browser, or enter the serial below.' : 'Opening camera…'}</div>}
                 {cameraError && <div role="alert" className="absolute inset-0 flex items-center justify-center p-5 text-center text-white text-sm font-semibold">{cameraError}</div>}

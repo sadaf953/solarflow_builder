@@ -1,0 +1,20 @@
+/* Builder-only styles. The sf-* classes and the palette come from template/src/index.css. */
+html {
+    scroll-padding-top: 5rem;
+}
+
+body {
+    background: var(--sf-canvas);
+    color: var(--sf-ink);
+    -webkit-tap-highlight-color: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}

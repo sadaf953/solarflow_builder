@@ -1,9 +1,6 @@
-import {percentCropRatio,fitCropRatio,resizeCrop} from '../utils/imageCrop';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { 
-    Crop, RotateCw, RotateCcw, ZoomIn, ZoomOut, Check, X, 
-    Sparkles, ArrowRight, RefreshCw, FileImage, ShieldCheck
-} from 'lucide-react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { percentCropRatio, fitCropRatio, resizeCrop } from '../utils/imageCrop';
+import { Crop, RotateCw, RotateCcw, Check, X, RefreshCw, FileImage } from 'lucide-react';
 
 const ASPECT_RATIOS = [
     { id: 'free', label: 'Freeform', ratio: null },

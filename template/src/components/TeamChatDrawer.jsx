@@ -1,521 +1,224 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
-import { 
-    MessageSquare, Send, X, Users, AlertCircle, Sparkles, 
-    Tag, Bell, Check, Shield, Flame, CheckCircle2, ChevronDown, Minimize2, RotateCcw
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { AlertCircle, MessageSquare, Send, Trash2, Users, X } from 'lucide-react';
 import { supabase } from '../supabase';
+import { formatDate } from '../lib/format.js';
+import { ErrorBanner, Spinner } from '../ui/index.js';
+import { useGlobalPopup } from './GlobalPopup';
 
-const STORAGE_KEY = 'solarflow_team_chat_messages';
-
-const formatTime = (d) => {
-    try {
-        const date = d instanceof Date ? d : new Date(d);
-        return `${date.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}, ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-    } catch {
-        return '';
-    }
-};
-
-// Dynamic starter updates relative to current time
-const getInitialMessages = () => {
-    const now = new Date();
-    const fmt = (d, timeStr) => `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })}, ${timeStr}`;
-    const d0 = new Date(now);
-    const d1 = new Date(now); d1.setDate(d1.getDate() - 1);
-    const d2 = new Date(now); d2.setDate(d2.getDate() - 3);
-
-    return [
-        {
-            id: 'msg-1',
-            senderName: 'Operations Admin',
-            senderRole: 'Admin',
-            userType: 'admin',
-            text: 'Welcome to the SolarFlow Operations channel. All dispatches, site installation updates, and DISCOM submissions can be announced here for full team visibility.',
-            tag: 'General',
-            timestamp: d2.toISOString(),
-            timeFormatted: fmt(d2, '09:30 AM')
-        },
-        {
-            id: 'msg-2',
-            senderName: 'Channel Partner Office',
-            senderRole: 'CPO',
-            userType: 'channel_partner_office',
-            text: 'Submitted 12 new residential proposals for East cluster. 8 have opted for Jan Samarth bank loan financing.',
-            tag: 'General',
-            timestamp: d1.toISOString(),
-            timeFormatted: fmt(d1, '02:15 PM')
-        },
-        {
-            id: 'msg-3',
-            senderName: 'Inventory & Logistics',
-            senderRole: 'Admin',
-            userType: 'admin',
-            text: 'Warehouse stock of bifacial solar modules replenished in godown. Ready for delivery batch allocation.',
-            tag: 'Dispatch',
-            timestamp: d0.toISOString(),
-            timeFormatted: fmt(d0, '10:00 AM')
-        },
-        {
-            id: 'msg-4',
-            senderName: 'Site Installation Lead',
-            senderRole: 'Vendor',
-            userType: 'vendor',
-            text: 'Completed rooftop mounting structure and inverter wiring for consumer Ramesh Patel. Geo-tag photos submitted.',
-            tag: 'Installation',
-            timestamp: d0.toISOString(),
-            timeFormatted: fmt(d0, '11:45 AM')
-        },
-        {
-            id: 'msg-5',
-            senderName: 'Document & Stamp Executive',
-            senderRole: 'Stamp Maker',
-            userType: 'stamp',
-            text: 'Executed and uploaded stamped DISCOM agreements for batch 22. All returned to admin queue for final review.',
-            tag: 'Discom',
-            timestamp: d0.toISOString(),
-            timeFormatted: fmt(d0, '01:20 PM')
-        }
-    ];
-};
-
-const TAG_OPTIONS = [
-    { label: 'General', color: 'bg-stone-100 text-stone-700 border-stone-200' },
-    { label: 'Dispatch', color: 'bg-orange-50 text-orange-700 border-orange-200' },
-    { label: 'Installation', color: 'bg-emerald-50 text-emerald-800 border-emerald-200' },
-    { label: 'Discom', color: 'bg-amber-50 text-amber-800 border-amber-200' },
-    { label: 'Urgent', color: 'bg-rose-50 text-rose-700 border-rose-200' },
-];
-
-const ROLE_BADGES = {
-    admin: { label: 'Admin', color: 'bg-stone-900 text-amber-400 border-stone-800' },
-    channel_partner_office: { label: 'CPO', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-    office2: { label: 'CPO Manager', color: 'bg-emerald-100 text-emerald-800 border-emerald-300' },
-    agent: { label: 'Dealer', color: 'bg-amber-100 text-amber-900 border-amber-300' },
-    agent2: { label: 'Dealer', color: 'bg-amber-100 text-amber-900 border-amber-300' },
-    vendor: { label: 'Vendor', color: 'bg-orange-100 text-orange-900 border-orange-300' },
-    stamp: { label: 'Stamp Maker', color: 'bg-yellow-100 text-yellow-900 border-yellow-300' },
-    sales: { label: 'Staff', color: 'bg-stone-100 text-stone-800 border-stone-200' }
-};
+const TAGS = ['General', 'Dispatch', 'Installation', 'Discom', 'Urgent'];
+const PRESETS = ['Dispatch on the way', 'Site work finished', 'Site inspection delayed'];
+const HISTORY = 200;
+const COLUMNS = 'id, sender_id, sender_name, sender_role, user_type, text, tag, created_at';
 
 export default function TeamChatDrawer({ currentUser }) {
+    const { showConfirm } = useGlobalPopup();
     const [isOpen, setIsOpen] = useState(false);
-    const [messages, setMessages] = useState(() => {
-        if (typeof window === 'undefined') return getInitialMessages();
-        try {
-            const stored = localStorage.getItem(STORAGE_KEY);
-            return stored ? JSON.parse(stored) : getInitialMessages();
-        } catch {
-            return getInitialMessages();
-        }
-    });
-
+    const [messages, setMessages] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
     const [filterTag, setFilterTag] = useState('All');
-    const [inputMessage, setInputMessage] = useState('');
-    const [selectedTag, setSelectedTag] = useState('General');
-    const [unreadCount, setUnreadCount] = useState(0);
+    const [draft, setDraft] = useState('');
+    const [tag, setTag] = useState('General');
+    const [sending, setSending] = useState(false);
+    const [unread, setUnread] = useState(0);
+    const openRef = useRef(false);
+    const endRef = useRef(null);
+    const inputRef = useRef(null);
+    const launcherRef = useRef(null);
+    const myId = currentUser?.id;
+    const canDeleteAny = currentUser?.userType === 'admin';
 
-    const messagesEndRef = useRef(null);
-
-    // Save and broadcast across tabs
-    const broadcastChannelRef = useRef(null);
+    const addMessage = useCallback(row => {
+        setMessages(prev => (prev.some(m => m.id === row.id) ? prev : [...prev, row]));
+    }, []);
 
     useEffect(() => {
-        let isMounted = true;
-
-        if (typeof window !== 'undefined' && window.BroadcastChannel) {
-            broadcastChannelRef.current = new BroadcastChannel('solarflow_team_chat');
-            broadcastChannelRef.current.onmessage = (event) => {
-                if (event.data?.type === 'NEW_MESSAGE') {
-                    setMessages(prev => {
-                        if (prev.some(m => m.id === event.data.message.id)) return prev;
-                        return [...prev, event.data.message];
-                    });
-                    if (!isOpen) {
-                        setUnreadCount(c => c + 1);
-                    }
-                } else if (event.data?.type === 'RESET_MESSAGES') {
-                    setMessages(event.data.messages || []);
+        let active = true;
+        supabase.from('team_chat_messages').select(COLUMNS).order('created_at', { ascending: false }).limit(HISTORY)
+            .then(({ data, error: loadError }) => {
+                if (!active) return;
+                if (loadError) {
+                    console.error('Could not load team chat:', loadError);
+                    setError('Messages could not be loaded.');
+                } else {
+                    setMessages((data || []).reverse());
                 }
-            };
-        }
-
-        // Fetch messages from Supabase
-        async function loadSupabaseChat() {
-            try {
-                const { data, error } = await supabase
-                    .from('team_chat_messages')
-                    .select('*')
-                    .order('created_at', { ascending: true })
-                    .limit(200);
-
-                if (!error && data && data.length > 0 && isMounted) {
-                    const mapped = data.map(r => ({
-                        id: r.id,
-                        senderName: r.sender_name,
-                        senderRole: r.sender_role,
-                        userType: r.user_type,
-                        text: r.text,
-                        tag: r.tag || 'General',
-                        timestamp: r.created_at,
-                        timeFormatted: formatTime(r.created_at)
-                    }));
-                    setMessages(mapped);
-                    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(mapped)); } catch { /* Storage may be unavailable in private browsing. */ }
-                } else if (!error && data && data.length === 0 && isMounted) {
-                    // Seed initial announcements
-                    const starters = getInitialMessages();
-                    setMessages(starters);
-                    const rows = starters.map(m => ({
-                        sender_name: m.senderName,
-                        sender_role: m.senderRole,
-                        user_type: m.userType,
-                        text: m.text,
-                        tag: m.tag,
-                        created_at: m.timestamp
-                    }));
-                    supabase.from('team_chat_messages').insert(rows).catch(() => {});
-                }
-            } catch (err) {
-                console.warn('Notice loading Supabase team chat:', err);
-            }
-        }
-
-        loadSupabaseChat();
-
-        // Subscribe to Supabase Realtime for live cross-device messaging
-        const realtimeChannel = supabase.channel('realtime:team_chat_messages')
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'team_chat_messages' },
-                (payload) => {
-                    const row = payload.new;
-                    if (!row?.id) return;
-                    const newMsg = {
-                        id: row.id,
-                        senderName: row.sender_name,
-                        senderRole: row.sender_role,
-                        userType: row.user_type,
-                        text: row.text,
-                        tag: row.tag || 'General',
-                        timestamp: row.created_at,
-                        timeFormatted: formatTime(row.created_at)
-                    };
-                    setMessages(prev => {
-                        if (prev.some(m => m.id === newMsg.id || (m.timestamp === newMsg.timestamp && m.text === newMsg.text && m.senderName === newMsg.senderName))) {
-                            return prev.map(m => (m.text === newMsg.text && m.senderName === newMsg.senderName ? newMsg : m));
-                        }
-                        return [...prev, newMsg];
-                    });
-                    if (!isOpen) {
-                        setUnreadCount(c => c + 1);
-                    }
-                }
-            )
-            .on(
-                'postgres_changes',
-                { event: 'DELETE', schema: 'public', table: 'team_chat_messages' },
-                (payload) => {
-                    if (payload.old?.id) {
-                        setMessages(prev => prev.filter(m => m.id !== payload.old.id));
-                    } else {
-                        setMessages([]);
-                    }
-                }
-            )
+                setLoading(false);
+            });
+        const channel = supabase.channel('team-chat-messages')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_chat_messages' }, ({ new: row }) => {
+                if (!row?.id) return;
+                addMessage(row);
+                if (!openRef.current && row.sender_id !== myId) setUnread(count => count + 1);
+            })
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'team_chat_messages' }, ({ old }) => {
+                if (old?.id) setMessages(prev => prev.filter(m => m.id !== old.id));
+            })
             .subscribe();
-
-        return () => {
-            isMounted = false;
-            supabase.removeChannel(realtimeChannel);
-            if (broadcastChannelRef.current) {
-                broadcastChannelRef.current.close();
-            }
-        };
-    }, [isOpen]);
-
-    const handleResetChat = async () => {
-        const fresh = getInitialMessages();
-        setMessages(fresh);
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
-            if (broadcastChannelRef.current) {
-                broadcastChannelRef.current.postMessage({ type: 'RESET_MESSAGES', messages: fresh });
-            }
-            await supabase.from('team_chat_messages').delete().neq('id', '00000000-0000-0000-0000-000000000000');
-            const rows = fresh.map(m => ({
-                sender_name: m.senderName,
-                sender_role: m.senderRole,
-                user_type: m.userType,
-                text: m.text,
-                tag: m.tag,
-                created_at: m.timestamp
-            }));
-            await supabase.from('team_chat_messages').insert(rows);
-        } catch { /* ignore */ }
-    };
+        return () => { active = false; supabase.removeChannel(channel); };
+    }, [addMessage, myId]);
 
     useEffect(() => {
-        if (isOpen) {
-            setUnreadCount(0);
-            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-        }
-    }, [isOpen, messages]);
+        openRef.current = isOpen;
+        if (!isOpen) return;
+        setUnread(0);
+        endRef.current?.scrollIntoView({ block: 'end' });
+    }, [isOpen, messages.length]);
 
-    const handleSendMessage = async (e) => {
-        e?.preventDefault();
-        const text = inputMessage.trim();
-        if (!text) return;
+    const close = useCallback(() => {
+        setIsOpen(false);
+        launcherRef.current?.focus();
+    }, []);
 
-        const roleKey = currentUser?.userType || 'admin';
-        const roleConfig = ROLE_BADGES[roleKey] || { label: 'Team Member', color: 'bg-stone-100 text-stone-800' };
+    useEffect(() => {
+        if (!isOpen) return;
+        inputRef.current?.focus();
+        const onKey = event => { if (event.key === 'Escape') close(); };
+        document.addEventListener('keydown', onKey);
+        return () => document.removeEventListener('keydown', onKey);
+    }, [isOpen, close]);
 
-        const now = new Date();
-        const timeFormatted = formatTime(now);
-        const tempId = `temp-${Date.now()}`;
-
-        const newMsg = {
-            id: tempId,
-            senderName: currentUser?.name || 'Staff Member',
-            senderRole: roleConfig.label,
-            userType: roleKey,
+    async function send(event) {
+        event?.preventDefault();
+        const text = draft.trim();
+        if (!text || !myId) return;
+        setSending(true);
+        setError('');
+        const { data, error: sendError } = await supabase.from('team_chat_messages').insert({
+            sender_id: myId,
+            sender_name: currentUser.name || currentUser.email || 'Team member',
+            sender_role: currentUser.role || 'Team member',
+            user_type: currentUser.userType,
             text,
-            tag: selectedTag,
-            timestamp: now.toISOString(),
-            timeFormatted
-        };
-
-        const updated = [...messages, newMsg];
-        setMessages(updated);
-        setInputMessage('');
-
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-            if (broadcastChannelRef.current) {
-                broadcastChannelRef.current.postMessage({ type: 'NEW_MESSAGE', message: newMsg });
-            }
-        } catch (err) {
-            console.error('Failed to store team chat message locally:', err);
+            tag,
+        }).select(COLUMNS).single();
+        setSending(false);
+        if (sendError) {
+            console.error('Could not send message:', sendError);
+            setError('Your message was not sent. Try again.');
+            return;
         }
+        setDraft('');
+        addMessage(data);
+    }
 
-        try {
-            const { data, error } = await supabase.from('team_chat_messages').insert({
-                sender_id: currentUser?.id || null,
-                sender_name: newMsg.senderName,
-                sender_role: newMsg.senderRole,
-                user_type: newMsg.userType,
-                text: newMsg.text,
-                tag: newMsg.tag,
-                created_at: newMsg.timestamp
-            }).select().maybeSingle();
-
-            if (!error && data?.id) {
-                setMessages(prev => prev.map(m => m.id === tempId ? { ...m, id: data.id } : m));
-            }
-        } catch (err) {
-            console.warn('Notice saving message to Supabase backend:', err);
+    async function remove(message) {
+        const ok = await showConfirm('Delete this message for everyone?', { title: 'Delete message', confirmLabel: 'Delete', type: 'danger' });
+        if (!ok) return;
+        const { data, error: deleteError } = await supabase.from('team_chat_messages').delete().eq('id', message.id).select('id');
+        if (deleteError || !data?.length) {
+            setError('The message could not be deleted.');
+            return;
         }
-    };
+        setMessages(prev => prev.filter(m => m.id !== message.id));
+    }
 
-    const filteredMessages = useMemo(() => {
-        if (filterTag === 'All') return messages;
-        return messages.filter(m => m.tag === filterTag);
-    }, [messages, filterTag]);
+    const shown = useMemo(() => (filterTag === 'All' ? messages : messages.filter(m => m.tag === filterTag)), [messages, filterTag]);
 
     return (
         <>
-            {/* Floating Chat Trigger Button (Visible on all portals) */}
-            <div className="team-chat-launcher fixed bottom-20 right-4 sm:bottom-5 sm:right-5 z-40">
-                <button
-                    onClick={() => setIsOpen(prev => !prev)}
-                    className="flex items-center gap-2 px-3 py-2 sm:px-4 sm:py-2.5 bg-stone-900/95 hover:bg-stone-800 text-white rounded-full shadow-2xl border border-stone-700 transition-all transform hover:scale-105 active:scale-95 cursor-pointer backdrop-blur-xs"
-                    title="Open Team Operations Chat (For All)"
-                >
-                    <div className="relative">
-                        <MessageSquare className="w-4 h-4 text-amber-400" />
-                        {unreadCount > 0 && (
-                            <span className="absolute -top-2 -right-2 w-4 h-4 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center animate-pulse">
-                                {unreadCount}
+            <div className="team-chat-launcher fixed bottom-20 right-4 z-40 sm:bottom-5 sm:right-5">
+                <button ref={launcherRef} type="button" onClick={() => setIsOpen(open => !open)} aria-expanded={isOpen}
+                    aria-label={unread ? `Team chat, ${unread} new` : 'Team chat'}
+                    className="flex min-h-11 items-center gap-2 rounded-full border border-stone-700 bg-stone-900 px-4 text-white shadow-2xl hover:bg-stone-800">
+                    <span className="relative">
+                        <MessageSquare size={16} className="text-orange-400" aria-hidden="true" />
+                        {unread > 0 && (
+                            <span className="absolute -right-2 -top-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[9px] font-bold text-white" aria-hidden="true">
+                                {unread > 99 ? '99+' : unread}
                             </span>
                         )}
-                    </div>
-                    <span className="text-xs font-bold tracking-wide">Team Chat</span>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                    </span>
+                    <span className="text-xs font-bold">Team chat</span>
                 </button>
             </div>
 
-            {/* Slide-over Drawer */}
             {isOpen && (
-                <div className="fixed inset-y-0 right-0 z-50 w-full max-w-md bg-white shadow-2xl border-l border-stone-200 flex flex-col animate-in slide-in-from-right duration-250">
-                    
-                    {/* Header */}
-                    <div className="p-4 bg-stone-900 text-white flex items-center justify-between border-b border-stone-800 shrink-0">
+                <div role="dialog" aria-modal="false" aria-labelledby="team-chat-title"
+                    className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l border-stone-200 bg-white shadow-2xl">
+                    <div className="flex shrink-0 items-center justify-between gap-3 bg-stone-900 py-2 pl-4 pr-2 text-white">
                         <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center border border-amber-500/30">
-                                <Users className="w-4 h-4" />
-                            </div>
+                            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-orange-500/20 text-orange-300"><Users size={16} aria-hidden="true" /></span>
                             <div>
-                                <div className="flex items-center gap-2">
-                                    <h3 className="text-sm font-bold">SolarFlow Team Channel</h3>
-                                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                        For All Roles
-                                    </span>
-                                </div>
-                                <p className="text-[10px] text-stone-400">
-                                    Shared bulletin: Admin, Partners, Vendors & Stamp Maker
-                                </p>
+                                <h2 id="team-chat-title" className="text-sm font-bold">Team chat</h2>
+                                <p className="text-[11px] text-stone-300">Everyone who signs in can read these messages.</p>
                             </div>
                         </div>
-
-                        <div className="flex items-center gap-1.5">
-                            <button
-                                onClick={handleResetChat}
-                                className="p-1.5 text-stone-400 hover:text-amber-400 rounded-lg hover:bg-stone-800 transition-colors cursor-pointer"
-                                title="Reset to Sample Updates"
-                            >
-                                <RotateCcw className="w-4 h-4" />
-                            </button>
-                            <button
-                                onClick={() => setIsOpen(false)}
-                                className="p-1.5 text-stone-400 hover:text-white rounded-lg hover:bg-stone-800 transition-colors cursor-pointer ml-1"
-                                title="Close Chat"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
+                        <button type="button" onClick={close} aria-label="Close team chat"
+                            className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-300 hover:bg-stone-800 hover:text-white">
+                            <X size={18} aria-hidden="true" />
+                        </button>
                     </div>
 
-                    {/* Notice Banner: No Personal Messages */}
-                    <div className="px-4 py-2 bg-amber-50/90 border-b border-amber-200 text-[11px] text-amber-900 flex items-center gap-2 shrink-0">
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-                        <span><strong>Public Channel:</strong> All posts are visible to every team role. No private DMs.</span>
-                    </div>
-
-                    {/* Category Filter Pills */}
-                    <div className="flex items-center gap-1.5 px-4 py-2 bg-stone-50 border-b border-stone-200 overflow-x-auto shrink-0">
-                        {['All', 'General', 'Dispatch', 'Installation', 'Discom', 'Urgent'].map(tag => (
-                            <button
-                                key={tag}
-                                onClick={() => setFilterTag(tag)}
-                                className={`px-2.5 py-1 text-[10px] font-bold rounded-full transition-all cursor-pointer whitespace-nowrap ${
-                                    filterTag === tag 
-                                        ? 'bg-stone-800 text-white shadow-2xs' 
-                                        : 'bg-white text-stone-600 border border-stone-200 hover:bg-stone-100'
-                                }`}
-                            >
-                                {tag}
+                    <div role="group" aria-label="Filter by topic" className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-stone-200 bg-stone-50 px-4 py-2">
+                        {['All', ...TAGS].map(name => (
+                            <button key={name} type="button" onClick={() => setFilterTag(name)} aria-pressed={filterTag === name}
+                                className={`min-h-9 whitespace-nowrap rounded-full px-3 text-[11px] font-bold ${filterTag === name ? 'bg-stone-800 text-white' : 'border border-stone-200 bg-white text-stone-600 hover:bg-stone-100'}`}>
+                                {name}
                             </button>
                         ))}
                     </div>
 
-                    {/* Message List */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-stone-50/50">
-                        {filteredMessages.length === 0 ? (
-                            <div className="py-12 text-center text-stone-400 text-xs">
-                                No messages in this category.
-                            </div>
-                        ) : (
-                            filteredMessages.map(msg => {
-                                const roleStyle = ROLE_BADGES[msg.userType] || { label: msg.senderRole, color: 'bg-stone-100 text-stone-800 border-stone-200' };
-                                const isMe = currentUser?.name && msg.senderName.includes(currentUser.name);
-
-                                return (
-                                    <div 
-                                        key={msg.id} 
-                                        className={`p-3 rounded-2xl border shadow-2xs transition-all ${
-                                            isMe ? 'bg-amber-50/50 border-amber-200/80 ml-3' : 'bg-white border-stone-200 mr-3'
-                                        }`}
-                                    >
-                                        <div className="flex items-center justify-between gap-2 pb-1 border-b border-stone-100/80">
-                                            <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-stone-900 truncate max-w-[150px]">
-                                                    {msg.senderName}
-                                                </span>
-                                                <span className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold border ${roleStyle.color}`}>
-                                                    {roleStyle.label}
-                                                </span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                <span className="text-[9px] font-semibold text-stone-400">
-                                                    {msg.timeFormatted}
-                                                </span>
-                                                {msg.tag && (
-                                                    <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-stone-100 text-stone-600 border border-stone-200">
-                                                        #{msg.tag}
-                                                    </span>
-                                                )}
-                                            </div>
+                    <div className="flex-1 space-y-3 overflow-y-auto bg-stone-50/50 p-4" aria-live="polite">
+                        {loading ? (
+                            <p className="flex items-center justify-center gap-2 py-12 text-xs text-stone-500"><Spinner size={14} /> Loading messages…</p>
+                        ) : shown.length === 0 ? (
+                            <p className="py-12 text-center text-xs text-stone-500">
+                                {filterTag === 'All' ? 'No messages yet. Post the first update for the team.' : `No ${filterTag} messages.`}
+                            </p>
+                        ) : shown.map(message => {
+                            const mine = message.sender_id && message.sender_id === myId;
+                            return (
+                                <article key={message.id} className={`rounded-2xl border p-3 ${mine ? 'ml-6 border-orange-200 bg-orange-50/60' : 'mr-6 border-stone-200 bg-white'}`}>
+                                    <div className="flex items-start justify-between gap-2 border-b border-stone-100 pb-1">
+                                        <div className="min-w-0">
+                                            <p className="truncate text-xs font-bold text-stone-900">{message.sender_name}</p>
+                                            <p className="truncate text-[11px] text-stone-500">
+                                                {[message.sender_role, formatDate(message.created_at, 'datetime'), message.tag && `#${message.tag}`].filter(Boolean).join(' · ')}
+                                            </p>
                                         </div>
-
-                                        <p className="text-xs text-stone-800 mt-2 leading-relaxed whitespace-pre-wrap">
-                                            {msg.text}
-                                        </p>
+                                        {(mine || canDeleteAny) && (
+                                            <button type="button" onClick={() => remove(message)} aria-label="Delete message"
+                                                className="-mr-2 -mt-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-400 hover:bg-red-50 hover:text-red-700">
+                                                <Trash2 size={14} aria-hidden="true" />
+                                            </button>
+                                        )}
                                     </div>
-                                );
-                            })
-                        )}
-                        <div ref={messagesEndRef} />
+                                    <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-stone-800">{message.text}</p>
+                                </article>
+                            );
+                        })}
+                        <div ref={endRef} />
                     </div>
 
-                    {/* Quick Presets */}
-                    <div className="px-3 pt-2 pb-1 bg-white border-t border-stone-100 flex gap-1.5 overflow-x-auto shrink-0">
-                        {[
-                            '🚛 Dispatch En Route',
-                            '✅ Site Work Finished',
-                            '📄 Stamped Agreement Ready',
-                            '⚠️ Site Inspection Delay'
-                        ].map(preset => (
-                            <button
-                                key={preset}
-                                onClick={() => setInputMessage(preset)}
-                                className="text-[10px] bg-stone-100 hover:bg-amber-100 text-stone-700 px-2 py-0.5 rounded-md border border-stone-200 whitespace-nowrap cursor-pointer transition-colors"
-                            >
+                    <div className="flex shrink-0 gap-1.5 overflow-x-auto border-t border-stone-100 bg-white px-3 pb-1 pt-2">
+                        {PRESETS.map(preset => (
+                            <button key={preset} type="button" onClick={() => { setDraft(preset); inputRef.current?.focus(); }}
+                                className="min-h-9 whitespace-nowrap rounded-lg border border-stone-200 bg-stone-100 px-2.5 text-[11px] text-stone-700 hover:bg-orange-100">
                                 {preset}
                             </button>
                         ))}
                     </div>
 
-                    {/* Message Composer Form */}
-                    <form onSubmit={handleSendMessage} className="p-3 bg-white border-t border-stone-200 space-y-2 shrink-0">
+                    <form onSubmit={send} className="shrink-0 space-y-2 border-t border-stone-200 bg-white p-3">
+                        {error && <ErrorBanner>{error}</ErrorBanner>}
                         <div className="flex items-center gap-2">
-                            <span className="text-[10px] font-bold uppercase text-stone-400">Post As:</span>
-                            <span className="text-xs font-bold text-stone-800">
-                                {currentUser?.name || 'Staff'} ({currentUser?.userType || 'Admin'})
-                            </span>
-                            <div className="ml-auto flex items-center gap-1">
-                                <span className="text-[10px] text-stone-400 font-bold">Tag:</span>
-                                <select
-                                    value={selectedTag}
-                                    onChange={e => setSelectedTag(e.target.value)}
-                                    className="text-[10px] font-bold px-2 py-0.5 rounded border border-stone-200 bg-stone-50 cursor-pointer"
-                                >
-                                    <option value="General">#General</option>
-                                    <option value="Dispatch">#Dispatch</option>
-                                    <option value="Installation">#Installation</option>
-                                    <option value="Discom">#Discom</option>
-                                    <option value="Urgent">#Urgent</option>
-                                </select>
-                            </div>
+                            <label htmlFor="team-chat-tag" className="text-[11px] font-bold text-stone-600">Topic</label>
+                            <select id="team-chat-tag" value={tag} onChange={e => setTag(e.target.value)}
+                                className="min-h-9 rounded-lg border border-stone-200 bg-stone-50 px-2 text-xs font-bold">
+                                {TAGS.map(name => <option key={name} value={name}>{name}</option>)}
+                            </select>
+                            {tag === 'Urgent' && <AlertCircle size={14} className="text-rose-600" aria-hidden="true" />}
                         </div>
-
                         <div className="flex items-center gap-2">
-                            <input
-                                type="text"
-                                value={inputMessage}
-                                onChange={e => setInputMessage(e.target.value)}
-                                placeholder="Post an update for all team members..."
-                                className="flex-1 px-3 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-amber-500 bg-stone-50"
-                            />
-                            <button
-                                type="submit"
-                                disabled={!inputMessage.trim()}
-                                className="p-2.5 bg-stone-900 hover:bg-stone-800 disabled:opacity-40 text-white rounded-xl transition-colors cursor-pointer shadow-xs"
-                                title="Send Message"
-                            >
-                                <Send className="w-4 h-4" />
+                            <input ref={inputRef} type="text" value={draft} maxLength={1000} onChange={e => setDraft(e.target.value)}
+                                aria-label="Message" placeholder="Post an update for the team…" className="sf-input min-h-11 flex-1" />
+                            <button type="submit" disabled={!draft.trim() || sending || !myId} aria-label="Send message"
+                                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-stone-900 text-white hover:bg-stone-800 disabled:opacity-40">
+                                {sending ? <Spinner size={16} /> : <Send size={16} aria-hidden="true" />}
                             </button>
                         </div>
                     </form>
-
                 </div>
             )}
         </>

@@ -1,5 +1,6 @@
 // ─── utils/bom.js ───────────────────────────────────────────────────────────
-// Single source of truth for loading a customer's BOM.
+// Single source of truth for the Roof / Shed BOM templates and for loading a
+// customer's BOM.
 //
 // This was previously inline in MaterialIntegrationTab, so the Agent Portal -
 // which read the bom / bom_items tables directly - ended up with a different
@@ -12,7 +13,9 @@
 import { supabase } from '../supabase.js';
 import reference from '../inventory/reference.json' with { type: 'json' };
 
-export const getBomTemplateForType = (type) => reference.scenarios[type === 'SHED' ? 'SHED' : 'ROOF'][0].items.map(item => ({...item, quantity_editable:true}));
+// The reference rows also carry sample staff names; only the item columns are used.
+export const getBomTemplateForType = (type) => reference.scenarios[type === 'SHED' ? 'SHED' : 'ROOF'][0].items
+    .map(({ sr_no, product_name, quantity, uom }) => ({ sr_no, product_name, quantity, uom, quantity_editable: true }));
 
 // Roof vs Shed is derived from the Material Order specification.
 export const getBomTypeForCustomer = (customer) =>
@@ -51,7 +54,6 @@ const mergeAgainstTemplate = (savedItems, template) => {
 
     const mergedStandardItems = template.map((tItem, idx) => {
         const saved = savedMap.get(norm(tItem.product_name));
-        const cleanNote = saved?.note && !['Synthetic sample item', 'Reference BOM quantities from supplied CS'].includes(saved.note.trim()) ? saved.note : '';
         return {
             ...tItem,
             id: saved?.id || null,
@@ -62,7 +64,7 @@ const mergeAgainstTemplate = (savedItems, template) => {
                 : (tItem.quantity || ''),
             uom: tItem.uom || getUomForProduct(tItem.product_name, template),
             integration_by: saved?.integration_by || '',
-            note: cleanNote,
+            note: saved?.note || '',
         };
     });
 
@@ -74,7 +76,7 @@ const mergeAgainstTemplate = (savedItems, template) => {
         quantity: item.quantity !== undefined && item.quantity !== null ? String(item.quantity) : '',
         uom: item.uom || getUomForProduct(item.product_name, template),
         integration_by: item.integration_by || '',
-        note: item.note && !['Synthetic sample item', 'Reference BOM quantities from supplied CS'].includes(item.note.trim()) ? item.note : '',
+        note: item.note || '',
     }));
 
     return [...mergedStandardItems, ...mergedCustomItems];
@@ -121,7 +123,7 @@ export const loadBomForCustomer = async (customer, activeType) => {
                 loadError = error;
             } else if (rows && rows.length > 0) {
                 if (rows.length > 1) {
-                    console.warn(`Customer ${customer.id} has ${rows.length} bom rows; using the earliest. Run scripts/fix_duplicate_bom_rows.sql.`);
+                    console.warn(`Customer ${customer.id} has ${rows.length} ${activeType} bom rows; using the earliest.`);
                 }
                 bomData = rows[0];
                 const { data: items, error: itemsError } = await supabase

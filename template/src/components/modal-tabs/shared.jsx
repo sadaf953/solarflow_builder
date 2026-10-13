@@ -1,45 +1,13 @@
-import { getChecklistMode, setChecklistMode } from '../../utils/checklistMode';
-export { getChecklistMode, setChecklistMode } from '../../utils/checklistMode';
-import React, { useState, useEffect, useRef } from 'react';
-import { Trash2, Plus, Edit3, X, Paperclip, Eye, Upload, FileText, Image as ImageIcon, Download, MessageSquare, Check, Sparkles, Phone, CheckSquare, FolderOpen } from 'lucide-react';
-import { formatINR, toIndianCommas, parseIndianNumber, formatInputValue, getTelephoneHref } from '../../utils';
+import { useState, useEffect, useRef } from 'react';
+import { Trash2, Edit3, X, Paperclip, Eye, Upload, FileText, Image as ImageIcon, Download, MessageSquare, Check, Phone } from 'lucide-react';
+import { formatINR, toIndianCommas, formatInputValue, getTelephoneHref } from '../../utils';
 import { supabase } from '../../supabase';
 import { useGlobalPopup } from '../GlobalPopup';
+import { useChecklistMode } from '../../utils/checklistMode';
 
-// Generate synthetic demo documents for 1-click sample upload in demo mode
-export function generateDemoSampleFile(field = 'document', label = 'Sample Document') {
-    const cleanLabel = (label || field || 'Sample Document').replace(/[<>]/g, '');
-    const timestamp = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400">
-  <defs>
-    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#fffbeb" />
-      <stop offset="100%" stop-color="#fef3c7" />
-    </linearGradient>
-  </defs>
-  <rect width="600" height="400" rx="16" fill="url(#bgGrad)" stroke="#f59e0b" stroke-width="4"/>
-  <rect x="24" y="24" width="552" height="352" rx="12" fill="#ffffff" stroke="#e5e7eb" stroke-width="2"/>
-  <circle cx="70" cy="70" r="24" fill="#f59e0b" />
-  <path d="M70 54 L70 86 M54 70 L86 70 M59 59 L81 81 M59 81 L81 59" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
-  <text x="110" y="66" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="bold" fill="#1f2937">SolarFlow Demo Verification Document</text>
-  <text x="110" y="88" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="500" fill="#6b7280">Sample Document for Testing &amp; Verification</text>
-  <line x1="44" y1="120" x2="556" y2="120" stroke="#f3f4f6" stroke-width="2"/>
-  <rect x="44" y="140" width="512" height="150" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-width="1"/>
-  <text x="64" y="175" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#4b5563">DOCUMENT TYPE:</text>
-  <text x="210" y="175" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="15" font-weight="bold" fill="#b45309">${cleanLabel}</text>
-  <text x="64" y="210" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#4b5563">VERIFIED DATE:</text>
-  <text x="210" y="210" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="500" fill="#111827">${timestamp}</text>
-  <text x="64" y="245" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="600" fill="#4b5563">AUTHENTICATION:</text>
-  <text x="210" y="245" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="500" fill="#059669">✓ Demo Record Certified (Simulated)</text>
-  <rect x="44" y="315" width="220" height="36" rx="6" fill="#fef3c7" stroke="#fbbf24" stroke-width="1"/>
-  <text x="56" y="338" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="bold" fill="#92400e">DEMO SAMPLE ATTACHMENT</text>
-  <text x="440" y="340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-style="italic" fill="#9ca3af">SolarFlow CRM v2.0</text>
-</svg>`;
-    const fileName = `${(field || 'sample').toLowerCase().replace(/[^a-z0-9]/g, '_')}_demo_sample.svg`;
-    const blob = new Blob([svgContent], { type: 'image/svg+xml' });
-    return new File([blob], fileName, { type: 'image/svg+xml' });
-}
+// @deprecated Sample files are no longer generated. Kept only so tabs that
+// still import it keep building; it returns no file, so nothing is uploaded.
+export const generateDemoSampleFile = () => null;
 
 // ─── Vendor name list (process-wide cache) ────────────────────────────────────
 // InstallationStatusTab and MaterialDeliveryTab each fetched this on mount with
@@ -129,65 +97,6 @@ export function MetaSelect({ label, field, value, onChange, options = [], isEdit
                 {options.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
         </div>
-    );
-}
-
-// ─── StageRemarkSection ───────────────────────────────────────────────────────
-export function StageRemarkSection({ stageId, editData, setEditData, isFrozen, onSave }) {
-    const [localSaved, setLocalSaved] = useState(true);
-    const remark = getStageRemarkFromData(editData.stages_remarks, stageId);
-
-    return (
-        <section className="bg-white p-6 rounded-[24px] border border-stone-100 shadow-sm space-y-4">
-            <div className="flex items-center justify-between border-b border-stone-100 pb-2 mb-1">
-                <label className="text-[10px] text-stone-400 font-bold uppercase tracking-wider block">Stage Remark ({stageId})</label>
-                {!isFrozen && !localSaved && (
-                    <button
-                        onClick={async () => {
-                            await onSave(stageId);
-                            setLocalSaved(true);
-                        }}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg text-[10px] font-bold transition-all shadow-md shadow-emerald-600/10"
-                    >
-                        Save Remark
-                    </button>
-                )}
-            </div>
-            {isFrozen ? (
-                <div className="text-xs text-stone-500 font-medium italic min-h-[36px] bg-stone-50 p-2.5 rounded-xl">
-                    {remark || 'No remarks for this stage.'}
-                </div>
-            ) : (
-                <div className="flex gap-2">
-                    <input
-                        type="text"
-                        placeholder={`Add remark for ${stageId}...`}
-                        value={remark}
-                        onChange={e => {
-                            const newVal = e.target.value;
-                            setLocalSaved(false);
-                            setEditData(prev => {
-                                const prevObj = typeof prev.stages_remarks === 'object' && prev.stages_remarks ? prev.stages_remarks : {};
-                                return {
-                                    ...prev,
-                                    stages_remarks: {
-                                        ...prevObj,
-                                        [stageId]: newVal
-                                    }
-                                };
-                            });
-                        }}
-                        onKeyDown={async (e) => {
-                            if (e.key === 'Enter') {
-                                await onSave(stageId);
-                                setLocalSaved(true);
-                            }
-                        }}
-                        className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-300 font-semibold text-stone-700 placeholder:text-stone-400"
-                    />
-                </div>
-            )}
-        </section>
     );
 }
 
@@ -432,18 +341,14 @@ export function FilePreviewModal({ file, fileUrl, onClose, onDownload, onUpdateR
                     )}
                 </div>
 
-                {/* Remark Bar in Preview - only when there is somewhere to save it.
-                    The input used to render unconditionally while just the Save
-                    button was guarded, so on the three screens that pass no
-                    onUpdateRemark (Add Lead, Stamp Portal, the Customer Detail
-                    file preview) you could type a remark into a live field,
-                    press Enter to no effect, and lose it silently on close. */}
+                {/* Only where there is somewhere to save the remark; otherwise typed text would be lost on close. */}
                 {onUpdateRemark && (
                 <div className="p-3.5 bg-white border-t border-stone-100 flex items-center gap-2">
                     <MessageSquare size={14} className="text-stone-400 flex-shrink-0" />
                     <input
                         type="text"
-                        placeholder="Add remark for this document (e.g. Verified by DISCOM, Valid KYC, Approved)..."
+                        placeholder="Add a remark for this document (e.g. Verified, Valid KYC, Approved)..."
+                        aria-label="Document remark"
                         value={remark}
                         onChange={e => setRemark(e.target.value)}
                         onKeyDown={e => {
@@ -451,21 +356,19 @@ export function FilePreviewModal({ file, fileUrl, onClose, onDownload, onUpdateR
                         }}
                         className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-1.5 text-xs text-stone-800 placeholder:text-stone-400 focus:outline-none focus:ring-1 focus:ring-amber-500"
                     />
-                    {onUpdateRemark && (
-                        <button
-                            type="button"
-                            disabled={savingRemark}
-                            onClick={handleSaveRemark}
-                            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
-                                remarkSaved
-                                    ? 'bg-emerald-600 text-white'
-                                    : 'bg-stone-900 hover:bg-stone-800 text-white'
-                            }`}
-                        >
-                            <Check size={12} />
-                            <span>{savingRemark ? 'Saving...' : remarkSaved ? 'Saved!' : 'Save Remark'}</span>
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        disabled={savingRemark}
+                        onClick={handleSaveRemark}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1 cursor-pointer disabled:opacity-50 ${
+                            remarkSaved
+                                ? 'bg-emerald-600 text-white'
+                                : 'bg-stone-900 hover:bg-stone-800 text-white'
+                        }`}
+                    >
+                        <Check size={12} />
+                        <span>{savingRemark ? 'Saving...' : remarkSaved ? 'Saved!' : 'Save Remark'}</span>
+                    </button>
                 </div>
                 )}
             </div>
@@ -473,54 +376,83 @@ export function FilePreviewModal({ file, fileUrl, onClose, onDownload, onUpdateR
     );
 }
 
-// ─── Compact Document Remark Row ─────────────────────────────────────────────
-function DocRemarkRow({ doc, onUpdateRemark, isEditing }) {
-    const [isEditingRemark, setIsEditingRemark] = useState(false);
+// ─── Per-document remark: view, add and edit ─────────────────────────────────
+// `compact` sits under a checklist item, `gallery` under a Documents card.
+// The editor stays open when the save is refused so the typed text is kept.
+const REMARK_STYLES = {
+    compact: {
+        editor: 'flex items-center gap-1.5 mt-1 animate-in fade-in',
+        input: 'flex-1 bg-white border border-stone-200 rounded-lg px-2 py-0.5 text-[10px] text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-400 font-medium',
+        save: 'px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[9px] font-bold cursor-pointer transition',
+        cancel: 'px-1.5 py-0.5 text-stone-400 hover:text-stone-600 text-[9px] font-medium cursor-pointer',
+        row: 'flex items-center justify-between gap-1.5 mt-0.5 px-1 py-0.5 bg-amber-50/60 rounded border border-amber-200/50',
+        pill: 'flex items-center gap-1 min-w-0 flex-1',
+        icon: 9,
+        text: 'text-[10px] text-amber-900 font-medium truncate',
+        edit: 'text-[9px] font-bold text-amber-700 hover:text-amber-900 underline cursor-pointer flex-shrink-0',
+        editLabel: 'Edit',
+        addWrap: 'mt-0.5',
+        add: 'text-[9px] text-stone-400 hover:text-stone-700 font-semibold flex items-center gap-1 cursor-pointer transition',
+        addLabel: '+ Add remark',
+        placeholder: 'Enter remark for this file...',
+    },
+    gallery: {
+        editor: 'pt-2 mt-1 border-t border-stone-200/60 flex items-center gap-1.5 animate-in fade-in',
+        input: 'flex-1 bg-white border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium',
+        save: 'px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition cursor-pointer',
+        cancel: 'px-2 py-1 text-stone-400 hover:text-stone-600 text-xs font-medium cursor-pointer',
+        row: 'pt-2 mt-1 border-t border-stone-200/60 flex items-center justify-between gap-2',
+        pill: 'flex items-center gap-1.5 min-w-0 flex-1 bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/60',
+        icon: 11,
+        text: 'text-[11px] text-amber-900 font-medium truncate',
+        edit: 'text-[10px] font-bold text-stone-500 hover:text-stone-800 underline cursor-pointer flex-shrink-0',
+        editLabel: 'Edit Remark',
+        addWrap: 'pt-1.5 mt-0.5 border-t border-dashed border-stone-200 flex justify-end',
+        add: 'text-[10px] text-stone-400 hover:text-stone-700 font-bold flex items-center gap-1 cursor-pointer transition',
+        addLabel: '+ Add Remark',
+        placeholder: 'Remark for this document...',
+    },
+};
+
+function DocRemarkEditor({ doc, onUpdateRemark, canEdit, variant = 'compact' }) {
+    const style = REMARK_STYLES[variant];
+    const [isEditing, setIsEditing] = useState(false);
     const [remarkVal, setRemarkVal] = useState(doc.remark || '');
     const [saving, setSaving] = useState(false);
+    const editable = canEdit && Boolean(onUpdateRemark);
 
     useEffect(() => {
         setRemarkVal(doc.remark || '');
     }, [doc.remark]);
 
     const handleSave = async () => {
-        if (!onUpdateRemark) return;
         setSaving(true);
         const ok = await onUpdateRemark(doc.id, remarkVal);
         setSaving(false);
-        // Keep the editor open on failure so the typed text is not lost.
         if (ok === false) return;
-        setIsEditingRemark(false);
+        setIsEditing(false);
     };
 
-    if (isEditingRemark) {
+    if (isEditing && editable) {
         return (
-            <div className="flex items-center gap-1.5 mt-1 animate-in fade-in">
+            <div className={style.editor}>
                 <input
                     type="text"
                     value={remarkVal}
-                    placeholder="Enter remark for this file..."
+                    placeholder={style.placeholder}
+                    aria-label="Remark"
                     onChange={e => setRemarkVal(e.target.value)}
                     onKeyDown={e => {
                         if (e.key === 'Enter') handleSave();
-                        if (e.key === 'Escape') setIsEditingRemark(false);
+                        if (e.key === 'Escape') setIsEditing(false);
                     }}
                     autoFocus
-                    className="flex-1 bg-white border border-stone-200 rounded-lg px-2 py-0.5 text-[10px] text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-400 font-medium"
+                    className={style.input}
                 />
-                <button
-                    type="button"
-                    disabled={saving}
-                    onClick={handleSave}
-                    className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[9px] font-bold cursor-pointer transition"
-                >
+                <button type="button" disabled={saving} onClick={handleSave} className={style.save}>
                     {saving ? '...' : 'Save'}
                 </button>
-                <button
-                    type="button"
-                    onClick={() => setIsEditingRemark(false)}
-                    className="px-1.5 py-0.5 text-stone-400 hover:text-stone-600 text-[9px] font-medium cursor-pointer"
-                >
+                <button type="button" onClick={() => setIsEditing(false)} className={style.cancel}>
                     Cancel
                 </button>
             </div>
@@ -529,42 +461,29 @@ function DocRemarkRow({ doc, onUpdateRemark, isEditing }) {
 
     if (doc.remark) {
         return (
-            <div className="flex items-center justify-between gap-1.5 mt-0.5 px-1 py-0.5 bg-amber-50/60 rounded border border-amber-200/50">
-                <div className="flex items-center gap-1 min-w-0 flex-1">
-                    <MessageSquare size={9} className="text-amber-600 flex-shrink-0" />
-                    <span className="text-[10px] text-amber-900 font-medium truncate" title={doc.remark}>
-                        {doc.remark}
-                    </span>
+            <div className={style.row}>
+                <div className={style.pill}>
+                    <MessageSquare size={style.icon} className="text-amber-600 flex-shrink-0" />
+                    <span className={style.text} title={doc.remark}>{doc.remark}</span>
                 </div>
-                {isEditing && (
-                    <button
-                        type="button"
-                        onClick={() => setIsEditingRemark(true)}
-                        className="text-[9px] font-bold text-amber-700 hover:text-amber-900 underline cursor-pointer flex-shrink-0"
-                    >
-                        Edit
+                {editable && (
+                    <button type="button" onClick={() => setIsEditing(true)} className={style.edit}>
+                        {style.editLabel}
                     </button>
                 )}
             </div>
         );
     }
 
-    if (isEditing && onUpdateRemark) {
-        return (
-            <div className="mt-0.5">
-                <button
-                    type="button"
-                    onClick={() => setIsEditingRemark(true)}
-                    className="text-[9px] text-stone-400 hover:text-stone-700 font-semibold flex items-center gap-1 cursor-pointer transition"
-                >
-                    <MessageSquare size={9} />
-                    <span>+ Add remark</span>
-                </button>
-            </div>
-        );
-    }
-
-    return null;
+    if (!editable) return null;
+    return (
+        <div className={style.addWrap}>
+            <button type="button" onClick={() => setIsEditing(true)} className={style.add}>
+                <MessageSquare size={style.icon - 1} />
+                <span>{style.addLabel}</span>
+            </button>
+        </div>
+    );
 }
 
 // Recall marker. Admin/Office stamp a document with this to send it back; only
@@ -573,57 +492,21 @@ function DocRemarkRow({ doc, onUpdateRemark, isEditing }) {
 export const RETURNED_DOCUMENT_PREFIX = '[RETURNED]';
 export const isReturnedDocument = (doc) => String(doc?.remark || '').trim().toUpperCase().startsWith(RETURNED_DOCUMENT_PREFIX);
 
-export function ChecklistModeToggle({ className = '', onFillAllDemoDocs = null, isFilling = false }) {
-    const [mode, setMode] = React.useState(() => getChecklistMode());
-
-    React.useEffect(() => {
-        const handleModeChange = (e) => {
-            if (e.detail?.mode) setMode(e.detail.mode);
-        };
-        window.addEventListener('solarflow-checklist-mode-changed', handleModeChange);
-        return () => window.removeEventListener('solarflow-checklist-mode-changed', handleModeChange);
-    }, []);
-
-    const handleSwitch = (newMode) => {
-        setChecklistMode(newMode);
-        setMode(newMode);
-    };
-
-    if (mode === 'files' && onFillAllDemoDocs) {
-        return (
-            <div className={`inline-flex items-center ${className}`}>
-                <button
-                    type="button"
-                    onClick={onFillAllDemoDocs}
-                    disabled={isFilling}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-all cursor-pointer shadow-xs disabled:opacity-50"
-                    title="Generate and attach sample demo documents for all missing checklist items in this section"
-                >
-                    <Sparkles size={11} className="text-amber-500" />
-                    <span>{isFilling ? 'Attaching...' : '✨ Fill Demo Docs'}</span>
-                </button>
-            </div>
-        );
-    }
-
+// @deprecated The only thing this rendered was a sample-document filler. Kept
+// so tabs that still render it keep building; it renders nothing.
+export function ChecklistModeToggle() {
     return null;
 }
 
-export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, isEditing, documents = [], onUpload, onDelete, onPreview, onDownload, onUpdateRemark, note, canDelete = false, canReplace = canDelete, allowReturnedReplace = !canDelete }) {
+// One document item: a tick in checklist mode, an upload in files mode.
+// `mode` forces one of the two (extra file fields always need the upload).
+export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, isEditing, documents = [], onUpload, onDelete, onPreview, onUpdateRemark, note, canDelete = false, canReplace = canDelete, allowReturnedReplace = !canDelete, mode }) {
     const { showConfirm, showImageCropper } = useGlobalPopup();
     const fieldDocs = documents.filter(d => d.doc_type === field);
-    const fileInputRef = React.useRef(null);
-    const [replacingDocId, setReplacingDocId] = React.useState(null);
-
-    const [checklistMode, setLocalChecklistMode] = React.useState(() => getChecklistMode());
-
-    React.useEffect(() => {
-        const handleModeChange = (e) => {
-            if (e.detail?.mode) setLocalChecklistMode(e.detail.mode);
-        };
-        window.addEventListener('solarflow-checklist-mode-changed', handleModeChange);
-        return () => window.removeEventListener('solarflow-checklist-mode-changed', handleModeChange);
-    }, []);
+    const fileInputRef = useRef(null);
+    const [replacingDocId, setReplacingDocId] = useState(null);
+    const sharedMode = useChecklistMode();
+    const checklistMode = mode || sharedMode;
 
     const isUploaded = fieldDocs.length > 0;
     const isChecklistOnly = checklistMode === 'checklist';
@@ -681,27 +564,6 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
         setReplacingDocId(null);
     };
 
-    const handleUploadSampleDoc = async (existingDocId = null) => {
-        const sampleFile = generateDemoSampleFile(field, label);
-        const wrappedEvent = { target: { files: [sampleFile], value: '' } };
-
-        const replacingDoc = fieldDocs.find(d => d.id === existingDocId);
-        const replacementAllowed = canReplace || (allowReturnedReplace && isReturnedDocument(replacingDoc));
-        if (replacementAllowed && existingDocId && onDelete) {
-            const oldDoc = fieldDocs.find(d => d.id === existingDocId);
-            if (oldDoc) await onDelete(oldDoc);
-        } else if (canReplace && fieldDocs.length > 0 && onDelete) {
-            for (const oldDoc of fieldDocs) {
-                await onDelete(oldDoc);
-            }
-        }
-
-        if (onUpload) await onUpload(wrappedEvent, field, existingDocId);
-        if (onChange) {
-            onChange(field, true);
-        }
-    };
-
     const handleDeleteClick = async (doc) => {
         const confirmed = await showConfirm(
             `Are you sure you want to permanently delete “${doc.file_name || 'this document'}”? It will be removed from the backend and cannot be recovered.`,
@@ -713,28 +575,6 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
         const remaining = fieldDocs.filter(d => d.id !== doc.id);
         if (remaining.length === 0 && onChange && !isChecklistOnly) {
             onChange(field, false);
-        }
-    };
-
-    const handleDirectDownload = async (doc) => {
-        if (onDownload) {
-            onDownload(doc);
-            return;
-        }
-        try {
-            const { getDownloadUrl } = await import('../../utils');
-            const url = await getDownloadUrl(doc.storage_path, doc.file_name);
-            if (url) {
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = doc.file_name;
-                a.target = '_blank';
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }
-        } catch (err) {
-            console.error('Download error:', err);
         }
     };
 
@@ -835,7 +675,7 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
                         </div>
 
                         {/* Document Remark Row */}
-                        <DocRemarkRow doc={doc} onUpdateRemark={onUpdateRemark} isEditing={isEditing && canDelete} />
+                        <DocRemarkEditor doc={doc} onUpdateRemark={onUpdateRemark} canEdit={isEditing && canDelete} />
                     </div>
                 ))}
                 {!isChecklistOnly && fieldDocs.length === 0 && isEditing && onUpload && (
@@ -847,92 +687,9 @@ export function CheckboxRemarkItem({ label, field, value, onChange, onAutoSave, 
                         >
                             <Paperclip size={11} /> Attach File / Photo
                         </button>
-                        <button
-                            type="button"
-                            onClick={() => handleUploadSampleDoc()}
-                            className="flex items-center gap-1.5 text-[10px] font-bold text-amber-700 hover:text-amber-800 px-2.5 py-1 rounded-lg border border-amber-200 bg-amber-50 hover:bg-amber-100 transition-all cursor-pointer shadow-xs"
-                            title="Generate and attach a sample document instantly (1-click test upload)"
-                        >
-                            <Sparkles size={11} className="text-amber-500" /> Use Demo Doc
-                        </button>
                     </div>
                 )}
             </div>
-        </div>
-    );
-}
-
-// ─── PaymentsEditor ───────────────────────────────────────────────────────────
-export function PaymentsEditor({ payments = [], onChange, isEditing }) {
-    const handleChange = (idx, field, val) => {
-        const next = payments.map((p, i) => i === idx ? { ...p, [field]: val } : p);
-        const total = next.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-        onChange(next, total);
-    };
-    const addPayment = () => {
-        const next = [...payments, { no: payments.length + 1, amount: '', date: '' }];
-        const total = next.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-        onChange(next, total);
-    };
-    const removePayment = (idx) => {
-        const next = payments.filter((_, i) => i !== idx);
-        const total = next.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-        onChange(next, total);
-    };
-
-    const displayTotal = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
-
-    if (!isEditing) return (
-        <div className="space-y-2">
-            {payments.length === 0 && <p className="text-xs text-stone-400 italic">No payments recorded</p>}
-            {payments.map((p, i) => (
-                <div key={i} className="bg-stone-50 p-3 rounded-xl flex justify-between items-center">
-                    <div>
-                        <p className="text-[9px] text-stone-400 font-bold uppercase">Payment {p.no || i + 1}</p>
-                        <p className="text-sm font-semibold text-emerald-600">{fmt(p.amount)}</p>
-                    </div>
-                    {p.date && <p className="text-xs text-stone-400">{p.date}</p>}
-                </div>
-            ))}
-            {payments.length > 0 && (
-                <div className="bg-emerald-50 rounded-xl p-3 flex justify-between items-center border border-emerald-100">
-                    <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">Total Received</p>
-                    <p className="text-sm font-bold text-emerald-700">{fmt(displayTotal)}</p>
-                </div>
-            )}
-        </div>
-    );
-
-    return (
-        <div className="space-y-2">
-            {payments.map((p, i) => (
-                <div key={i} className="bg-stone-50 p-3 rounded-xl space-y-2 border border-stone-200">
-                    <div className="flex items-center justify-between">
-                        <p className="text-[9px] font-bold text-stone-400 uppercase">Payment {p.no || i + 1}</p>
-                        <button onClick={() => removePayment(i)} className="text-red-400 hover:text-red-600">
-                            <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                        <input type="text" inputMode="decimal" placeholder="Amount (₹)" value={p.amount ? toIndianCommas(p.amount) : ''}
-                            onChange={e => handleChange(i, 'amount', parseIndianNumber(e.target.value))}
-                            className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300" />
-                        <input type="date" value={p.date || ''}
-                            onChange={e => handleChange(i, 'date', e.target.value)}
-                            className="w-full bg-white border border-stone-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-amber-300" />
-                    </div>
-                </div>
-            ))}
-            <button onClick={addPayment}
-                className="w-full flex items-center justify-center gap-1.5 border border-dashed border-stone-300 rounded-xl py-2 text-xs text-stone-500 hover:border-amber-400 hover:text-amber-600 transition-colors">
-                <Plus className="w-3.5 h-3.5" /> Add Payment
-            </button>
-            {payments.length > 0 && (
-                <div className="bg-amber-50 rounded-xl p-3 flex justify-between items-center border border-amber-100">
-                    <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide">Auto Total (will save)</p>
-                    <p className="text-sm font-bold text-amber-700">{fmt(displayTotal)}</p>
-                </div>
-            )}
         </div>
     );
 }
@@ -967,93 +724,5 @@ export function SectionHeader({ title, id, icon: Icon, isEditable, editingSectio
 }
 
 export function DocGalleryRemarkRow({ doc, onUpdateRemark, isEditable }) {
-    const [isEditing, setIsEditing] = useState(false);
-    const [remarkVal, setRemarkVal] = useState(doc.remark || '');
-    const [saving, setSaving] = useState(false);
-
-    useEffect(() => {
-        setRemarkVal(doc.remark || '');
-    }, [doc.remark]);
-
-    const handleSave = async () => {
-        if (!onUpdateRemark) return;
-        setSaving(true);
-        const ok = await onUpdateRemark(doc.id, remarkVal);
-        setSaving(false);
-        if (ok === false) return;
-        setIsEditing(false);
-    };
-
-    if (isEditing) {
-        return (
-            <div className="pt-2 mt-1 border-t border-stone-200/60 flex items-center gap-1.5 animate-in fade-in">
-                <input
-                    type="text"
-                    value={remarkVal}
-                    placeholder="Remark for this document..."
-                    onChange={e => setRemarkVal(e.target.value)}
-                    onKeyDown={e => {
-                        if (e.key === 'Enter') handleSave();
-                        if (e.key === 'Escape') setIsEditing(false);
-                    }}
-                    autoFocus
-                    className="flex-1 bg-white border border-stone-200 rounded-lg px-2.5 py-1 text-xs text-stone-800 focus:outline-none focus:ring-1 focus:ring-amber-500 font-medium"
-                />
-                <button
-                    type="button"
-                    disabled={saving}
-                    onClick={handleSave}
-                    className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition cursor-pointer"
-                >
-                    {saving ? '...' : 'Save'}
-                </button>
-                <button
-                    type="button"
-                    onClick={() => setIsEditing(false)}
-                    className="px-2 py-1 text-stone-400 hover:text-stone-600 text-xs font-medium cursor-pointer"
-                >
-                    Cancel
-                </button>
-            </div>
-        );
-    }
-
-    if (doc.remark) {
-        return (
-            <div className="pt-2 mt-1 border-t border-stone-200/60 flex items-center justify-between gap-2">
-                <div className="flex items-center gap-1.5 min-w-0 flex-1 bg-amber-50/80 px-2 py-1 rounded-lg border border-amber-200/60">
-                    <MessageSquare size={11} className="text-amber-600 flex-shrink-0" />
-                    <span className="text-[11px] text-amber-900 font-medium truncate" title={doc.remark}>
-                        {doc.remark}
-                    </span>
-                </div>
-                {isEditable && (
-                    <button
-                        type="button"
-                        onClick={() => setIsEditing(true)}
-                        className="text-[10px] font-bold text-stone-500 hover:text-stone-800 underline cursor-pointer flex-shrink-0"
-                    >
-                        Edit Remark
-                    </button>
-                )}
-            </div>
-        );
-    }
-
-    if (isEditable) {
-        return (
-            <div className="pt-1.5 mt-0.5 border-t border-dashed border-stone-200 flex justify-end">
-                <button
-                    type="button"
-                    onClick={() => setIsEditing(true)}
-                    className="text-[10px] text-stone-400 hover:text-stone-700 font-bold flex items-center gap-1 cursor-pointer transition"
-                >
-                    <MessageSquare size={10} />
-                    <span>+ Add Remark</span>
-                </button>
-            </div>
-        );
-    }
-
-    return null;
+    return <DocRemarkEditor doc={doc} onUpdateRemark={onUpdateRemark} canEdit={isEditable} variant="gallery" />;
 }

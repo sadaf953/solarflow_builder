@@ -5,6 +5,8 @@ import {supabase} from '../supabase';
 import {dailyStock,stockDay} from './model';
 import './inventory.css';
 import {inventoryLoadMessage} from './errors';
+import {downloadBlob,toCsv} from '../lib/download.js';
+import {fetchAllPages} from '../lib/db.js';
 const tabs=[['stock','Stock',Package],['movements','Movements',History],['daily','Daily Report',CalendarDays],['archived','Archived',Archive]];
 const fmt=n=>Number(n).toLocaleString('en-IN',{maximumFractionDigits:3});
 const blankItem={product_name:'',sku:'',uom:'Nos',category:'General',reorder_level:'0'};
@@ -16,7 +18,7 @@ export default function InventoryView({currentUser}){
  const [itemDraft,setItemDraft]=useState(null),[categoryFilter,setCategoryFilter]=useState('all');
  const [reportDay,setReportDay]=useState(()=>stockDay(Date.now()));const request=useRef(null),inventoryPanelRef=useRef(null),historyRequest=useRef(null);
 
- const readAll=async(table,order)=>{const rows=[];for(let offset=0;;offset+=1000){const p=await supabase.from(table).select('*').order(order).range(offset,offset+999);if(p.error)throw p.error;rows.push(...p.data);if(p.data.length<1000)return rows;}};
+ const readAll=(table,order)=>fetchAllPages(()=>supabase.from(table).select('*').order(order));
 
  async function loadHistory(force=false){
   if(historyLoading||(!force&&historyLoaded))return;
@@ -31,58 +33,22 @@ export default function InventoryView({currentUser}){
   }finally{if(historyRequest.current===token)setHistoryLoading(false);}
  }
 
- function downloadDailyReport() {
-  const filtered = items.filter(i => `${i.sku} ${i.product_name} ${i.uom}`.toLowerCase().includes(search.toLowerCase()));
-  const reportData = dailyStock(filtered, history, reportDay);
-  const escapeCsv = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const headers = ['Material', 'SKU', 'Unit', 'Opening Stock', 'Incoming (+)', 'Outgoing (-)', 'Closing Stock', 'Report Date'];
-  const lines = [
-   headers.map(escapeCsv).join(','),
-   ...reportData.map(r => [
-    escapeCsv(r.product_name),
-    escapeCsv(r.sku || ''),
-    escapeCsv(r.uom),
-    escapeCsv(r.opening),
-    escapeCsv(r.incoming),
-    escapeCsv(r.outgoing),
-    escapeCsv(r.closing),
-    escapeCsv(reportDay)
-   ].join(','))
-  ];
-  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `SolarFlow_Daily_Inventory_${reportDay}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+ function downloadDailyReport(){
+  const filtered=items.filter(i=>`${i.sku} ${i.product_name} ${i.uom}`.toLowerCase().includes(search.toLowerCase()));
+  const csv=toCsv(dailyStock(filtered,history,reportDay),[
+   {key:'product_name',label:'Material'},{key:'sku',label:'SKU'},{key:'uom',label:'Unit'},
+   {key:'opening',label:'Opening stock'},{key:'incoming',label:'Incoming (+)'},{key:'outgoing',label:'Outgoing (-)'},
+   {key:'closing',label:'Closing stock'},{key:'day',label:'Report date',get:()=>reportDay},
+  ]);
+  downloadBlob(csv,'text/csv;charset=utf-8',`daily_inventory_${reportDay}.csv`);
  }
-
- function downloadCurrentStock() {
-  const escapeCsv = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const headers = ['Material', 'SKU', 'Unit', 'Available Stock', 'Reorder Level', 'Status'];
-  const lines = [
-   headers.map(escapeCsv).join(','),
-   ...shown.map(r => [
-    escapeCsv(r.product_name),
-    escapeCsv(r.sku || ''),
-    escapeCsv(r.uom),
-    escapeCsv(r.stock_on_hand),
-    escapeCsv(r.reorder_level),
-    escapeCsv(Number(r.stock_on_hand) <= Number(r.reorder_level) ? 'Low Stock' : 'In Stock')
-   ].join(','))
-  ];
-  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.setAttribute('download', `SolarFlow_Stock_${stockDay(Date.now())}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+ function downloadCurrentStock(){
+  const csv=toCsv(shown,[
+   {key:'product_name',label:'Material'},{key:'sku',label:'SKU'},{key:'uom',label:'Unit'},
+   {key:'stock_on_hand',label:'Available stock'},{key:'reorder_level',label:'Reorder level'},
+   {key:'status',label:'Status',get:r=>Number(r.stock_on_hand)<=Number(r.reorder_level)?'Low stock':'In stock'},
+  ]);
+  downloadBlob(csv,'text/csv;charset=utf-8',`stock_${stockDay(Date.now())}.csv`);
  }
  async function refresh(){setLoading(true);setLoadFailed(false);setError('');try{
   const todayKey=stockDay(Date.now());

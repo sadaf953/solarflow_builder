@@ -6,12 +6,18 @@
 // div was appended without the rules that isolate it from the rest of the app.
 // ────────────────────────────────────────────────────────────────────────────
 
-import { useRef } from 'react';
-import { Printer } from 'lucide-react';
+import { useEffect, useRef } from 'react';
+import { Printer, X } from 'lucide-react';
 import BomPrintView from './BomPrintView';
 
 export default function BomPrintModal({ customer, bom, bomItems = [], activeType, onClose }) {
     const printableBomRef = useRef(null);
+
+    useEffect(() => {
+        const onKeyDown = event => { if (event.key === 'Escape') onClose(); };
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [onClose]);
 
     const handlePrint = () => {
         const documentBody = printableBomRef.current;
@@ -53,28 +59,29 @@ export default function BomPrintModal({ customer, bom, bomItems = [], activeType
     };
 
     return (
-        <div className="fixed inset-0 z-[999] bg-stone-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+        <div role="dialog" aria-modal="true" aria-labelledby="bom-print-title" className="fixed inset-0 z-[999] bg-stone-900/70 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
             <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] flex flex-col overflow-hidden">
                 {/* Header bar */}
                 <div className="px-6 py-4 bg-stone-900 text-white flex items-center justify-between no-print">
                     <div className="flex items-center gap-2">
                         <Printer size={18} className="text-amber-400" />
-                        <h3 className="text-sm font-black uppercase tracking-wider">Print Preview - Material Integration &amp; BOM</h3>
+                        <h3 id="bom-print-title" className="text-sm font-black uppercase tracking-wider">Print Preview - Material Integration &amp; BOM</h3>
                     </div>
                     <div className="flex items-center gap-3">
                         <button
                             type="button"
                             onClick={handlePrint}
-                            className="bg-amber-500 hover:bg-amber-400 text-stone-950 px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-md"
+                            className="bg-amber-500 hover:bg-amber-400 text-stone-950 px-4 min-h-11 rounded-lg text-xs font-black uppercase tracking-wider transition flex items-center gap-1.5 cursor-pointer shadow-md"
                         >
-                            <Printer size={14} /> Print Document
+                            <Printer size={14} aria-hidden="true" /> Print Document
                         </button>
                         <button
                             type="button"
                             onClick={onClose}
-                            className="text-stone-400 hover:text-white p-1 rounded-lg transition cursor-pointer"
+                            aria-label="Close print preview"
+                            className="text-stone-400 hover:text-white h-11 w-11 flex items-center justify-center rounded-lg transition cursor-pointer"
                         >
-                            ✕
+                            <X size={18} aria-hidden="true" />
                         </button>
                     </div>
                 </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { Page1 } from './Page1';
 import { Page2 } from './Page2';
 import { Page3 } from './Page3';
@@ -50,10 +50,13 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
     }
   };
 
+  // Opened with "Add to Documents": build the PDF once, after the pages have painted.
+  const addRef = useRef(handleAddToDocuments);
+  addRef.current = handleAddToDocuments;
   useEffect(() => {
     if (!autoAdd || autoAddStartedRef.current) return;
     autoAddStartedRef.current = true;
-    const frame = requestAnimationFrame(() => { handleAddToDocuments(); });
+    const frame = requestAnimationFrame(() => { addRef.current(); });
     return () => cancelAnimationFrame(frame);
   }, [autoAdd]);
 
@@ -175,7 +178,7 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
           <div className="flex items-center gap-3">
             <span className="font-bold text-sm text-slate-200 flex items-center gap-2">
               <FileText className="w-5 h-5 text-amber-400" />
-              PM Surya Ghar Agreement {data.gpaStampUrl ? '(5 Pages · GPA Stamp Attached)' : '(4 Pages)'}
+              PM Surya Ghar agreement {data.gpaStampUrl ? '(5 pages, with stamp paper)' : '(4 pages)'}
             </span>
             <div className="h-4 w-[1px] bg-slate-800 mx-1" />
             <div className="flex items-center gap-1 bg-slate-900 p-0.5 rounded border border-slate-800">
@@ -185,7 +188,7 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
                   onClick={() => scrollToPage(0)}
                   className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-400/10 text-amber-300 hover:bg-amber-400/20 transition cursor-pointer"
                 >
-                  Stamp Page
+                  Stamp paper
                 </button>
               )}
               {[1, 2, 3, 4].map((num) => (
@@ -210,10 +213,10 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
                 type="button"
                 onClick={() => setStampRotation(prev => (prev + 90) % 360)}
                 className="px-3 py-2 rounded-xl border border-slate-800 bg-slate-900 hover:bg-slate-800 text-xs font-bold text-amber-300 flex items-center gap-1.5 transition cursor-pointer shadow-xs"
-                title="Rotate stamp 90° clockwise if uploaded sideways"
+                title="Turn the stamp paper 90° if it was uploaded sideways"
               >
                 <RotateCw className="w-3.5 h-3.5 text-amber-400" />
-                <span>Rotate Stamp{stampRotation > 0 ? ` (${stampRotation}°)` : ''}</span>
+                <span>Rotate stamp paper{stampRotation > 0 ? ` (${stampRotation}°)` : ''}</span>
               </button>
             )}
 
@@ -233,8 +236,9 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
 
             {/* Font Size Selection */}
             <div className="flex items-center gap-2 bg-slate-900 rounded-xl border border-slate-800 px-3 py-1.5">
-              <Type className="w-4 h-4 text-slate-400" />
+              <Type className="w-4 h-4 text-slate-400" aria-hidden="true" />
               <select
+                aria-label="Text size"
                 value={fontSize}
                 onChange={(e) => setFontSize(e.target.value)}
                 className="bg-transparent border-0 text-xs font-bold text-slate-200 focus:outline-none focus:ring-0 cursor-pointer pr-1"
@@ -249,17 +253,21 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
             {/* Zoom Controls */}
             <div className="flex items-center gap-2 bg-slate-900 rounded-xl border border-slate-800 px-3 py-1.5">
               <button
+                type="button"
                 onClick={() => setZoom(Math.max(60, zoom - 10))}
                 className="text-slate-400 hover:text-slate-200 p-0.5"
-                title="Zoom Out"
+                title="Zoom out"
+                aria-label="Zoom out"
               >
                 <ZoomOut className="w-4 h-4" />
               </button>
               <span className="text-xs font-bold text-slate-200 w-9 text-center">{zoom}%</span>
               <button
+                type="button"
                 onClick={() => setZoom(Math.min(140, zoom + 10))}
                 className="text-slate-400 hover:text-slate-200 p-0.5"
-                title="Zoom In"
+                title="Zoom in"
+                aria-label="Zoom in"
               >
                 <ZoomIn className="w-4 h-4" />
               </button>
@@ -268,6 +276,7 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
             {/* Print Button */}
             {onAddToDocuments && (
               <button
+                type="button"
                 onClick={handleAddToDocuments}
                 disabled={adding}
                 className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-emerald-600/20 transition text-xs cursor-pointer"
@@ -277,6 +286,7 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
               </button>
             )}
             <button
+              type="button"
               onClick={handlePrint}
               className="bg-amber-500 hover:bg-amber-600 text-white font-bold px-4 py-2 rounded-xl flex items-center gap-2 shadow-lg shadow-amber-500/20 transition text-xs cursor-pointer"
             >
@@ -286,7 +296,9 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
 
             {/* Close Button */}
             <button
+              type="button"
               onClick={onClose}
+              aria-label="Close agreement"
               className="text-slate-400 hover:text-slate-200 p-1.5 rounded-xl hover:bg-slate-800 transition-colors ml-1"
             >
               <X className="w-5 h-5" />
@@ -311,7 +323,7 @@ export const AgreementPreview = ({ data, onChange, onClose, onAddToDocuments, ex
                 >
                   <img 
                     src={data.gpaStampUrl} 
-                    alt="PM Surya GPA Stamp" 
+                    alt="Stamp paper" 
                     onLoad={(e) => {
                       if (e.target.naturalWidth > e.target.naturalHeight && stampRotation === 0) {
                         setStampRotation(90);

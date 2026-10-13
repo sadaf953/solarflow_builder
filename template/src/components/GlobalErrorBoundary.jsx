@@ -1,5 +1,19 @@
 import React from 'react';
+import { AlertTriangle } from 'lucide-react';
 import { reportError } from '../utils/globalErrors';
+
+const RELOAD_FLAG = 'chunk_auto_reload_done';
+// Without sessionStorage we cannot tell whether we already reloaded, so never reload.
+function reloadOnce() {
+    try {
+        if (window.sessionStorage.getItem(RELOAD_FLAG) === 'true') return false;
+        window.sessionStorage.setItem(RELOAD_FLAG, 'true');
+    } catch {
+        return false;
+    }
+    window.location.reload();
+    return true;
+}
 
 export default class GlobalErrorBoundary extends React.Component {
     constructor(props) {
@@ -30,12 +44,7 @@ export default class GlobalErrorBoundary extends React.Component {
             errorMsg.includes('Importing a module script failed') ||
             errorMsg.includes('error loading dynamically imported module')
         ) {
-            const hasAutoReloaded = sessionStorage.getItem('chunk_auto_reload_done') === 'true';
-            if (!hasAutoReloaded) {
-                sessionStorage.setItem('chunk_auto_reload_done', 'true');
-                window.location.reload();
-                return;
-            }
+            if (reloadOnce()) return;
         }
 
         this.setState({
@@ -90,15 +99,15 @@ export default class GlobalErrorBoundary extends React.Component {
                     {/* Header */}
                     <div className="px-6 py-5 border-b border-red-100 bg-red-50 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center text-red-600 font-bold text-lg shadow-sm">
-                                ⚠️
+                            <div className="w-10 h-10 rounded-xl bg-red-100 border border-red-200 flex items-center justify-center text-red-600 shadow-sm">
+                                <AlertTriangle size={20} aria-hidden="true" />
                             </div>
                             <div>
                                 <h1 className="text-lg font-bold text-red-950">
-                                    Application Error Encountered
+                                    Something went wrong
                                 </h1>
                                 <p className="text-xs text-red-700 font-medium mt-0.5">
-                                    The application caught an unexpected error and prevented a crash.
+                                    This screen hit an unexpected error. Reload to carry on; your saved work is safe.
                                 </p>
                             </div>
                         </div>
@@ -118,9 +127,9 @@ export default class GlobalErrorBoundary extends React.Component {
                                 </span>
                                 <button
                                     onClick={this.handleCopy}
-                                    className="text-xs text-stone-500 hover:text-stone-900 font-medium flex items-center gap-1 transition-colors"
+                                    className="min-h-11 px-2 text-xs text-stone-500 hover:text-stone-900 font-medium flex items-center gap-1 transition-colors"
                                 >
-                                    {this.state.copied ? '✓ Copied to clipboard' : '📋 Copy Error Details'}
+                                    {this.state.copied ? 'Copied' : 'Copy error details'}
                                 </button>
                             </div>
                             <div className="bg-stone-950 text-red-300 rounded-xl p-4 overflow-x-auto border border-stone-800 shadow-inner font-mono text-xs leading-relaxed">
@@ -158,21 +167,21 @@ export default class GlobalErrorBoundary extends React.Component {
                         <div className="pt-3 border-t border-stone-100 flex flex-wrap gap-3">
                             <button
                                 onClick={this.handleReload}
-                                className="px-5 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-semibold hover:bg-stone-800 active:scale-[0.99] transition shadow-sm"
+                                className="min-h-11 px-5 py-2.5 rounded-xl bg-stone-900 text-white text-xs font-semibold hover:bg-stone-800 active:scale-[0.99] transition shadow-sm"
                             >
-                                Reload Application
+                                Reload
                             </button>
                             <button
                                 onClick={this.handleReset}
-                                className="px-5 py-2.5 rounded-xl bg-stone-100 text-stone-700 hover:bg-stone-200 text-xs font-semibold border border-stone-200 transition"
+                                className="min-h-11 px-5 py-2.5 rounded-xl bg-stone-100 text-stone-700 hover:bg-stone-200 text-xs font-semibold border border-stone-200 transition"
                             >
-                                Try Recovering (Reset State)
+                                Try again
                             </button>
                             <button
                                 onClick={() => window.location.href = window.location.origin}
-                                className="px-5 py-2.5 rounded-xl bg-white text-stone-600 hover:bg-stone-50 text-xs font-medium border border-stone-200 transition ml-auto"
+                                className="min-h-11 px-5 py-2.5 rounded-xl bg-white text-stone-600 hover:bg-stone-50 text-xs font-medium border border-stone-200 transition ml-auto"
                             >
-                                Return to Home
+                                Go to home
                             </button>
                         </div>
 

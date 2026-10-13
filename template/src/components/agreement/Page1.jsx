@@ -1,4 +1,4 @@
-import React from 'react';
+import { AGREEMENT_COMPANY, BLANK } from './agreementData.js';
 
 export const Page1 = ({ data, fontSizeClass = 'text-[17px]' }) => {
   const getHighlightStyle = () => ({
@@ -24,7 +24,7 @@ export const Page1 = ({ data, fontSizeClass = 'text-[17px]' }) => {
         <p className="text-justify font-normal">
           This agreement is executed on{' '}
           <span className="font-normal" style={getHighlightStyle()}>
-            {data.executionDate || '23-06-2026'}
+            {data.executionDate || BLANK}
           </span>{' '}
           for design, supply, installation, commissioning and 5-year comprehensive maintenance of RTS project/system along with warranty under PM Surya Ghar: Muft Bijli Yojana
         </p>
@@ -36,23 +36,23 @@ export const Page1 = ({ data, fontSizeClass = 'text-[17px]' }) => {
 
         <p className="text-justify font-normal">
           <span className="font-normal" style={getHighlightStyle()}>
-            {data.consumerName || 'DEMO CUSTOMER ONE'}
+            {data.consumerName || BLANK}
           </span>{' '}
           ,Consumer No-{' '}
           <span className="font-normal" style={getHighlightStyle()}>
-            {data.consumerNo || 'DEMO-CONSUMER-001'}
+            {data.consumerNo || BLANK}
           </span>{' '}
           having address at Vill{' '}
           <span className="font-normal" style={getHighlightStyle()}>
-            {data.village || 'DEMO TOWN'}
+            {data.village || BLANK}
           </span>
           ,Tal:{' '}
           <span className="font-normal" style={getHighlightStyle()}>
-            {data.taluka || 'DEMO TOWN'}
+            {data.taluka || BLANK}
           </span>{' '}
           Dist:{' '}
           <span className="font-normal" style={getHighlightStyle()}>
-            {data.district || ''}
+            {data.district || BLANK}
           </span>{' '}
           (hereinafter referred to as first Party i.e. /consumer/consumer/purchaser /owner of system).
         </p>
@@ -61,11 +61,11 @@ export const Page1 = ({ data, fontSizeClass = 'text-[17px]' }) => {
 
         <p className="text-justify font-normal">
           <span className="font-normal">
-            {data.vendorName || 'SolarFlow Demo Energy'}
+            {AGREEMENT_COMPANY.name}
           </span>{' '}
           having registered office at{' '}
           <span className="font-normal underline">
-            {data.vendorAddress || '100 Demo Avenue, Sample City (fictional)'}
+            {AGREEMENT_COMPANY.address}
           </span>{' '}
           (hereinafter referred to as second Party i.e. Vendor/ contractor/ System Integrator).
         </p>

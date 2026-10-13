@@ -43,111 +43,11 @@ export const APP_ROLES = [
     { id: 'agent2', label: 'Dealer', user_type: 'agent2', role: 'Channel Partner' },
     { id: 'channel_partner', label: 'Channel Partners', user_type: 'agent', role: 'Channel Partners' },
     { id: 'vendor', label: 'Vendors', user_type: 'vendor', role: 'Vendors' },
-    { id: 'stamp', label: 'Stamp Maker', user_type: 'stamp', role: 'Stamp' },
 ];
 
 // Login types switched on for this client (see config/catalog/features.js).
 export const enabledRoles = () => APP_ROLES.filter(role => isRoleEnabled(role.user_type));
 
-
-// ============================================================
-// ROOF BOM TEMPLATE (Exact Order)
-// ============================================================
-
-export const ROOF_BOM_TEMPLATE = [
-    { sr_no: 1,  product_name: 'Solar Panel',             quantity: '',      uom: 'Nos', quantity_editable: true },
-    { sr_no: 2,  product_name: 'Inverter',                quantity: '',      uom: 'Nos', quantity_editable: true },
-    { sr_no: 3,  product_name: 'ACDB',                    quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 4,  product_name: 'DCDB',                    quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 5,  product_name: 'Dc Cable',                quantity: '',      uom: 'MTR', quantity_editable: true },
-    { sr_no: 6,  product_name: 'Earthing Cable',          quantity: '',      uom: 'MTR', quantity_editable: true },
-    { sr_no: 7,  product_name: '16sq MM LA cabel',        quantity: '',      uom: 'MTR', quantity_editable: true },
-    { sr_no: 8,  product_name: 'Ac Cable',                quantity: '',      uom: 'MTR', quantity_editable: true },
-    { sr_no: 9,  product_name: 'Isolation box+MCB',       quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 10, product_name: 'Shadel',                  quantity: '50',    uom: 'No.', quantity_editable: false },
-    { sr_no: 11, product_name: 'Elbow',                   quantity: '35',    uom: 'No.', quantity_editable: false },
-    { sr_no: 12, product_name: 'Tea',                     quantity: '7',     uom: 'No.', quantity_editable: false },
-    { sr_no: 13, product_name: 'Wedge Anchor Fast',       quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 14, product_name: '8 aani 4 inch',           quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 15, product_name: '6 aani 6 inch',           quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 16, product_name: 'jasti khila',             quantity: '8',     uom: 'No.', quantity_editable: false },
-    { sr_no: 17, product_name: 'm c 4 conectar',           quantity: '2',     uom: 'No.', quantity_editable: false },
-    { sr_no: 18, product_name: 'Screw/ Tape',             quantity: '15',    uom: 'No.', quantity_editable: false },
-    { sr_no: 19, product_name: '16 sq MM Round LUG',      quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 20, product_name: '4 sq MM Round LUG',       quantity: '3',     uom: 'No.', quantity_editable: false },
-    { sr_no: 21, product_name: '4 Sqmm Pin Type Lug',     quantity: '10',    uom: 'No.', quantity_editable: false },
-    { sr_no: 22, product_name: 'Red/Black Sleeve',        quantity: '5+2',   uom: 'No.', quantity_editable: false },
-    { sr_no: 23, product_name: '5 aani 2inch',            quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 24, product_name: 'Mid Clamp',               quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 25, product_name: 'End Clamp',               quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 26, product_name: 'GI Clamp',                quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 27, product_name: 'u bolt+patti',            quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 28, product_name: 'Chaki+Wisher',            quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 29, product_name: 'Sapot pati',              quantity: '3',     uom: 'No.', quantity_editable: false },
-    { sr_no: 30, product_name: 'rubar cap',               quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 31, product_name: 'cabale ties',             quantity: '15',    uom: 'No.', quantity_editable: false },
-    { sr_no: 32, product_name: 'Cable Tie ( Nani )',      quantity: '36',    uom: 'No.', quantity_editable: false },
-    { sr_no: 33, product_name: 'Earth Pit Doll',          quantity: '3',     uom: 'No.', quantity_editable: false },
-    { sr_no: 34, product_name: '40*40 Pipe Perlin',       quantity: '',      uom: 'Feet', quantity_editable: true },
-    { sr_no: 35, product_name: '60*40 Pipe rafter',       quantity: '',      uom: 'Feet', quantity_editable: true },
-    { sr_no: 36, product_name: '60*40 front leg',         quantity: '',      uom: 'Feet', quantity_editable: true },
-    { sr_no: 37, product_name: '60*40 Rear leg',          quantity: '',      uom: 'Feet', quantity_editable: true },
-    { sr_no: 38, product_name: 'LA  insuletar',           quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 39, product_name: 'cabale tre',              quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 40, product_name: 'Earthing Kit + LA',       quantity: '3+1',   uom: 'No.', quantity_editable: false },
-    { sr_no: 41, product_name: 'chemical',                quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 42, product_name: 'Conduite Pipe',           quantity: '15',    uom: 'No.', quantity_editable: false },
-    { sr_no: 43, product_name: 'Cement',                  quantity: '',      uom: 'Bag', quantity_editable: true },
-    { sr_no: 44, product_name: 'Reti',                    quantity: '',      uom: 'Bag (50 kg)', quantity_editable: true },
-    { sr_no: 45, product_name: 'Kapachi',                 quantity: '',      uom: 'Bag (50 kg)', quantity_editable: true },
-];
-
-
-// ============================================================
-// SHED BOM TEMPLATE (Exact Order)
-// ============================================================
-
-export const SHED_BOM_TEMPLATE = [
-    { sr_no: 1,  product_name: 'Solar Panel',             quantity: '',      uom: 'Nos', quantity_editable: true },
-    { sr_no: 2,  product_name: 'Inverter',                quantity: '',      uom: 'Nos', quantity_editable: true },
-    { sr_no: 3,  product_name: 'ACDB',                    quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 4,  product_name: 'DCDB',                    quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 5,  product_name: 'Dc Cable',                quantity: '',      uom: 'MTR', quantity_editable: true },
-    { sr_no: 6,  product_name: 'Earthing Cable',          quantity: '',      uom: 'MTR', quantity_editable: true },
-    { sr_no: 7,  product_name: '16sq MM LA Cable',        quantity: '',      uom: 'MTR', quantity_editable: true },
-    { sr_no: 8,  product_name: 'Ac Cable',                quantity: '',      uom: 'MTR', quantity_editable: true },
-    { sr_no: 9,  product_name: 'Isolation box+MCB',       quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 10, product_name: 'Shadel',                  quantity: '50',    uom: 'No.', quantity_editable: false },
-    { sr_no: 11, product_name: 'Elbow',                   quantity: '35',    uom: 'No.', quantity_editable: false },
-    { sr_no: 12, product_name: 'Tea',                     quantity: '7',     uom: 'No.', quantity_editable: false },
-    { sr_no: 13, product_name: 'Spring + HEX Bolt',       quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 14, product_name: 'L And Key',               quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 15, product_name: '80*40 J bolt mota',       quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 16, product_name: 'Damar roll',              quantity: '2',     uom: 'MTR', quantity_editable: false },
-    { sr_no: 17, product_name: 'jasti khila',             quantity: '8',     uom: 'No.', quantity_editable: false },
-    { sr_no: 18, product_name: 'm c 4 conectar',           quantity: '2',     uom: 'No.', quantity_editable: false },
-    { sr_no: 19, product_name: '16 sq MM Round LUG',      quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 20, product_name: '4 sq MM Round LUG',       quantity: '3',     uom: 'No.', quantity_editable: false },
-    { sr_no: 21, product_name: '4 Sqmm Pin Type Lug',     quantity: '10',    uom: 'No.', quantity_editable: false },
-    { sr_no: 22, product_name: 'Red/Black Sleeve',        quantity: '5+2',   uom: 'No.', quantity_editable: false },
-    { sr_no: 23, product_name: '5 aani 2inch',            quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 24, product_name: 'Mid Clamp',               quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 25, product_name: 'End Clamp',               quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 26, product_name: 'LA  insuletar',           quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 27, product_name: 'cabale ties',             quantity: '15',    uom: 'No.', quantity_editable: false },
-    { sr_no: 28, product_name: 'Earthing ડોલ / ઢાંકણા', quantity: '3',     uom: 'No.', quantity_editable: false },
-    { sr_no: 29, product_name: 'C Chanel',                quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 30, product_name: 'Z mota',                  quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 31, product_name: 'Z nana',                  quantity: '',      uom: 'No.', quantity_editable: true },
-    { sr_no: 32, product_name: 'cabale tre',              quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 33, product_name: 'Earthing Kit + LA',       quantity: '3+1',   uom: 'No.', quantity_editable: false },
-    { sr_no: 34, product_name: 'chemical',                quantity: '1',     uom: 'No.', quantity_editable: false },
-    { sr_no: 35, product_name: 'Condute Pipe',            quantity: '15',    uom: 'No.', quantity_editable: false },
-];
-
-export const COMMON_BOM_ITEMS = ROOF_BOM_TEMPLATE.filter(r => 
-    SHED_BOM_TEMPLATE.some(s => s.product_name.toLowerCase().trim() === r.product_name.toLowerCase().trim())
-);
 
 // ════════════════════════════════════════════════════════════
 // INSTALLATION STATUS TAGS
@@ -161,11 +61,6 @@ export const INSTALLATION_TAG_COLORS = {
     'Pending': { bg: 'bg-amber-50',   text: 'text-amber-700',   border: 'border-amber-200',   dot: 'bg-amber-500' },
     'Give Up': { bg: 'bg-rose-50',    text: 'text-rose-700',    border: 'border-rose-200',    dot: 'bg-rose-500' }
 };
-
-// ════════════════════════════════════════════════════════════
-// LOST PROJECT STATUS TAGS
-// ════════════════════════════════════════════════════════════
-
 
 // ════════════════════════════════════════════════════════════
 // DOCUMENT TYPE LABELS
@@ -196,14 +91,11 @@ export const DOC_TYPE_LABELS = {
     stamp_pic: 'Vendor Stamp',
     vendor_stamp: 'Vendor Stamp',
     secondPartyStamp: 'Vendor Stamp',
-    // The stamp maker uploads the completed/stamped Discom document under this
-    // established backend type. Keep the type unchanged so existing files work.
     pm_surya_ghar_stamp: 'Discom Submission (Stamped)',
     surya_gpa_stamp: 'PM Surya GPA Stamp',
     gpa_stamp: 'PM Surya GPA Stamp',
     meter_installation_photo: 'Meter Installation Photo',
     meter_photo: 'Meter Installation Photo',
-    warranty_card: 'Warranty Card',
     insurance_status: 'Insurance Document',
     feasibilty_document: 'Feasibility Document',
     feasibility_document: 'Feasibility Document',
@@ -239,7 +131,6 @@ export const DOC_TYPE_FLAG_COLUMN = {
     plant_commissioning_report: 'plant_commissioning_report',
     digital_certificate:        'digital_certificate',
     subsidy_token_photo:        'subsidy_token_photo',
-    warranty_card:              'warranty_card',
     insurance_status:           'insurance_status',
     pm_surya_ghar_stamp:        'pm_surya_ghar_stamp',
     discom_agreement:           'discom_agreement',
@@ -297,22 +188,8 @@ export const REG_CHECKLIST_FIELDS = [
     { field: 'extra_docs', label: 'Extra Docs' },
 ];
 
-export const OPERATIONAL_CHECKLIST_FIELDS = [
-    { field: 'digital_certificate', label: 'Digital Certificate' },
-    { field: 'feasibilty_document', label: 'Feasibility Document' },
-    { field: 'subsidy_token_photo', label: 'Subsidy Token Photo' },
-    { field: 'meter_installation_photo', label: 'Meter Installation Photo' },
-    { field: 'geo_tag_image', label: 'Geo Tag Image' },
-    { field: 'dcr_certificate', label: 'DCR Certificate' },
-    { field: 'signature_pic', label: 'Signature Pic' },
-    { field: 'pm_surya_ghar_stamp', label: 'PM Surya Ghar Stamp' },
-    { field: 'vendor_feasibility', label: 'Vendor Feasibility' },
-    { field: 'site_feasibility', label: 'Site Feasibility' },
-];
-
-// Every real column on the `admin` table, verified against the live schema on
-// 2026-08-29. Used by sanitizeAdminUpdate() to strip keys that are not real
-// columns before a write.
+// Every column of public.admin in backend/schema.sql. Used by
+// sanitizeAdminUpdate() to strip keys that are not real columns before a write.
 //
 // WHY: several save paths write { ...editData }, i.e. the whole customer row.
 // PostgREST rejects the ENTIRE update with 42703 if even one key is not a
@@ -436,30 +313,20 @@ export const ADMIN_COLUMNS = new Set([
     'warranty_card'
 ]);
 
-// Numeric / integer columns on `admin`, verified against the live schema on
-// 2026-08-30. An empty string sent to any of these is rejected by Postgres
-// ("invalid input syntax for type numeric"), so callers must convert '' to null.
-//
-// The previous hand-written list was missing phone_number, folder_no,
-// driver_phone_number and both structure leg heights - so simply CLEARING any
-// of those fields made the whole save fail. It also listed three columns
-// (loan_sanction_amount, loan_disbursed_amount, subsidy_amount) that do not exist.
+// Numeric columns of public.admin. Postgres rejects '' in these
+// ("invalid input syntax for type numeric"), so writes turn '' into null.
+// Phone numbers and folder numbers are text and keep their leading 0 / +.
 export const ADMIN_NUMERIC_COLUMNS = [
     'ac_cable',
     'dc_cable',
-    'driver_phone_number',
-    'folder_no',
     'invoice_value',
     'module_wp',
     'no_of_modules',
-    'phone_number',
     'structure_front_leg_height',
     'structure_rear_leg_height',
     'system_capacity_kwp',
     'vendor_quote',
 ];
-
-export const DEFAULT_PAGE_SIZE = 50;
 
 // Optimized Column Selectors for List Views (prevents downloading 67+ full columns)
 // Verified against the live `admin` schema on 2026-08-29. Every name here must
@@ -472,18 +339,14 @@ export const DEFAULT_PAGE_SIZE = 50;
 // query without these would make that check see undefined and falsely block.
 export const CUSTOMER_CARD_COLUMNS = 'id, customer_name, phone_number, email_address, consumer_no, folder_no, stage, channel_partner, sub_channel_partner, payment_type, loan_tag, subsidy_tag, installation_status, system_capacity_kwp, module_brand, module_wp, no_of_modules, villages, full_address, pincode, sub_divisions, district, registration_date, invoice_value, vendor_quote, created_at, updated_at, deleted_at, delivery_batch_id, delivery_status, stages_remarks, vendor, geo_tag_status, google_drive_link, location_link';
 
-// Safe columns for cpo_leads view in case new columns (google_drive_link, location_link)
-// have not yet been refreshed into the Postgres view definition
-export const CPO_CARD_COLUMNS = 'id, customer_name, phone_number, email_address, consumer_no, folder_no, stage, channel_partner, sub_channel_partner, payment_type, loan_tag, subsidy_tag, installation_status, system_capacity_kwp, module_brand, module_wp, no_of_modules, villages, full_address, pincode, sub_divisions, district, registration_date, invoice_value, vendor_quote, created_at, updated_at, deleted_at, delivery_batch_id, delivery_status, stages_remarks, vendor, geo_tag_status';
-
-export const getCustomerCardColumns = (isCpo = false) => isCpo ? CPO_CARD_COLUMNS : CUSTOMER_CARD_COLUMNS;
+// cpo_leads is `select * from admin`, so both sources share one column list.
+export const getCustomerCardColumns = () => CUSTOMER_CARD_COLUMNS;
 
 
 // Vendor list cards and stage counters do not need the full admin record. The
 // complete record is fetched only when a vendor opens one assignment.
 export const VENDOR_LIST_COLUMNS = 'id, customer_name, phone_number, email_address, consumer_no, folder_no, stage, vendor, deleted_at, installation_status, geo_tag_status, villages, sub_divisions, district, system_capacity_kwp, module_brand, module_wp, no_of_modules, material_delivery_date, installation_date, vendor_quote, vendor_payment_status, vendor_paid_date, created_at, updated_at';
 
-export const DELIVERY_PICKER_COLUMNS = 'id, customer_name, phone_number, consumer_no, folder_no, stage, channel_partner, sub_channel_partner, system_capacity_kwp, module_wp, no_of_modules, invoice_value, delivery_batch_id, delivery_status, material_delivery_date, driver_name, driver_phone_number, vehicle_number, vendor, created_at, updated_at, deleted_at';
 
 // A tag value is "final" when it is the terminal state of its set. Reaching it
 // locks the field for everyone except Admin. Driven by the isFinal flag on the

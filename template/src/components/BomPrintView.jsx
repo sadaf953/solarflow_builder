@@ -6,31 +6,9 @@
 // (product_name / quantity / uom / integration_by / note).
 // ────────────────────────────────────────────────────────────────────────────
 
-import React from 'react';
-
-// Indian grouping that keeps the decimal part intact - capacity is a kWp value
-// like 32.94, and the previous substring approach turned that into "32,.94".
-const toIndianCommas = (val) => {
-    const n = Number(String(val).replace(/,/g, ''));
-    if (isNaN(n) || val === '' || val == null) return '';
-    const [intPart, decPart] = n.toString().split('.');
-    const lastThree = intPart.slice(-3);
-    const rest = intPart.slice(0, -3);
-    const formatted = rest.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + (rest ? ',' : '') + lastThree;
-    return decPart !== undefined ? `${formatted}.${decPart}` : formatted;
-};
-
-// Serials are stored as a JSON string, a newline list or a comma list.
-const parsePanelSerials = (raw) => {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw.map(value => String(value || '').trim()).filter(Boolean);
-    const rawText = String(raw);
-    try {
-        const parsed = JSON.parse(rawText);
-        if (Array.isArray(parsed)) return parsed.map(value => String(value || '').trim()).filter(Boolean);
-    } catch { /* not JSON */ }
-    return rawText.split(/[\n,]/).map(value => value.trim()).filter(Boolean);
-};
+import { BRANDING, isOn } from '../config/index.js';
+import { toIndianCommas } from '../lib/format.js';
+import { readModuleSerials } from '../serials/record.js';
 
 const dash = (value) => {
     const text = value === null || value === undefined ? '' : String(value).trim();
@@ -40,7 +18,7 @@ const dash = (value) => {
 const PageHeader = ({ label, page }) => (
     <div className="mb-4">
         <div className="text-center">
-            <h1 className="text-xl font-black uppercase tracking-wider text-stone-950">SolarFlow Demo Energy</h1>
+            <h1 className="text-xl font-black uppercase tracking-wider text-stone-950">{BRANDING.companyName}</h1>
             <p className="text-[11px] font-semibold text-stone-600 mt-0.5">Solar PV Project Integration &amp; Material Loading Checklist</p>
         </div>
         <div className="flex items-center justify-between mt-3">
@@ -56,7 +34,7 @@ const PageHeader = ({ label, page }) => (
 
 const PageFooter = ({ page }) => (
     <div className="mt-6 border-t border-stone-300 pt-3 flex justify-between text-[9px] text-stone-400 font-semibold">
-        <div>SolarFlow Demo Energy</div>
+        <div>{BRANDING.companyName}</div>
         <div>BOM Page {page} of 2</div>
     </div>
 );
@@ -78,8 +56,24 @@ const Cell = ({ label, value, wide }) => (
     </>
 );
 
+// Label/value pairs laid out two per table row.
+const CellRows = ({ cells }) => (
+    <table className="w-full border-collapse">
+        <tbody>
+            {Array.from({ length: Math.ceil(cells.length / 2) }, (_, row) => {
+                const pair = cells.slice(row * 2, row * 2 + 2);
+                return (
+                    <tr key={pair[0].label}>
+                        {pair.map(cell => <Cell key={cell.label} label={cell.label} value={cell.value} wide={pair.length === 1} />)}
+                    </tr>
+                );
+            })}
+        </tbody>
+    </table>
+);
+
 export default function BomPrintView({ customer, bom, bomItems, activeType }) {
-    const panelSerials = parsePanelSerials(customer?.panel_serial_no);
+    const panelSerials = readModuleSerials(customer?.panel_serial_no);
     const type = activeType || bom?.bom_type || 'ROOF';
     const legHeight = (customer?.structure_front_leg_height || customer?.structure_rear_leg_height)
         ? `Front: ${dash(customer?.structure_front_leg_height)} ft / Rear: ${dash(customer?.structure_rear_leg_height)} ft`
@@ -94,37 +88,23 @@ export default function BomPrintView({ customer, bom, bomItems, activeType }) {
 
                     <div className="mb-4">
                         <SectionTitle>1. Customer &amp; Site Reference</SectionTitle>
-                        <table className="w-full border-collapse">
-                            <tbody>
-                                <tr>
-                                    <Cell label="Customer Name:" value={dash(customer?.customer_name)} />
-                                    <Cell label="Phone Number:" value={dash(customer?.phone_number)} />
-                                </tr>
-                                <tr>
-                                    <Cell label="Email Address:" value={dash(customer?.email_address || customer?.email)} />
-                                    <Cell label="Consumer No:" value={dash(customer?.consumer_no)} />
-                                </tr>
-                                <tr>
-                                    <Cell label="Villages:" value={dash(customer?.villages)} />
-                                    <Cell label="Sub Division:" value={dash(customer?.sub_divisions)} />
-                                </tr>
-                                <tr>
-                                    <Cell label="Channel Partner Name:" value={dash(customer?.channel_partner)} />
-                                    <Cell label="Dealer Name:" value={dash(customer?.sub_channel_partner)} />
-                                </tr>
-                                <tr>
-                                    <Cell label="MODULE BRAND:" value={dash(customer?.module_brand)} />
-                                    <Cell label="MODULE WP:" value={dash(customer?.module_wp)} />
-                                </tr>
-                                <tr>
-                                    <Cell label="No of Modules:" value={dash(customer?.no_of_modules)} />
-                                    <Cell
-                                        label="System Capacity (kWp):"
-                                        value={customer?.system_capacity_kwp ? `${toIndianCommas(customer.system_capacity_kwp)} kWp` : '–'}
-                                    />
-                                </tr>
-                            </tbody>
-                        </table>
+                        <CellRows cells={[
+                            { label: 'Customer Name:', value: dash(customer?.customer_name) },
+                            { label: 'Phone Number:', value: dash(customer?.phone_number) },
+                            { label: 'Email Address:', value: dash(customer?.email_address || customer?.email) },
+                            { label: 'Consumer No:', value: dash(customer?.consumer_no) },
+                            { label: 'Villages:', value: dash(customer?.villages) },
+                            { label: 'Sub Division:', value: dash(customer?.sub_divisions) },
+                            ...(isOn('channelPartners') || isOn('cpos') ? [{ label: 'Channel Partner Name:', value: dash(customer?.channel_partner) }] : []),
+                            ...(isOn('dealers') ? [{ label: 'Dealer Name:', value: dash(customer?.sub_channel_partner) }] : []),
+                            { label: 'MODULE BRAND:', value: dash(customer?.module_brand) },
+                            { label: 'MODULE WP:', value: dash(customer?.module_wp) },
+                            { label: 'No of Modules:', value: dash(customer?.no_of_modules) },
+                            {
+                                label: 'System Capacity (kWp):',
+                                value: customer?.system_capacity_kwp ? `${toIndianCommas(customer.system_capacity_kwp)} kWp` : '–',
+                            },
+                        ]} />
                     </div>
 
                     <div className="mb-4">

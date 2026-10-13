@@ -13,8 +13,6 @@ export default [
       globals: {
         ...globals.browser,
         ...globals.node,
-        // Compiled in by vite.config.js `define` - see UpdateChecker.jsx.
-        __BUILD_ID__: 'readonly',
       },
       parserOptions: {
         ecmaFeatures: { jsx: true },

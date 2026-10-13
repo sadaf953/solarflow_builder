@@ -17,8 +17,8 @@ test('delivery needs an acknowledged atomic result', async () => {
 test('save and delete never fall back when transaction functions are absent or fail', async () => {
  const {saveDeliveryBatch,deleteDeliveryBatch}=await import('../../template/src/delivery/status.js');
  const client={rpc:async()=>({error:{code:'PGRST202'}}),from:()=>assert.fail('separate writes forbidden')};
- await assert.rejects(saveDeliveryBatch(client,{id:'b'},['p'],[]),/SQL 07/);
- await assert.rejects(deleteDeliveryBatch(client,'b',['p']),/SQL 07/);
+ await assert.rejects(saveDeliveryBatch(client,{id:'b'},['p'],[]),/backend\/schema\.sql/);
+ await assert.rejects(deleteDeliveryBatch(client,'b',['p']),/backend\/schema\.sql/);
  const failed={rpc:async()=>({error:{message:'Project assigned elsewhere'}})};
  await assert.rejects(saveDeliveryBatch(failed,{id:'b'},['p'],[]),error=>error.message==='Project assigned elsewhere');
 });

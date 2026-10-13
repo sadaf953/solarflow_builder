@@ -1,119 +1,95 @@
 // ─── TrashView.jsx ────────────────────────────────────────────────────────────
-// Shows soft-deleted customers (deleted_at IS NOT NULL).
-// Actions: View details (read-only) | Recover.
-// Hard delete (permanent) for admin only.
+// Soft-deleted customers (deleted_at is set): view (read only) or recover.
+// Permanent delete is shown to admins only; the database refuses anyone else.
 // ──────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from 'react';
-import { supabase } from "../supabase";
-import { Trash2, RotateCcw, Eye, AlertTriangle, X } from 'lucide-react';
-import { PRIMARY_STAGES, SUBSIDY_TAGS, CUSTOMER_CARD_COLUMNS } from '../constants';
+import { supabase } from '../supabase';
+import { Trash2, RotateCcw, Eye } from 'lucide-react';
+import { SUBSIDY_TAGS, isOn, stageLabel } from '../config/index.js';
+import { CUSTOMER_CARD_COLUMNS } from '../constants';
+import { fetchAllPages } from '../lib/db.js';
+import { formatDate } from '../lib/format.js';
+import { EmptyState, ErrorBanner, LoadingState, Modal } from '../ui/index.js';
 
-function formatDate(d) {
-    if (!d) return '–';
-    return new Date(d).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
-}
+const deletedOn = value => formatDate(value, 'short') || '–';
 
-function TrashDetailDrawer({ customer, onClose }) {
-    const tagInfo = SUBSIDY_TAGS.find(f => f.id === customer.subsidy_tag);
+function TrashDetail({ customer, onClose }) {
+    const tagInfo = isOn('subsidyTracking') ? SUBSIDY_TAGS.find(tag => tag.id === customer.subsidy_tag) : null;
+    const rows = [
+        ['Phone', customer.phone_number],
+        ['Email', customer.email_address],
+        ['Channel partner', customer.channel_partner],
+        ['Capacity', customer.system_capacity_kwp ? `${customer.system_capacity_kwp} kWp` : null],
+        ['Modules', customer.no_of_modules ? `${customer.no_of_modules} modules` : null],
+        ['Panel / WP', (customer.module_brand || customer.module_wp) ? `${customer.module_brand || ''} ${customer.module_wp ? `(${customer.module_wp}W)` : ''}`.trim() : null],
+        ['Stage when deleted', stageLabel(customer.stage)],
+        ['Subsidy status', tagInfo?.label],
+    ].filter(([, value]) => value);
     return (
-        <div className="fixed inset-0 bg-stone-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-lg overflow-hidden border border-stone-100">
-                <div className="bg-stone-700 px-6 py-5 flex justify-between items-center">
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <Trash2 size={14} className="text-red-400" />
-                            <h2 className="text-lg font-bold text-white">{customer.customer_name}</h2>
-                        </div>
-                        <p className="text-[10px] text-stone-400 mt-1">Deleted {formatDate(customer.deleted_at)} · Read only</p>
+        <Modal open onClose={onClose} title={customer.customer_name || 'Unnamed customer'}>
+            <p className="mb-3 text-xs text-stone-500">Deleted {deletedOn(customer.deleted_at)} · Read only</p>
+            <dl className="space-y-3">
+                {rows.map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-4 text-sm">
+                        <dt className="text-[11px] font-bold text-stone-500 uppercase tracking-wide">{label}</dt>
+                        <dd className="text-stone-700 font-medium text-right">{value}</dd>
                     </div>
-                    <button onClick={onClose} className="text-white/40 hover:text-white cursor-pointer"><X size={22} /></button>
-                </div>
-                <div className="p-6 space-y-3">
-                    {[
-                        ['Phone',            customer.phone_number],
-                        ['Email',            customer.email_address],
-                        ['Channel Partner',  customer.channel_partner],
-                        ['Capacity',         customer.system_capacity_kwp ? `${customer.system_capacity_kwp} kWp` : null],
-                        ['Quantity (Modules)', customer.no_of_modules ? `${customer.no_of_modules} Modules` : null],
-                        ['Panel / WP',       (customer.module_brand || customer.module_wp) ? `${customer.module_brand || ''} ${customer.module_wp ? `(${customer.module_wp}W)` : ''}`.trim() : null],
-                        ['Stage at Deletion',PRIMARY_STAGES.find(s => s.id === customer.stage)?.label || customer.stage],
-                        ['Subsidy Status',   tagInfo?.label],
-                    ].map(([label, val]) => val ? (
-                        <div key={label} className="flex justify-between text-sm">
-                            <span className="text-[10px] font-bold text-stone-400 uppercase tracking-wide">{label}</span>
-                            <span className="text-stone-700 font-medium">{val}</span>
-                        </div>
-                    ) : null)}
-
-                </div>
-            </div>
-        </div>
+                ))}
+            </dl>
+        </Modal>
     );
 }
 
 export default function TrashView({ onRecover, onHardDelete, isAdmin, onCountChange }) {
     const [viewing, setViewing] = useState(null);
     const [confirmHard, setConfirmHard] = useState(null);
+    const [deleting, setDeleting] = useState(false);
     const [trashedCustomers, setTrashedCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState('');
 
     useEffect(() => {
-        const fetchTrashed = async () => {
-            setLoading(true);
-            let data = [];
-            let from = 0;
-            const pageSize = 1000;
-            while (true) {
-                const { data: page, error } = await supabase
-                    .from('admin')
-                    // Was select('*'): ~90 columns per row for a card that renders a
-                // handful. CUSTOMER_CARD_COLUMNS was already imported here
-                // and unused. The detail modal fetches the full record on open.
-                .select(`${CUSTOMER_CARD_COLUMNS}, email_address`)
-                    .not('deleted_at', 'is', null)
-                    .order('deleted_at', { ascending: false })
-                    .range(from, from + pageSize - 1);
-                if (error) {
-                    console.error('Error fetching trashed customers:', error);
-                    break;
-                }
-                if (!page || page.length === 0) break;
-                data = data.concat(page);
-                if (page.length < pageSize) break;
-                from += pageSize;
-            }
-            setTrashedCustomers(data || []);
-            setLoading(false);
-        };
-        fetchTrashed();
+        let cancelled = false;
+        fetchAllPages(() => supabase
+            .from('admin')
+            .select(`${CUSTOMER_CARD_COLUMNS}, email_address`)
+            .not('deleted_at', 'is', null)
+            .order('deleted_at', { ascending: false })
+            .order('id', { ascending: true }))
+            .then(rows => { if (!cancelled) setTrashedCustomers(rows); })
+            .catch(error => {
+                console.error('Error fetching trashed customers:', error);
+                if (!cancelled) setLoadError('Trash could not be loaded. Check your connection and refresh the page.');
+            })
+            .finally(() => { if (!cancelled) setLoading(false); });
+        return () => { cancelled = true; };
     }, []);
 
     useEffect(() => {
-        if (typeof onCountChange === 'function' && !loading) {
-            onCountChange(trashedCustomers.length);
-        }
-    }, [trashedCustomers.length, onCountChange, loading]);
+        if (!loading && !loadError) onCountChange?.(trashedCustomers.length);
+    }, [trashedCustomers.length, onCountChange, loading, loadError]);
 
-    const handleRecover = async (id) => {
-        await onRecover(id);
-        setTrashedCustomers(prev => prev.filter(c => c.id !== id));
+    const handleRecover = async customer => {
+        if (await onRecover(customer.id, customer.customer_name) === false) return;
+        setTrashedCustomers(prev => prev.filter(c => c.id !== customer.id));
     };
 
-    const handleHardDelete = async (id) => {
-        await onHardDelete(id);
-        setTrashedCustomers(prev => prev.filter(c => c.id !== id));
+    const handleHardDelete = async () => {
+        const customer = confirmHard;
+        setDeleting(true);
+        const ok = await onHardDelete(customer.id, customer.customer_name);
+        setDeleting(false);
+        setConfirmHard(null);
+        if (ok !== false) setTrashedCustomers(prev => prev.filter(c => c.id !== customer.id));
     };
 
-    if (loading) return <div className="p-10 text-center animate-pulse text-stone-400">Loading trash...</div>;
+    if (loading) return <LoadingState label="Loading Trash…" />;
+    if (loadError) return <ErrorBanner className="max-w-4xl mx-auto">{loadError}</ErrorBanner>;
 
-    if (trashedCustomers.length === 0) return (
-        <div className="flex flex-col items-center justify-center h-64 text-stone-400">
-            <Trash2 className="w-12 h-12 mb-3 text-stone-200" />
-            <p className="font-medium text-stone-500">Trash is empty</p>
-            <p className="text-sm mt-1">Deleted customers will appear here</p>
-        </div>
-    );
+    if (trashedCustomers.length === 0) {
+        return <EmptyState icon={Trash2} title="Trash is empty" className="max-w-4xl mx-auto">Deleted customers will appear here.</EmptyState>;
+    }
 
     const totalKwp = trashedCustomers.reduce((acc, c) => acc + (parseFloat(c.system_capacity_kwp) || 0), 0);
     const totalModules = trashedCustomers.reduce((acc, c) => acc + (parseInt(c.no_of_modules, 10) || 0), 0);
@@ -122,38 +98,32 @@ export default function TrashView({ onRecover, onHardDelete, isAdmin, onCountCha
         <div className="max-w-4xl mx-auto space-y-3">
             <div className="flex items-center justify-between gap-2 mb-4 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
-                    <Trash2 className="w-4 h-4 text-stone-400" />
+                    <Trash2 className="w-4 h-4 text-stone-400" aria-hidden="true" />
                     <p className="text-sm text-stone-600 font-medium">
                         {trashedCustomers.length} deleted record{trashedCustomers.length !== 1 ? 's' : ''}
                     </p>
-                    {(totalKwp > 0 || totalModules > 0) && (
-                        <div className="flex items-center gap-1.5 ml-2">
-                            {totalKwp > 0 && (
-                                <span className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
-                                    {totalKwp % 1 === 0 ? totalKwp : totalKwp.toFixed(1)} kWp Total
-                                </span>
-                            )}
-                            {totalModules > 0 && (
-                                <span className="text-xs bg-stone-100 text-stone-700 border border-stone-200 px-2 py-0.5 rounded-full font-semibold">
-                                    {totalModules} Modules Total
-                                </span>
-                            )}
-                        </div>
+                    {totalKwp > 0 && (
+                        <span className="text-xs bg-amber-50 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
+                            {totalKwp % 1 === 0 ? totalKwp : totalKwp.toFixed(1)} kWp total
+                        </span>
+                    )}
+                    {totalModules > 0 && (
+                        <span className="text-xs bg-stone-100 text-stone-700 border border-stone-200 px-2 py-0.5 rounded-full font-semibold">
+                            {totalModules} modules total
+                        </span>
                     )}
                 </div>
-                {isAdmin && <span className="text-[10px] text-stone-400">Admins can permanently delete</span>}
+                {isAdmin && <span className="text-[11px] text-stone-500">Admins can delete records permanently</span>}
             </div>
 
             {trashedCustomers.map(c => (
                 <div key={c.id} className="bg-white rounded-2xl border border-stone-100 shadow-sm p-4 flex items-center gap-4 hover:border-red-100 transition-all">
                     <div className="flex-1 min-w-0">
                         <div className="flex flex-wrap items-center gap-2 mb-1">
-                            <p className="font-bold text-stone-700 truncate">{c.customer_name}</p>
-                            <span className="text-[9px] bg-red-50 text-red-500 border border-red-100 px-2 py-0.5 rounded font-bold uppercase">Deleted</span>
+                            <p className="font-bold text-stone-700 truncate">{c.customer_name || 'Unnamed customer'}</p>
+                            <span className="text-[10px] bg-red-50 text-red-500 border border-red-100 px-2 py-0.5 rounded font-bold uppercase">Deleted</span>
                             {c.system_capacity_kwp && (
-                                <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200/80 px-2 py-0.5 rounded-md font-bold">
-                                    {c.system_capacity_kwp} kWp
-                                </span>
+                                <span className="text-[10px] bg-amber-50 text-amber-800 border border-amber-200/80 px-2 py-0.5 rounded-md font-bold">{c.system_capacity_kwp} kWp</span>
                             )}
                             {c.no_of_modules && (
                                 <span className="text-[10px] bg-stone-100 text-stone-700 border border-stone-200/80 px-2 py-0.5 rounded-md font-semibold">
@@ -161,24 +131,23 @@ export default function TrashView({ onRecover, onHardDelete, isAdmin, onCountCha
                                 </span>
                             )}
                         </div>
-                        <p className="text-xs text-stone-400">
-                            {PRIMARY_STAGES.find(s => s.id === c.stage)?.label || c.stage || '–'} ·{' '}
-                            {c.villages || 'No location'}
-                            {c.channel_partner ? ` · ${c.channel_partner}` : ''} · Deleted {formatDate(c.deleted_at)}
+                        <p className="text-xs text-stone-500">
+                            {stageLabel(c.stage) || '–'} · {c.villages || 'No location'}
+                            {c.channel_partner ? ` · ${c.channel_partner}` : ''} · Deleted {deletedOn(c.deleted_at)}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                        <button onClick={() => setViewing(c)}
-                            className="p-2 text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-xl transition-colors cursor-pointer" title="View">
+                        <button type="button" onClick={() => setViewing(c)} aria-label={`View ${c.customer_name || 'customer'}`} title="View"
+                            className="flex h-11 w-11 items-center justify-center text-stone-400 hover:text-stone-600 hover:bg-stone-50 rounded-xl transition-colors cursor-pointer">
                             <Eye className="w-4 h-4" />
                         </button>
-                        <button onClick={() => handleRecover(c.id)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors cursor-pointer">
-                            <RotateCcw className="w-3.5 h-3.5" /> Recover
+                        <button type="button" onClick={() => handleRecover(c)}
+                            className="min-h-11 flex items-center gap-1.5 px-3 text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition-colors cursor-pointer">
+                            <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" /> Recover
                         </button>
                         {isAdmin && (
-                            <button onClick={() => setConfirmHard(c)}
-                                className="p-2 text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors cursor-pointer" title="Permanently delete">
+                            <button type="button" onClick={() => setConfirmHard(c)} aria-label={`Permanently delete ${c.customer_name || 'customer'}`} title="Permanently delete"
+                                className="flex h-11 w-11 items-center justify-center text-red-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors cursor-pointer">
                                 <Trash2 className="w-4 h-4" />
                             </button>
                         )}
@@ -186,30 +155,22 @@ export default function TrashView({ onRecover, onHardDelete, isAdmin, onCountCha
                 </div>
             ))}
 
-            {/* View drawer */}
-            {viewing && <TrashDetailDrawer customer={viewing} onClose={() => setViewing(null)} />}
+            {viewing && <TrashDetail customer={viewing} onClose={() => setViewing(null)} />}
 
-            {/* Hard delete confirm */}
-            {confirmHard && (
-                <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
-                    <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="p-2 bg-red-100 rounded-full"><AlertTriangle className="w-5 h-5 text-red-600" /></div>
-                            <h3 className="font-bold text-stone-800">Permanently Delete?</h3>
-                        </div>
-                        <p className="text-sm text-stone-600 mb-5">
-                            <strong>{confirmHard.customer_name}</strong> will be <strong>permanently removed</strong> from the database. This cannot be undone.
-                        </p>
-                        <div className="flex gap-3">
-                            <button onClick={() => setConfirmHard(null)} className="flex-1 py-2.5 border border-stone-300 text-stone-700 rounded-xl text-sm font-medium">Cancel</button>
-                            <button onClick={() => { handleHardDelete(confirmHard.id); setConfirmHard(null); }}
-                                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl text-sm font-medium flex items-center justify-center gap-2">
-                                <Trash2 className="w-4 h-4" /> Delete Forever
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <Modal
+                open={Boolean(isAdmin && confirmHard)} onClose={() => setConfirmHard(null)} busy={deleting} size="sm" title="Delete permanently?"
+                footer={<>
+                    <button type="button" onClick={() => setConfirmHard(null)} disabled={deleting} className="sf-btn-secondary min-h-11">Cancel</button>
+                    <button type="button" onClick={handleHardDelete} disabled={deleting}
+                        className="min-h-11 inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50">
+                        <Trash2 className="w-4 h-4" aria-hidden="true" /> {deleting ? 'Deleting…' : 'Delete forever'}
+                    </button>
+                </>}
+            >
+                <p className="text-sm text-stone-600">
+                    <strong>{confirmHard?.customer_name || 'This customer'}</strong> will be removed from the database for good. This cannot be undone.
+                </p>
+            </Modal>
         </div>
     );
 }

@@ -106,7 +106,7 @@ test('raw_user_meta_data (user-editable) never grants a role', async () => {
     await db.query('insert into auth.users(id, email, raw_user_meta_data) values ($1, $2, $3)',
         [id, 'meta@client.test', JSON.stringify({ created_via: 'add_user', user_type: 'admin', name: 'SUNRISE' })]);
     const profile = await one(db, 'select user_type, status from public.profiles where id = $1', [id]);
-    assert.deepEqual(profile, { user_type: 'sales', status: 'inactive' });
+    assert.deepEqual(profile, { user_type: 'pending', status: 'inactive' });
     assert.deepEqual(await visibleNames(id), []);
 });
 
@@ -217,6 +217,28 @@ test('add_user: disabled roles stay disabled and deactivated admins lose access'
     assert.equal((await addUser.call(p.owner, { action: 'set_status', user_id: p.owner, status: 'inactive' })).status, 400);
 });
 
+test('add_user: an unknown sign-up needs a login type before it can be activated', async () => {
+    const id = await addAuthUser(db, 'walkin@client.test');
+    assert.deepEqual(await one(db, 'select user_type, status from public.profiles where id = $1', [id]), { user_type: 'pending', status: 'inactive' });
+    assert.equal((await addUser.call(p.owner, { email: 'p@x.test', password: 'pw123456', user_type: 'pending' })).status, 400);
+    assert.equal((await addUser.call(p.owner, { action: 'set_status', user_id: id, status: 'active' })).status, 400);
+    await db.query("update public.app_roles set enabled = true where user_type = 'pending'");
+    await db.query("update public.profiles set status = 'active' where id = $1", [id]);
+    try {
+        assert.deepEqual(await visibleNames(id), [], 'a pending login never has access, even if switched on by hand');
+    } finally {
+        await db.query("update public.app_roles set enabled = false where user_type = 'pending'");
+    }
+    await as(db, p.owner, tx => tx.query("update public.profiles set user_type = 'sales', role = 'Office', status = 'inactive' where id = $1", [id]));
+    assert.equal((await addUser.call(p.owner, { action: 'set_status', user_id: id, status: 'active' })).status, 200);
+    await db.query('delete from auth.users where id = $1', [id]);
+});
+
+test('add_user: a channel partner gets its name as its fixed partner key', async () => {
+    assert.equal((await addUser.call(p.owner, { email: 'cp@x.test', password: 'pw123456', user_type: 'agent', name: 'Star Solar' })).status, 200);
+    assert.equal((await profileOf('cp@x.test')).channel_partner, 'STAR SOLAR');
+});
+
 test('add_user: ALLOWED_ORIGIN refuses other sites', async () => {
     const pinned = await loadAddUser(db, { ALLOWED_ORIGIN: 'https://crm.client.test' });
     const body = { email: 'origin@x.test', password: 'pw123456', user_type: 'sales' };
@@ -265,9 +287,21 @@ test('re-running the full setup keeps data, logins and admin edits', async () =>
         inactive: await rows(db, 'select category, label from public.metadata where not is_active order by 1, 2'),
         events: await rows(db, 'select title from public.calendar_events order by 1'),
     });
+    // Objects the client added itself are left alone by a re-run.
+    await db.exec(`create table public.client_notes(id int primary key, body text);
+        alter table public.client_notes enable row level security;
+        create policy client_notes_read on public.client_notes for select to authenticated using (true);
+        grant select on public.client_notes to authenticated;
+        create function public.client_hello() returns text language sql as $$ select 'hi' $$;
+        grant execute on function public.client_hello() to authenticated;`);
+    const clientObjects = () => one(db, `select has_table_privilege('authenticated', 'public.client_notes', 'select') as t,
+        has_function_privilege('authenticated', 'public.client_hello()', 'execute') as f,
+        (select count(*)::int from pg_policies where tablename = 'client_notes') as policies`);
     const before = await snapshot();
     await db.exec(setupSql({ schema, config: config() }));
     assert.deepEqual(await snapshot(), before);
+    assert.deepEqual(await clientObjects(), { t: true, f: true, policies: 1 });
+    await db.exec('drop function public.client_hello(); drop table public.client_notes;');
     assert.deepEqual(await visibleNames(p.agent), ['Agent lead']);
     assert.ok(!/\b(drop\s+table|truncate)\b/i.test(schema), 'schema.sql never drops or truncates a table');
 });

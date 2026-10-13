@@ -21,3 +21,4 @@ template/dist/
 builder/dist/
 builder/public/client-template.json
 .claude/
+client-zips/

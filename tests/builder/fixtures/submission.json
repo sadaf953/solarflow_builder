@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "contact": {
+    "company": "Surya O'Neil Solar",
+    "name": "Asha Patel",
+    "phone": "9800000000",
+    "email": "owner@surya-solar.example",
+    "city": "Surat",
+    "state": "Gujarat"
+  },
+  "answers": {
+    "partners": "yes",
+    "partnerOffices": "no",
+    "dealers": "unsure",
+    "quotations": "yes",
+    "payments": "both",
+    "subsidy": "yes",
+    "bom": "yes",
+    "trucks": "yes",
+    "godown": "no",
+    "documents": "both",
+    "installerLogins": "yes",
+    "installerPayouts": "no",
+    "installationPayments": "yes",
+    "installationPage": "yes",
+    "calendar": "yes",
+    "attendance": "no",
+    "chat": "no",
+    "exports": "yes"
+  },
+  "featureOverrides": { "teamChat": true },
+  "workflow": {
+    "source": "form",
+    "sheetUrl": "",
+    "sheetNote": "",
+    "stagesMode": "custom",
+    "stages": [
+      { "id": "LEADS", "label": "Enquiries" },
+      { "id": "SITE SURVEY", "label": "Site survey", "custom": true, "group": "enquiry", "icon": "MapPin" },
+      { "id": "REGISTRATION" },
+      { "id": "LOAN" },
+      { "id": "CASH" },
+      { "id": "MATERIAL ORDER" },
+      { "id": "MATERIAL INTEGRATION" },
+      { "id": "MATERIAL DELIVERY" },
+      { "id": "INSTALLATION STATUS" },
+      { "id": "GEO TAG PHOTO" },
+      { "id": "SUBSIDY STATUS" },
+      { "id": "COMPLETED" },
+      { "id": "LOST PROJECT" }
+    ],
+    "dropdowns": {
+      "module_brand": ["WAAREE", "Adani", "Ravi's Panels"],
+      "loan_tags": [
+        { "id": "Inprocess", "label": "File in bank" },
+        { "id": "Sanctioned", "label": "Sanctioned" },
+        { "id": "1st Payment", "label": "1st Payment" },
+        { "id": "2nd Payment", "label": "2nd Payment" },
+        { "id": "Total Loan Payment Received", "label": "Total Received" }
+      ]
+    },
+    "customFields": [
+      { "key": "survey_date", "label": "Survey date", "type": "date", "stage": "SITE SURVEY", "required": true },
+      { "key": "roof_type", "label": "Roof type", "type": "select", "stage": "LEADS", "options": ["RCC", "Tin shed"], "showInAddLead": true }
+    ]
+  },
+  "notes": "Wants the loan stage first; call before 11 am."
+}

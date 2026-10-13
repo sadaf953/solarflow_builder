@@ -2,7 +2,7 @@ import React from 'react';
 import { QuotationData, AssetImages } from '../../types';
 import { DocumentHeader } from '../DocumentHeader';
 import { DocumentFooter } from '../DocumentFooter';
-import { DemoQualityBadge, DemoEnergyBadge, DemoQuoteBanner } from '../CompanyLogos';
+import { Emblem, QuoteBanner } from '../CompanyLogos';
 import { HighlightWrapper } from '../HighlightWrapper';
 
 interface Page1Props {
@@ -21,9 +21,7 @@ export const Page1: React.FC<Page1Props> = ({
   onOpenAssetSlot,
 }) => {
   const { company, page1, footer, assets } = data;
-  const publicAssetUrl = (fileName: string) => `${import.meta.env.BASE_URL}${fileName}`;
-  const demoQualityLogoUrl = assets?.demoQualityLogoUrl;
-  const demoBannerUrl = assets?.demoBannerUrl || publicAssetUrl('banner.png');
+  const bannerUrl = assets?.bannerUrl || (page1.showSchemeBanner ? `${import.meta.env.BASE_URL}banner.png` : '');
 
   const isFieldChanged = (key: string) => changedFields.has(key);
 
@@ -34,7 +32,7 @@ export const Page1: React.FC<Page1Props> = ({
         <DocumentHeader
           company={company}
           assets={assets}
-          onEditLogo={() => onOpenAssetSlot?.('solarflowLogoUrl')}
+          onEditLogo={() => onOpenAssetSlot?.('logoUrl')}
         />
 
         {/* Customer & Quote Meta Section */}
@@ -66,70 +64,7 @@ export const Page1: React.FC<Page1Props> = ({
                 </HighlightWrapper>
               </div>
             </div>
-            {(page1 as any).address && <p className="mt-1 text-[11px] break-words">{(page1 as any).address}</p>}
-            {/*
-            <div className="mt-1 text-left" style={{ whiteSpace: 'nowrap' }}>
-              <table
-                className="q-contact-row"
-                style={{
-                  display: 'inline-table',
-                  verticalAlign: 'middle',
-                  borderCollapse: 'collapse',
-                  border: 'none',
-                  margin: 0,
-                  padding: 0,
-                  width: 'auto',
-                  tableLayout: 'auto',
-                }}
-              >
-                <tbody>
-                  <tr>
-                    <td
-                      className="q-contact-icon"
-                      style={{ padding: '0 6px 0 0', verticalAlign: 'middle', lineHeight: 0, border: 'none' }}
-                    >
-                      <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="#4b5563"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        style={{ display: 'block', margin: 0, padding: 0 }}
-                      >
-                        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
-                      </svg>
-                    </td>
-                    <td
-                      className="q-contact-text"
-                      style={{
-                        padding: 0,
-                        verticalAlign: 'middle',
-                        whiteSpace: 'nowrap',
-                        border: 'none',
-                        lineHeight: 1,
-                      }}
-                    >
-                      <HighlightWrapper
-                        isChanged={isFieldChanged('page1.customerPhone')}
-                        active={highlightChanges}
-                        fieldLabel="Customer Phone"
-                        onClick={() => onEditField?.('page1.customerPhone')}
-                      >
-                        <span className="text-[13px] font-normal text-gray-800 tracking-normal" style={{ whiteSpace: 'nowrap', display: 'inline-block' }}>
-                          {page1.customerPhone || 'PHONE NUMBER'}
-                        </span>
-                      </HighlightWrapper>
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            {(page1 as any).address && <p className="mt-1 text-[11px] break-words">{(page1 as any).address}</p>}
-            {(page1 as any).email && <p className="text-[11px] break-all">{(page1 as any).email}</p>}
-            */}
+            {page1.address && <p className="mt-1 text-[11px] break-words">{page1.address}</p>}
           </div>
 
           {/* Quote info */}
@@ -176,15 +111,15 @@ export const Page1: React.FC<Page1Props> = ({
 
         {/* Empanelment Tagline (Increased 10% and solid black) */}
         <div className="text-center font-bold text-[14.5px] text-black my-2 tracking-tight">
-          SolarFlow Demonstration Proposal · Fictional Company · Sample Data
+          Proposal for a Grid-Connected Rooftop Solar Power Plant
         </div>
 
         {/* Logos & Quote Area (Individual emblems and quote banner) */}
         <div className="my-2">
-          {assets?.screenshot2MiddleBannerUrl ? (
+          {assets?.middleBannerUrl ? (
             <div className="w-full my-1 rounded overflow-hidden border border-gray-200">
               <img
-                src={assets.screenshot2MiddleBannerUrl}
+                src={assets.middleBannerUrl}
                 alt="Solar energy banner and emblems"
                 className="w-full h-auto object-contain"
                 referrerPolicy="no-referrer"
@@ -193,24 +128,18 @@ export const Page1: React.FC<Page1Props> = ({
           ) : (
             <div>
               <div className="flex items-center justify-between px-2 mb-2">
-                <DemoQualityBadge customLogoUrl={demoQualityLogoUrl} className="h-20" />
-                <DemoEnergyBadge customLogoUrl={assets?.demoEnergyLogoUrl} className="h-20" />
+                <Emblem url={assets?.leftEmblemUrl} alt="Agency emblem" className="h-20" />
+                <Emblem url={assets?.rightEmblemUrl} alt="Energy emblem" className="h-20" />
               </div>
-              <DemoQuoteBanner customLogoUrl={demoBannerUrl} />
+              <QuoteBanner url={bannerUrl} />
             </div>
           )}
         </div>
 
         {/* Body Paragraphs */}
         <div className="space-y-2.5 text-[11px] leading-[1.65] text-justify text-gray-800 font-normal mt-3">
-          <p>
-            {page1.introParagraph1 ||
-              'SolarFlow is a fictional solar energy company. This sample proposal is for demonstration only.'}
-          </p>
-          <p>
-            {page1.introParagraph2 ||
-              'All customer and company details are synthetic. This is not a payable quotation.'}
-          </p>
+          {page1.introParagraph1 && <p>{page1.introParagraph1}</p>}
+          {page1.introParagraph2 && <p>{page1.introParagraph2}</p>}
           <p>
             We hope this is in line with your requirements. Please feel free to contact us for any further details and information as required.
           </p>
@@ -230,11 +159,11 @@ export const Page1: React.FC<Page1Props> = ({
               onClick={() => onEditField?.('page1.yoursTrulyName')}
             >
               <span className="font-normal text-gray-900 text-[13px]">
-                {page1.yoursTrulyName || 'Mr. SolarFlow office'}
+                {page1.yoursTrulyName || company.name}
               </span>
             </HighlightWrapper>
           </div>
-          <div className="mt-0.5 text-[12px] text-gray-900">
+          {(page1.yoursTrulyPhone || company.phone) && <div className="mt-0.5 text-[12px] text-gray-900">
             <span className="font-bold">Phone No: </span>
             <HighlightWrapper
               isChanged={isFieldChanged('page1.yoursTrulyPhone')}
@@ -242,9 +171,9 @@ export const Page1: React.FC<Page1Props> = ({
               fieldLabel="Representative Phone"
               onClick={() => onEditField?.('page1.yoursTrulyPhone')}
             >
-              <span className="font-normal text-gray-800">{page1.yoursTrulyPhone || '00000 00000 (demo)'}</span>
+              <span className="font-normal text-gray-800">{page1.yoursTrulyPhone || company.phone}</span>
             </HighlightWrapper>
-          </div>
+          </div>}
         </div>
       </div>
 
@@ -252,7 +181,7 @@ export const Page1: React.FC<Page1Props> = ({
       <DocumentFooter
         footer={footer}
         assets={assets}
-        onEditLogo={() => onOpenAssetSlot?.('demoPartnerLogoUrl')}
+        onEditLogo={() => onOpenAssetSlot?.('partnerLogoUrl')}
       />
     </div>
   );

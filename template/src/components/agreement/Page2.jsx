@@ -1,6 +1,4 @@
-import React from 'react';
-
-export const Page2 = ({ data, fontSizeClass = 'text-[17px]' }) => {
+export const Page2 = ({ fontSizeClass = 'text-[17px]' }) => {
   return (
     <div className={`doc-page font-sans leading-relaxed text-slate-900 bg-white shadow-md print:shadow-none mx-auto relative ${fontSizeClass}`}>
       

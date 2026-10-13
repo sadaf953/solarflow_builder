@@ -1,19 +1,26 @@
-// Company-controlled template, copied from the approved solar-quotation-maker reference.
+// The standard quotation for this client: company details from the branding
+// in client.config.js plus the fixed terms, warranties and bill of materials.
+// Each saved quotation keeps its own copy, so later changes here never alter
+// a quotation that was already issued.
 
-export const INVERTER_PRESETS = [
-  { id: 'Option 1', label: 'Option 1 - DemoVolt', brand: 'DemoVolt', specs: 'Grid-tied string inverter' },
-  { id: 'Option 2', label: 'Option 2 - DemoGrid', brand: 'DemoGrid', specs: 'Single phase / Three phase high efficiency' },
-  { id: 'Option 3', label: 'Option 3 - DemoSun', brand: 'DemoSun', specs: 'Smart residential inverter' },
-  { id: 'Option 4', label: 'Option 4 - SolarFlow Premium', brand: 'SolarFlow Premium', specs: 'Premium grid-tied inverter' },
-];
+import { BRANDING, METADATA_DEFAULTS } from '../../../config/index.js';
+
+const companyName = BRANDING.companyName || BRANDING.appName || '';
+const discom = BRANDING.discomName || 'DISCOM';
+
+// The three price options start as the first three configured panel brands.
+const tierNames = [0, 1, 2].map(i => (METADATA_DEFAULTS.module_brand || [])[i] || `Option ${i + 1}`);
 
 export const INITIAL_QUOTATION = {
+  assets: {},
+
   company: {
-    name: 'SOLARFLOW',
-    tagline: 'SOLAR ENERGY',
-    gstNo: 'DEMO-GST-001',
-    cinNo: 'DEMO-CIN-001',
-    email: 'hello@solarflow.example',
+    name: companyName,
+    tagline: '',
+    gstNo: BRANDING.gstin || '',
+    cinNo: '',
+    email: BRANDING.email || '',
+    phone: BRANDING.phone || '',
   },
 
   page1: {
@@ -24,8 +31,10 @@ export const INITIAL_QUOTATION = {
     capacityKw: '',
     yoursTrulyName: '',
     yoursTrulyPhone: '',
-    introParagraph1: 'SolarFlow is a fictional solar energy company created for this demonstration. This sample proposal illustrates a residential solar installation workflow.',
-    introParagraph2: 'All customer, company, banking and registration details shown here are synthetic. This document is for demonstration only and is not a payable quotation.',
+    // The PM Surya Ghar banner carries the Gujarat agency logo.
+    showSchemeBanner: /gujarat/i.test(BRANDING.state || ''),
+    introParagraph1: `Thank you for considering ${companyName || 'us'} for your rooftop solar power plant. We design, supply, install and commission grid-connected solar systems, and look after the paperwork with ${discom} on your behalf.`,
+    introParagraph2: 'This quotation sets out the system we propose for your site, with prices for three panel options, the government subsidy where it applies, and our terms.',
   },
 
   page2: {
@@ -34,35 +43,18 @@ export const INITIAL_QUOTATION = {
     inverterOption: '',
     inverterBrand: '',
     gebGedaCharge: 'Including',
+    chargesLabel: BRANDING.chargesLabel || `${discom} registration`,
     projectType: 'Residential',
 
     projectSize: '',
-    brandOptions: [
-      {
-        brandName: 'SolarFlow Essential',
-        baseValue: 0,
-        discount: 0,
-        netPayableAmount: 0,
-        subsidy: 0,
-        netPriceAfterSubsidy: 0,
-      },
-      {
-        brandName: 'SolarFlow Plus',
-        baseValue: 0,
-        discount: 0,
-        netPayableAmount: 0,
-        subsidy: 0,
-        netPriceAfterSubsidy: 0,
-      },
-      {
-        brandName: 'SolarFlow Premium',
-        baseValue: 0,
-        discount: 0,
-        netPayableAmount: 0,
-        subsidy: 0,
-        netPriceAfterSubsidy: 0,
-      },
-    ],
+    brandOptions: tierNames.map(brandName => ({
+      brandName,
+      baseValue: 0,
+      discount: 0,
+      netPayableAmount: 0,
+      subsidy: 0,
+      netPriceAfterSubsidy: 0,
+    })),
 
     baseValue: 0,
     discount: 0,
@@ -74,9 +66,6 @@ export const INITIAL_QUOTATION = {
       'All GST is inclusive',
       '70% Solar Power System-(HSN CODE-8541)-5% @GST',
       '30% Solar Power System-(HSN CODE-9954)-18% @GST',
-      'Owner Name:-Demo Owner',
-      'National Portal Empanelment Number -DEMO-PORTAL-001',
-      'Electrical Contractor Number -DEMO-CONTRACTOR-001',
     ],
   },
 
@@ -106,103 +95,35 @@ export const INITIAL_QUOTATION = {
     ],
 
     bomItems: [
-      {
-        sr: 1,
-        description: 'Solar modules',
-        unit: 'Nos',
-        qty: 'As Per the Above First Page',
-        size: 'As Per the Project',
-        make: 'As Per the Above First Page',
-      },
-      {
-        sr: 2,
-        description: 'Module mounting structure (GI)',
-        unit: 'Set',
-        qty: 'As per design',
-        size: '(max up to 8 FT from Ground)',
-        make: 'SolarFlow Standard',
-      },
-      {
-        sr: 3,
-        description: 'String type Grid Tied Inverter',
-        unit: 'Nos',
-        qty: 'As per design',
-        size: 'As Per the Project',
-        make: 'SolarFlow Demo Inverter',
-      },
-      {
-        sr: 4,
-        description: 'AJB with accessories',
-        unit: 'Nos',
-        qty: 'As per design',
-        size: '****',
-        make: 'DemoCable / DemoSwitch / Standard',
-      },
-      {
-        sr: 5,
-        description: 'ACDB',
-        unit: 'Nos',
-        qty: 'At actual',
-        size: 'As per design',
-        make: 'DemoCable / DemoSwitch / Standard',
-      },
-      {
-        sr: 6,
-        description: 'DC cable with UV protected',
-        unit: 'Mtr.',
-        qty: 'At actual',
-        size: 'As per design',
-        make: 'DemoCable / Equivalent',
-      },
-      {
-        sr: 7,
-        description: 'AC Cable',
-        unit: 'Mtr.',
-        qty: 'At actual',
-        size: 'As per design',
-        make: 'DemoCable / DemoWire / Equivalent',
-      },
-      {
-        sr: 8,
-        description: 'Earthing systems',
-        unit: 'Nos',
-        qty: 'At actual',
-        size: 'As per design',
-        make: 'Standard',
-      },
-      {
-        sr: 9,
-        description: 'Lightening arrester systems',
-        unit: 'Nos',
-        qty: 'At actual',
-        size: '****',
-        make: 'Standard',
-      },
-      {
-        sr: 10,
-        description: 'LA Cable',
-        unit: 'MTR',
-        qty: 'At actual',
-        size: '16 Sqmm Aluminium',
-        make: 'DemoFlex / DemoWire / DemoCable',
-      },
+      { sr: 1, description: 'Solar modules', unit: 'Nos', qty: 'As Per the Above First Page', size: 'As Per the Project', make: 'As Per the Above First Page' },
+      { sr: 2, description: 'Module mounting structure (GI)', unit: 'Set', qty: 'As per design', size: '(max up to 8 FT from Ground)', make: 'Standard' },
+      { sr: 3, description: 'String type Grid Tied Inverter', unit: 'Nos', qty: 'As per design', size: 'As Per the Project', make: 'As Per the Above First Page' },
+      { sr: 4, description: 'AJB with accessories', unit: 'Nos', qty: 'As per design', size: '****', make: 'Standard' },
+      { sr: 5, description: 'ACDB', unit: 'Nos', qty: 'At actual', size: 'As per design', make: 'Standard' },
+      { sr: 6, description: 'DC cable with UV protected', unit: 'Mtr.', qty: 'At actual', size: 'As per design', make: 'Standard / Equivalent' },
+      { sr: 7, description: 'AC Cable', unit: 'Mtr.', qty: 'At actual', size: 'As per design', make: 'Standard / Equivalent' },
+      { sr: 8, description: 'Earthing systems', unit: 'Nos', qty: 'At actual', size: 'As per design', make: 'Standard' },
+      { sr: 9, description: 'Lightening arrester systems', unit: 'Nos', qty: 'At actual', size: '****', make: 'Standard' },
+      { sr: 10, description: 'LA Cable', unit: 'MTR', qty: 'At actual', size: '16 Sqmm Aluminium', make: 'Standard / Equivalent' },
     ],
 
     otherChargesText:
-      '* 50% Advance includes discom registration charges of Rs.2000/- per KW. If any client refused to install solar plant after discom registration payment, then we shall refund the amount after deducting discom charges and receipt of same will be provided with A/C statement.',
+      `* The 50% advance includes the ${discom} registration charges. If a customer cancels after the registration has been paid, the advance is refunded after deducting the ${discom} charges, with a receipt and account statement.`,
 
+    // Shown on the quotation only when filled in.
     bankDetails: {
-      accountName: 'SOLARFLOW DEMO ENERGY',
-      accountNumber: 'DEMO-ACCOUNT-0001',
-      bankName: 'Demo Bank (not payable)',
-      branchName: 'DEMO TOWN',
-      ifscCode: 'DEMO-IFSC',
+      accountName: '',
+      accountNumber: '',
+      bankName: '',
+      branchName: '',
+      ifscCode: '',
     },
   },
 
   footer: {
-    authorizedPartner: 'SOLARFLOW Demo Aurora Solar',
-    corporateOffice: '100 Demo Avenue, Sample City (fictional)',
-    branchOffice: 'Suite 2, Sample Plaza, Demo Town (fictional)',
+    authorizedPartner: companyName,
+    corporateOffice: BRANDING.address || '',
+    branchOffice: '',
+    contact: [BRANDING.phone, BRANDING.email].filter(Boolean).join(' · '),
   },
 };

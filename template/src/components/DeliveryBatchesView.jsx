@@ -8,7 +8,11 @@ import {
     ChevronDown, ChevronUp, Package, X, Check, ArrowRight, ArrowUp, ArrowDown, FileText, Clock, ExternalLink
 } from 'lucide-react';
 import { supabase } from '../supabase';
-import { PRIMARY_STAGES, DELIVERY_PICKER_COLUMNS } from '../constants';
+import { PRIMARY_STAGES, STAGE_IDS } from '../constants';
+import { BRANDING, isOn, isStageEnabled, stageLabel } from '../config/index.js';
+import { fetchAllPages } from '../lib/db.js';
+import { todayIST } from '../lib/format.js';
+import { isVendorUnavailableOn } from '../utils/vendorAvailability';
 import { toIndianCommas, logActivity, formatInputValue, parseIndianNumber, runWrite, getTelephoneHref } from '../utils';
 import { useGlobalPopup } from './GlobalPopup';
 import {filterDeliveryProjects,projectAssignedElsewhere} from '../delivery/projectPicker';
@@ -45,6 +49,9 @@ const readBomItems = (project, relationalItems = {}) => {
         return relationalItems[project?.id] || [];
     }
 };
+
+// The picker opens on the Material Delivery stage when this client uses it.
+const DEFAULT_PICKER_STAGE = isStageEnabled(STAGE_IDS.MATERIAL_DELIVERY) ? STAGE_IDS.MATERIAL_DELIVERY : 'ALL';
 
 const materialQuantity = item => item?.stock_quantity ?? item?.quantity ?? '';
 
@@ -132,7 +139,7 @@ function MaterialDeliverySheet({ batch, matrix, loading, error }) {
             <header className="border-b-2 border-stone-900 pb-2 mb-3">
                 <div className="flex items-start justify-between gap-4">
                     <div>
-                        <h1 className="text-lg font-black uppercase tracking-wide">SolarFlow Demo Energy</h1>
+                        <h1 className="text-lg font-black uppercase tracking-wide">{BRANDING.companyName}</h1>
                         <p className="text-xs font-bold">Gate pass · Loading list · Delivery order</p>
                     </div>
                     <strong className="text-sm text-right">{batch.batch_no}</strong>
@@ -205,28 +212,11 @@ export default function DeliveryBatchesView({
     const [localStatusOverrides, setLocalStatusOverrides] = useState({});
 
     // Customers for the batch picker and the manifest.
-    // Queries only required columns via DELIVERY_PICKER_COLUMNS to cut network payload.
+    // Full rows: the print sheets read each project's saved BOM and address.
     const fetchAllCustomers = async () => {
         setProjectsLoading(true);setProjectsError('');
         try {
-            const pageAll = async (buildQuery) => {
-                const pageSize = 1000;
-                let from = 0;
-                const rows = [];
-                while (true) {
-                    const { data, error } = await buildQuery().range(from, from + pageSize - 1);
-                    if (error) {
-                        throw error;
-                    }
-                    if (!data || data.length === 0) break;
-                    rows.push(...data);
-                    if (data.length < pageSize) break;
-                    from += pageSize;
-                }
-                return rows;
-            };
-
-            const all = await pageAll(() => supabase.from('admin').select('*').is('deleted_at', null).order('id'));
+            const all = await fetchAllPages(() => supabase.from('admin').select('*').is('deleted_at', null).order('id'));
             setAllCustomers(all);
         } catch (e) {
             console.error('Error fetching customers in DeliveryBatchesView:', e);
@@ -266,7 +256,7 @@ export default function DeliveryBatchesView({
     // Form state for Create / Edit Batch
     const [batchForm, setBatchForm] = useState({
         batch_no: '',
-        dispatch_date: new Date().toISOString().split('T')[0],
+        dispatch_date: todayIST(),
         driver_name: '',
         driver_phone: '',
         vehicle_number: '',
@@ -277,7 +267,7 @@ export default function DeliveryBatchesView({
     });
 
     const [projectSearchQuery, setProjectSearchQuery] = useState('');
-    const [projectStageFilter, setProjectStageFilter] = useState('MATERIAL DELIVERY');
+    const [projectStageFilter, setProjectStageFilter] = useState(DEFAULT_PICKER_STAGE);
     const [saving, setSaving] = useState(false);
     const batchDialogRef = useRef(null);
     const batchTriggerRef = useRef(null);
@@ -306,10 +296,21 @@ export default function DeliveryBatchesView({
         fetchVendors();
     }, []);
 
+    // Vendors mark days they cannot take work on the shared calendar.
+    const [vendorUnavailable, setVendorUnavailable] = useState(null);
+    useEffect(() => {
+        setVendorUnavailable(null);
+        if (!showCreateModal || !isOn('calendar') || !batchForm.vendor || !batchForm.dispatch_date) return;
+        let cancelled = false;
+        isVendorUnavailableOn(batchForm.vendor, batchForm.dispatch_date).then(result => {
+            if (!cancelled && result.unavailable) setVendorUnavailable(result);
+        });
+        return () => { cancelled = true; };
+    }, [showCreateModal, batchForm.vendor, batchForm.dispatch_date]);
+
     // Load current batch data from the database; never silently substitute cached records.
     useEffect(() => {
         if (projectStageFilter === 'ALL') fetchAllCustomers(true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [projectStageFilter]);
 
     const fetchBatches = async () => {
@@ -374,7 +375,7 @@ export default function DeliveryBatchesView({
     const handleOpenCreateModal = () => {
         if (loading || loadError) return;
         const randNum = Math.floor(1000 + Math.random() * 9000);
-        const today = new Date().toISOString().split('T')[0];
+        const today = todayIST();
         setBatchForm({
             batch_no: `BATCH-${today.replace(/-/g, '').slice(2)}-${randNum}`,
             dispatch_date: today,
@@ -383,13 +384,14 @@ export default function DeliveryBatchesView({
             vehicle_number: '',
             rent_amount: '',
             car_rent_paid: '',
+            vendor: '',
             notes: '',
             status: 'IN_TRANSIT',
             selectedProjectIds: []
         });
         setEditingBatch(null);
         fetchAllCustomers();
-        setProjectStageFilter('MATERIAL DELIVERY');
+        setProjectStageFilter(DEFAULT_PICKER_STAGE);
         setProjectSearchQuery('');
         setShowCreateModal(true);
     };
@@ -399,18 +401,19 @@ export default function DeliveryBatchesView({
         setBatchForm({
             id: batch.id,
             batch_no: batch.batch_no || '',
-            dispatch_date: batch.dispatch_date || new Date().toISOString().split('T')[0],
+            dispatch_date: batch.dispatch_date || todayIST(),
             driver_name: batch.driver_name || '',
             driver_phone: batch.driver_phone || '',
             vehicle_number: batch.vehicle_number || '',
             rent_amount: batch.rent_amount || '',
             car_rent_paid: batch.car_rent_paid || '',
+            vendor: batch.vendor || '',
             notes: batch.notes || '',
             status: batch.status || 'IN_TRANSIT',
             selectedProjectIds: batch.project_ids || []
         });
         setEditingBatch(batch);
-        setProjectStageFilter('MATERIAL DELIVERY');
+        setProjectStageFilter(DEFAULT_PICKER_STAGE);
         setProjectSearchQuery('');
         fetchAllCustomers();
         setShowCreateModal(true);
@@ -468,7 +471,7 @@ export default function DeliveryBatchesView({
             const batchId = editingBatch ? editingBatch.id : crypto.randomUUID();
             const displayBatchNo = batchForm.batch_no || `BATCH-${Date.now()}`;
             // project_ids is a real `uuid[]` column - any non-UUID id in
-            // this list (e.g. a leftover synthetic/demo id) would cause
+            // this list would cause
             // the exact same "operator does not exist: uuid = text" error
             // as the batch id bug above, just for the array column
             // instead of the primary key. Filter defensively.
@@ -1188,7 +1191,7 @@ export default function DeliveryBatchesView({
                                                          
                                                          <td className="py-2.5">
                                                              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-stone-100 text-stone-800 border border-stone-200">
-                                                                 {PRIMARY_STAGES.find(s => s.id === proj.stage)?.label || proj.stage}
+                                                                 {stageLabel(proj.stage)}
                                                              </span>
                                                          </td>
                                                          <td className="py-2.5">
@@ -1226,7 +1229,7 @@ export default function DeliveryBatchesView({
                                                                                 if (newStat === "PENDING") {
                                                                                     await removeDeliveryProject(supabase, batch, proj.id);
                                                                                 } else {
-                                                                                    const todayStr = new Date().toISOString().split("T")[0];
+                                                                                    const todayStr = todayIST();
                                                                                     const statusRes = await runWrite(
                                                                                         supabase.from("admin").update({
                                                                                             delivery_status: newStat,
@@ -1436,6 +1439,27 @@ export default function DeliveryBatchesView({
                                             />
                                         </div>
                                     </div>
+
+                                    <div>
+                                        <label htmlFor="batch-vendor" className="text-[9px] font-bold text-stone-600 uppercase tracking-wider block mb-1">
+                                            Installer
+                                        </label>
+                                        <select
+                                            id="batch-vendor" value={batchForm.vendor || ''}
+                                            onChange={e => setBatchForm(p => ({ ...p, vendor: e.target.value }))}
+                                            className="w-full bg-white border border-stone-200 rounded-xl px-3 py-2 text-xs font-semibold text-stone-800 outline-none focus:border-amber-400 cursor-pointer"
+                                        >
+                                            <option value="">No installer</option>
+                                            {batchForm.vendor && !vendorsList.includes(batchForm.vendor) && <option value={batchForm.vendor}>{batchForm.vendor}</option>}
+                                            {vendorsList.map(name => <option key={name} value={name}>{name}</option>)}
+                                        </select>
+                                        <p className="text-[9px] text-stone-600 font-medium mt-1">Saved on every project in this batch.</p>
+                                        {vendorUnavailable && (
+                                            <p role="alert" className="mt-1 rounded-lg border border-amber-300 bg-amber-50 p-2 text-[11px] font-semibold text-amber-900">
+                                                {batchForm.vendor} marked this date as not available{vendorUnavailable.reason ? ` (${vendorUnavailable.reason})` : ''}. Check with them or pick another date.
+                                            </p>
+                                        )}
+                                    </div>
                                     
                                 </div>
                             </div>
@@ -1466,10 +1490,8 @@ export default function DeliveryBatchesView({
                                             onChange={e => setProjectStageFilter(e.target.value)}
                                             className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1 text-xs font-bold text-stone-700 outline-none max-w-full"
                                         >
-                                            <option value="MATERIAL DELIVERY">Material Delivery (Current Stage)</option>
-                                            <option value="MATERIAL INTEGRATION">Material Integration</option>
-                                            <option value="MATERIAL ORDER">Material Order</option>
-                                            <option value="ALL">All Stages</option>
+                                            {PRIMARY_STAGES.map(stage => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+                                            <option value="ALL">All stages</option>
                                         </select>
                                     </div>
                                 </div>
@@ -1477,7 +1499,7 @@ export default function DeliveryBatchesView({
                                 <p className="text-xs text-stone-500">Selected projects stay visible across stage filters. Projects on another truck show their batch number; remove them from that batch before reassigning.</p>
                                 {projectsLoading && <p role="status" className="text-xs text-stone-500">Loading projects…</p>}
                                 {projectsError && <p role="alert" className="text-xs text-red-600">{projectsError} <button type="button" onClick={fetchAllCustomers}>Retry</button></p>}
-                                {!projectsLoading && !projectsError && eligibleProjects.length===0 && <p className="text-sm text-stone-500 p-3">No projects match this stage and search. Try All Stages or clear the search.</p>}
+                                {!projectsLoading && !projectsError && eligibleProjects.length===0 && <p className="text-sm text-stone-500 p-3">No projects match this stage and search. Try All stages or clear the search.</p>}
                                 {/* Project Checklist Cards */}
                                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto p-1 bg-stone-50/60 rounded-2xl border border-stone-200/70">
                                     {eligibleProjects.map(proj => {
@@ -1507,7 +1529,7 @@ export default function DeliveryBatchesView({
                                                     <p className="text-[10px] text-stone-500 truncate">{proj.villages || 'No village'} · {proj.phone_number}</p>
                                                     <div className="flex items-center justify-between text-[10px] mt-1 pt-1 border-t border-stone-100">
                                                         <span className="font-bold text-amber-800">{proj.system_capacity_kwp || '–'} kWp</span>
-                                                        <span className="text-stone-600 font-semibold">{proj.stage}</span>
+                                                        <span className="text-stone-600 font-semibold">{stageLabel(proj.stage)}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1586,7 +1608,7 @@ export default function DeliveryBatchesView({
                         <div ref={printableRef} className="flex-1 overflow-y-auto p-8 bg-white text-stone-900 print-document" id="printable-master-batch">
                             {/* Company Header */}
                             <div className="border-b-2 border-stone-900 pb-4 mb-5 text-center">
-                                <h1 className="text-xl font-black uppercase tracking-wider text-stone-950">SolarFlow Demo Energy</h1>
+                                <h1 className="text-xl font-black uppercase tracking-wider text-stone-950">{BRANDING.companyName}</h1>
                                 <p className="text-xs font-semibold text-stone-600 mt-0.5">Master Delivery Batch & Security Gate Pass Manifest</p>
                                 <div className="inline-block mt-2 px-3 py-1 bg-stone-100 border border-stone-300 rounded text-[11px] font-black uppercase tracking-widest text-stone-800">
                                     BATCH DISPATCH MANIFEST - {printingBatch.batch_no}

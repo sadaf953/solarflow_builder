@@ -18,7 +18,7 @@ export const Page3: React.FC<Page3Props> = ({ data, onOpenAssetSlot }) => {
         <DocumentHeader
           company={company}
           assets={assets}
-          onEditLogo={() => onOpenAssetSlot?.('solarflowLogoUrl')}
+          onEditLogo={() => onOpenAssetSlot?.('logoUrl')}
         />
 
         {/* Section 1: Terms & Conditions Table */}
@@ -122,8 +122,8 @@ export const Page3: React.FC<Page3Props> = ({ data, onOpenAssetSlot }) => {
           </div>
         </div>
 
-        {/* Section 5: Company Bank Details */}
-        <div className="w-full mb-1">
+        {/* Section 5: Company Bank Details, when the company has filled them in */}
+        {page3.bankDetails?.accountNumber && <div className="w-full mb-1">
           <table className="quotation-detail-table w-full border-collapse border border-black text-[9px] leading-tight">
             <thead>
               <tr className="bg-white">
@@ -159,14 +159,14 @@ export const Page3: React.FC<Page3Props> = ({ data, onOpenAssetSlot }) => {
               </tr>
             </tbody>
           </table>
-        </div>
+        </div>}
       </div>
 
       {/* Bottom Footer */}
       <DocumentFooter
         footer={footer}
         assets={assets}
-        onEditLogo={() => onOpenAssetSlot?.('demoPartnerLogoUrl')}
+        onEditLogo={() => onOpenAssetSlot?.('partnerLogoUrl')}
       />
     </div>
   );

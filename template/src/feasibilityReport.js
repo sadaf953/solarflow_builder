@@ -1,12 +1,7 @@
+import { BRANDING, STAGE_IDS, stageLabel } from './config/index.js';
+import { formatDate } from './lib/format.js';
 
 const A4 = [595.28, 841.89];
-const VENDOR = {
-    name: 'SOLARFLOW',
-    address: '100 Demo Avenue, Sample City',
-    epc: 'DEMO-EPC-001',
-    account: 'DEMO-ACCOUNT-0001',
-    ifsc: 'DEMO-IFSC'
-};
 
 const clean = value => String(value ?? '').trim();
 // pdf-lib's built-in Helvetica font uses WinAnsi and throws when imported
@@ -49,31 +44,29 @@ export function mapFeasibilityReport(customer) {
         janSamarthNo: clean(customer.jansamarth_application_no),
         address: clean(customer.full_address),
         district: clean(customer.district),
-        state: 'GUJARAT',
+        state: clean(BRANDING.state).toUpperCase(),
         pincode: clean(customer.pincode),
         capacity: clean(customer.system_capacity_kwp),
         projectCost: money(quote?.amount),
-        signatureDate: new Date().toLocaleDateString('en-GB')
+        signatureDate: formatDate(new Date(), 'dmy')
     };
 }
 
+// `tab` is the stage tab where the value is entered, using the client's stage names.
 export function getMissingFeasibilityFields(data) {
     const checks = [
-        ['Consumer Name', 'Leads', data.consumerName],
-        ['Consumer No', 'Leads', data.consumerNo],
-        ['Full Address', 'Leads', data.address],
-        ['District', 'Leads', data.district],
-        ['Pincode', 'Leads', data.pincode],
-        ['System Capacity', 'Leads', data.capacity],
-        ['PM Surya Ghar Portal / Feasibility No', 'Registration', data.feasibilityNo],
-        ['Jan Samarth Application No', 'Loan', data.janSamarthNo],
-        ['Total Quotation Amount', 'Loan', data.projectCost]
+        ['Consumer Name', STAGE_IDS.LEADS, data.consumerName],
+        ['Consumer No', STAGE_IDS.LEADS, data.consumerNo],
+        ['Full Address', STAGE_IDS.LEADS, data.address],
+        ['District', STAGE_IDS.LEADS, data.district],
+        ['Pincode', STAGE_IDS.LEADS, data.pincode],
+        ['System Capacity', STAGE_IDS.LEADS, data.capacity],
+        ['PM Surya Ghar Portal / Feasibility No', STAGE_IDS.REGISTRATION, data.feasibilityNo],
+        ['Jan Samarth Application No', STAGE_IDS.LOAN, data.janSamarthNo],
+        ['Total Quotation Amount', STAGE_IDS.LOAN, data.projectCost]
     ];
-    return checks.filter(([, , value]) => !value).map(([field, tab]) => ({ field, tab }));
+    return checks.filter(([, , value]) => !value).map(([field, stage]) => ({ field, tab: stageLabel(stage) }));
 }
-
-export const shouldSaveGeneratedSiteFeasibility = documents =>
-    !(documents || []).some(doc => doc?.doc_type === 'site_feasibility');
 
 const wrap = (text, font, size, width) => {
     const words = pdfSafe(text).split(/\s+/).filter(Boolean);
@@ -94,6 +87,8 @@ async function embedImage(pdf, source) {
     try { return await pdf.embedPng(bytes); } catch { return await pdf.embedJpg(bytes); }
 }
 
+// The company's EPC code and bank details are not part of the client config,
+// so those lines are printed blank for the vendor to fill in by hand.
 export async function createFeasibilityPdf(data, { stampUrl = null, highlightMapped = false } = {}) {
     const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
     const pdf = await PDFDocument.create();
@@ -141,18 +136,16 @@ export async function createFeasibilityPdf(data, { stampUrl = null, highlightMap
         ['5. Jan Samarth ID:', data.janSamarthNo, true], ['6. Address for Installation:', data.address, true],
         ['7. District of Installation:', data.district, true], ['8. State of Installation:', data.state, true],
         ['9. Pin Code of Installation:', data.pincode, true], ['10. OEM Name:', '', false],
-        ['11. Channel Partner, if any:', '', false], ['12. EPC Contractor Address:', VENDOR.address, false],
-        ['13. EPC:', VENDOR.epc, false]
+        ['11. Channel Partner, if any:', '', false], ['12. EPC Contractor Address:', clean(BRANDING.address).replace(/\s*\n\s*/g, ', '), false],
+        ['13. EPC:', '', false]
     ];
     let y = 742;
     rows.forEach(([label, value, mapped]) => { field(p1, label, value, y, mapped); y -= 25; });
     p1.drawText('14. EPC Contractor Bank Details:', { x: 56, y, size: 10, font: regular }); y -= 23;
     p1.drawText('A/c No :-', { x: 72, y, size: 10, font: regular });
     p1.drawRectangle({ x: 126, y: y - 6, width: 135, height: 20, borderWidth: 1, borderColor: black });
-    p1.drawText(VENDOR.account, { x: 137, y, size: 10, font: bold });
     p1.drawText('IFSC CODE :-', { x: 274, y, size: 10, font: regular });
-    p1.drawRectangle({ x: 351, y: y - 6, width: 128, height: 20, borderWidth: 1, borderColor: black });
-    p1.drawText(VENDOR.ifsc, { x: 362, y, size: 10, font: bold }); y -= 25;
+    p1.drawRectangle({ x: 351, y: y - 6, width: 128, height: 20, borderWidth: 1, borderColor: black }); y -= 25;
     field(p1, '14. RTS Capacity in KW Applied:', data.capacity, y, true); y -= 25;
     field(p1, '15. Actual RTS Capacity to be installed:', data.capacity, y, true); y -= 25;
     field(p1, '16. Is the vendor registered in MNRE Portal:', 'Yes / No', y); y -= 18;
@@ -171,7 +164,7 @@ export async function createFeasibilityPdf(data, { stampUrl = null, highlightMap
 
     const p2 = pdf.addPage(A4);
     p2.drawRectangle({ x: 56, y: 760, width: 483, height: 34, borderWidth: 1, borderColor: black });
-    p2.drawText(`Name of the Vendor: ${VENDOR.name}`, { x: 66, y: 773, size: 11, font: bold });
+    p2.drawText(`Name of the Vendor: ${pdfSafe(BRANDING.companyName)}`, { x: 66, y: 773, size: 11, font: bold, maxWidth: 463 });
     const paragraphs = [
         '(a) Disbursement of Loan and payment of Margin up to installation of SRT [Capacity - up to 3 KW]. 70% of total project cost including loan and borrower margin.',
         '(b) Disbursement of Loans and payment of Margin up to installation of SRT [Capacity - more than 3 KW and up to 10 KW].',
@@ -195,7 +188,7 @@ export async function createFeasibilityPdf(data, { stampUrl = null, highlightMap
     const p3 = pdf.addPage(A4);
     p3.drawText('Site Photos:', { x: 56, y: 790, size: 15, font: bold });
     p3.drawLine({ start: { x: 56, y: 787 }, end: { x: 56 + bold.widthOfTextAtSize('Site Photos:', 15), y: 787 }, thickness: 1 });
-    p3.drawText(`EPC Code: ${VENDOR.epc}`, { x: 56, y: 105, size: 9, font: regular });
+    p3.drawText('EPC Code: ________________________', { x: 56, y: 105, size: 9, font: regular });
     p3.drawText('Authorised Signatory of the vendor with Stamp', { x: 315, y: 82, size: 9, font: bold });
     footer(p3, 3);
     return new Blob([await pdf.save()], { type: 'application/pdf' });

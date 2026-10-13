@@ -1,17 +1,14 @@
-import { useMemo } from 'react';
 // ─── DashboardView.jsx ────────────────────────────────────────────────────────
-// Metrics overview: project counts, financial summary, stage pipeline bar chart.
-// • "Total" = all non-deleted records
-// • "Live"  = non-deleted AND stage !== 'Completed'
-// • "Completed" = stage === 'Completed' (non-deleted)
-// Numbers use Indian locale (₹1,00,000)
+// Metrics overview: project counts, today's work, solar equipment, how
+// customers pay and projects per stage. "In progress" excludes Completed and
+// Lost Project; deleted records are never counted.
 // ──────────────────────────────────────────────────────────────────────────────
 
+import { useMemo } from 'react';
 import { FolderOpen, Activity, CheckCircle2, XCircle, PanelsTopLeft, Zap, Gauge, CircuitBoard, CalendarPlus, BadgeCheck, ListChecks, Truck } from 'lucide-react';
-import { PRIMARY_STAGES } from '../constants';
-import { formatINRCompact } from '../utils';
-
-const fmtLakh = formatINRCompact;
+import { PRIMARY_STAGES, STAGE_IDS, isOn } from '../config/index.js';
+import { formatCount, formatDate } from '../lib/format.js';
+import { LoadingState, StatTile } from '../ui/index.js';
 
 const MetricBox = ({ label, value, sub, icon: Icon, color }) => {
     const colorMap = {
@@ -33,25 +30,6 @@ const MetricBox = ({ label, value, sub, icon: Icon, color }) => {
     );
 };
 
-const formatNumber = value => Number(value || 0).toLocaleString('en-IN');
-
-const EquipmentMetric = ({ label, value, sub, icon: Icon, tone }) => {
-    const tones = {
-        orange: 'bg-orange-50 text-orange-600',
-        yellow: 'bg-yellow-50 text-yellow-700',
-        green: 'bg-green-50 text-green-700',
-        blue: 'bg-blue-50 text-blue-700',
-    };
-    return <div className="min-w-0 p-5 rounded-2xl border border-stone-200 bg-white">
-        <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${tones[tone] || tones.orange}`}>
-            <Icon size={18} aria-hidden="true" />
-        </div>
-        <p className="mt-4 text-2xl font-bold text-stone-900 truncate" title={String(value)}>{value}</p>
-        <p className="mt-1 text-xs font-semibold text-stone-700">{label}</p>
-        <p className="mt-1 text-xs text-stone-500 leading-relaxed">{sub}</p>
-    </div>;
-};
-
 const EquipmentMix = ({ title, items, unit, color }) => {
     const bar = color === 'green' ? 'bg-green-500' : 'bg-orange-500';
     return <div className="min-w-0">
@@ -60,7 +38,7 @@ const EquipmentMix = ({ title, items, unit, color }) => {
             {items.length ? items.map(item => <div key={item.name}>
                 <div className="flex items-center justify-between gap-4 text-xs">
                     <span className="font-semibold text-stone-700 truncate" title={item.name}>{item.name}</span>
-                    <span className="text-stone-500 whitespace-nowrap">{formatNumber(item.count)} {unit}</span>
+                    <span className="text-stone-500 whitespace-nowrap">{formatCount(item.count)} {unit}</span>
                 </div>
                 <div className="mt-1.5 h-2 rounded-full bg-stone-100 overflow-hidden">
                     <div className={`h-full rounded-full ${bar}`} style={{ width: `${Math.max(item.percentage, 3)}%` }} />
@@ -82,14 +60,14 @@ const TodayMetric = ({ label, value, sub, icon: Icon, tone }) => {
             <Icon size={18} aria-hidden="true" />
         </div>
         <div className="min-w-0">
-            <p className="text-xl font-bold text-stone-900">{formatNumber(value)}</p>
+            <p className="text-xl font-bold text-stone-900">{formatCount(value)}</p>
             <p className="text-xs font-semibold text-stone-700">{label}</p>
             <p className="mt-1 text-[11px] leading-relaxed text-stone-500">{sub}</p>
         </div>
     </div>;
 };
 
-export default function DashboardView({ metrics, loading, scoped = false }) {
+export default function DashboardView({ metrics, failed = false, scoped = false, canViewDeliveries = false }) {
     const {
         totalProjects = 0,
         completedCount = 0,
@@ -109,11 +87,9 @@ export default function DashboardView({ metrics, loading, scoped = false }) {
         return { loanPerc, cashPerc };
     }, [loanCount, cashCount]);
 
-    if (!metrics) return (
-        <div className="p-20 text-center text-stone-400 font-medium italic animate-pulse">
-            Loading project summary…
-        </div>
-    );
+    if (!metrics) return failed ? null : <LoadingState label="Loading project summary…" />;
+
+    const showDeliveries = isOn('deliveryBatches');
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
@@ -122,7 +98,7 @@ export default function DashboardView({ metrics, loading, scoped = false }) {
                 <MetricBox label={scoped ? "My Office & Dealers" : "Total projects"} value={totalProjects}  icon={FolderOpen}   color="neutral"    sub={`${liveProjects} projects in progress`} />
                 <MetricBox label="Projects in progress"  value={liveProjects}   icon={Activity}     color="amber"   sub="Excluding completed and lost" />
                 <MetricBox label="Completed"      value={completedCount} icon={CheckCircle2} color="emerald" sub="Installation completed" />
-                <MetricBox label="Lost Projects" value={metrics.lostCount ?? stageCounts['LOST PROJECT'] ?? 0} icon={XCircle} color="rose" sub="Projects marked lost" />
+                <MetricBox label="Lost Projects" value={stageCounts[STAGE_IDS.LOST_PROJECT] ?? 0} icon={XCircle} color="rose" sub="Projects marked lost" />
             </div>
 
             {/* Today's operational picture */}
@@ -132,20 +108,22 @@ export default function DashboardView({ metrics, loading, scoped = false }) {
                         <p className="text-[10px] font-bold uppercase tracking-widest text-orange-600">Today</p>
                         <h3 id="today-summary-title" className="mt-1 text-lg font-bold text-stone-900">What needs attention today</h3>
                     </div>
-                    {today?.date && <p className="text-xs text-stone-500">{new Date(`${today.date}T12:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}</p>}
+                    {today?.date && <p className="text-xs text-stone-500">{formatDate(today.date, 'long')}</p>}
                 </div>
-                {!today ? <div className="py-8 text-center text-sm text-stone-500" role="status">Loading today’s activity…</div> : (
-                    <div className="mt-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+                {!today ? <LoadingState label="Loading today’s activity…" /> : (
+                    <div className={`mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 ${showDeliveries ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
                         <TodayMetric label="Registered today" value={today.registeredToday} sub="Projects with today’s registration date" icon={CalendarPlus} tone="orange" />
                         <TodayMetric label="Installed today" value={today.installedToday} sub="Installations marked complete today" icon={BadgeCheck} tone="green" />
                         <TodayMetric label="Installed in live projects" value={today.installedLive} sub="Installed projects still moving through approvals" icon={ListChecks} tone="yellow" />
-                        <TodayMetric
-                            label="Deliveries due today"
-                            value={today.deliveriesDueToday}
-                            sub={today.canViewDeliveries ? `${formatNumber(today.deliveryProjectsToday)} projects scheduled across today’s trips` : 'Available to Admin and Office users'}
-                            icon={Truck}
-                            tone="blue"
-                        />
+                        {showDeliveries && (
+                            <TodayMetric
+                                label="Deliveries due today"
+                                value={today.deliveriesDueToday}
+                                sub={canViewDeliveries ? `${formatCount(today.deliveryProjectsToday)} projects scheduled across today’s trips` : 'Available to Admin and Office users'}
+                                icon={Truck}
+                                tone="blue"
+                            />
+                        )}
                     </div>
                 )}
             </section>
@@ -160,33 +138,33 @@ export default function DashboardView({ metrics, loading, scoped = false }) {
                     <p className="text-xs text-stone-500">Calculated from active and completed project records</p>
                 </div>
 
-                {!equipment ? <div className="mt-6 py-8 text-center text-sm text-stone-500" role="status">Loading solar equipment summary…</div> : <>
+                {!equipment ? <LoadingState label="Loading solar equipment summary…" /> : <>
                     <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-                        <EquipmentMetric
+                        <StatTile
                             label="Panels across projects"
-                            value={formatNumber(equipment.panelsAcrossProjects)}
-                            sub={`${formatNumber(equipment.completedPanels)} installed on completed projects`}
+                            value={formatCount(equipment.panelsAcrossProjects)}
+                            hint={`${formatCount(equipment.completedPanels)} installed on completed projects`}
                             icon={PanelsTopLeft}
                             tone="orange"
                         />
-                        <EquipmentMetric
+                        <StatTile
                             label="Most-used panel brand"
                             value={equipment.topPanelBrand?.name || 'Not recorded'}
-                            sub={equipment.topPanelBrand ? `${formatNumber(equipment.topPanelBrand.count)} panels across projects` : 'Add panel details to project records'}
+                            hint={equipment.topPanelBrand ? `${formatCount(equipment.topPanelBrand.count)} panels across projects` : 'Add panel details to project records'}
                             icon={CircuitBoard}
                             tone="yellow"
                         />
-                        <EquipmentMetric
+                        <StatTile
                             label="Most-used inverter"
                             value={equipment.topInverterBrand?.name || 'Not recorded'}
-                            sub={equipment.topInverterBrand ? `Selected in ${formatNumber(equipment.topInverterBrand.count)} projects` : 'Add inverter details during integration'}
+                            hint={equipment.topInverterBrand ? `Selected in ${formatCount(equipment.topInverterBrand.count)} projects` : 'Add inverter details during integration'}
                             icon={Zap}
                             tone="green"
                         />
-                        <EquipmentMetric
+                        <StatTile
                             label="Installed capacity"
-                            value={`${formatNumber(equipment.installedCapacityKwp)} kWp`}
-                            sub={`${formatNumber(equipment.averageSystemKwp)} kWp average project size`}
+                            value={`${formatCount(equipment.installedCapacityKwp)} kWp`}
+                            hint={`${formatCount(equipment.averageSystemKwp)} kWp average project size`}
                             icon={Gauge}
                             tone="blue"
                         />
@@ -199,8 +177,8 @@ export default function DashboardView({ metrics, loading, scoped = false }) {
                 </>}
             </section>
 
-            {/* Financial Analytics */}
-            <div className="bg-white rounded-[32px] p-8 border border-stone-100 shadow-sm">
+            {/* Loan vs cash share; only meaningful while loans are tracked */}
+            {isOn('loanTracking') && <div className="bg-white rounded-[32px] p-8 border border-stone-100 shadow-sm">
                 <h3 className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-6">How customers are paying</h3>
                 <div className="flex justify-between items-end mb-2">
                     <div className="flex items-center gap-1.5 text-xs font-bold text-stone-700">
@@ -230,7 +208,7 @@ export default function DashboardView({ metrics, loading, scoped = false }) {
                         </div>
                     )}
                 </div>
-            </div>
+            </div>}
 
             {/* Stage pipeline bar chart */}
             <div className="bg-white rounded-[32px] p-8 border border-stone-100 shadow-sm">
@@ -247,7 +225,7 @@ export default function DashboardView({ metrics, loading, scoped = false }) {
                                 </div>
                                 <div className="h-1.5 bg-stone-50 rounded-full overflow-hidden">
                                     <div
-                                        className={`h-full transition-all duration-1000 rounded-full ${stage.id === 'COMPLETED' ? 'bg-emerald-400' : 'bg-amber-400'}`}
+                                        className={`h-full transition-all duration-1000 rounded-full ${stage.id === STAGE_IDS.COMPLETED ? 'bg-emerald-400' : 'bg-amber-400'}`}
                                         style={{ width: `${perc}%` }}
                                     />
                                 </div>

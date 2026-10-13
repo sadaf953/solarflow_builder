@@ -48,40 +48,21 @@ export function reportError(error, context = {}) {
 
     console.error('🚨 APP ERROR:', errorDetails);
 
-    // Optional: Log to activity_log table if user_id is provided in context or localStorage
-    try {
-        let userId = context.userId || null;
-        if (!userId && typeof window !== 'undefined' && typeof sessionStorage !== 'undefined') {
-            for (let i = 0; i < sessionStorage.length; i++) {
-                const key = sessionStorage.key(i);
-                if (key && key.startsWith('sb-') && key.endsWith('-auth-token')) {
-                    try {
-                        const parsed = JSON.parse(sessionStorage.getItem(key));
-                        userId = parsed?.user?.id || null;
-                        break;
-                    } catch { /* not valid JSON, skip this key */ }
-                }
-            }
-        }
-
-        if (userId && supabase) {
-            supabase.from('activity_log').insert({
-                user_id: userId,
-                action: 'error_occurred',
-                message: `[${context.action || 'system'}] ${errorDetails.message}`.slice(0, 255),
-                new_value: JSON.stringify({
-                    error: errorDetails.message,
-                    context,
-                    stack: errorDetails.stack ? errorDetails.stack.slice(0, 1000) : null
-                }),
-                created_at: new Date().toISOString()
-            }).then(({ error: dbErr }) => {
-                if (dbErr) {
-                    // Silent fail to avoid infinite error loop
-                }
-            }).catch(() => {});
-        }
-    } catch {
-        // Silent catch for error logging failure
-    }
+    // Also record it in the activity log when someone is signed in.
+    const userId = context.userId || null;
+    const write = id => {
+        if (!id) return;
+        supabase.from('activity_log').insert({
+            user_id: id,
+            action: 'error_occurred',
+            message: `[${context.action || 'system'}] ${errorDetails.message}`.slice(0, 255),
+            new_value: JSON.stringify({
+                error: errorDetails.message,
+                context,
+                stack: errorDetails.stack ? errorDetails.stack.slice(0, 1000) : null,
+            }),
+        }).then(() => {}, () => {});   // never let error logging raise another error
+    };
+    if (userId) write(userId);
+    else supabase.auth.getSession().then(({ data }) => write(data?.session?.user?.id), () => {});
 }

@@ -1,9 +1,12 @@
 -- SolarFlow database setup.
 --
 -- Run in the Supabase SQL Editor of the client's own project. It is safe to
--- run again: every object is created only if missing or replaced in place,
--- and existing data is never removed. The per-client settings (features,
--- pipeline, dropdown lists, owner email) follow from backend/seed.js.
+-- run again: it adds anything missing and replaces SolarFlow's own functions,
+-- triggers and policies in place. It never removes data and leaves tables,
+-- functions and policies you added yourself alone. It is not a migration
+-- tool: a changed column type or a renamed column is not carried over. The
+-- per-client settings (features, pipeline, dropdown lists, owner email)
+-- follow from backend/seed.js.
 --
 -- No customers, staff or sample data are created here. The first login is
 -- created in Authentication > Users and becomes the admin (see the
@@ -19,6 +22,8 @@ grant usage on schema public to anon, authenticated, service_role;
 -- ═══ Tables ═════════════════════════════════════════════════════════════
 
 -- Login types. `enabled` is set from the client's features by the seed.
+-- 'pending' is the placeholder for an account nobody set up (no access, no
+-- portal); the seed never enables it.
 create table if not exists public.app_roles (
   user_type text primary key,
   label text not null,
@@ -34,7 +39,8 @@ insert into public.app_roles(user_type, label, role, sort_order, enabled) values
   ('agent2', 'Dealer', 'Channel Partner', 5, false),
   ('agent', 'Channel Partners', 'Channel Partners', 6, false),
   ('vendor', 'Vendors', 'Vendors', 7, false),
-  ('stamp', 'Stamp Maker', 'Stamp', 8, false)
+  ('stamp', 'Stamp Maker', 'Stamp', 8, false),
+  ('pending', 'Not set up', 'Not set up', 99, false)
 on conflict (user_type) do nothing;
 
 -- Keys: features, pipeline, owner_email, client.
@@ -50,7 +56,7 @@ create table if not exists public.profiles (
   name text not null,
   email text,
   phone_number text,
-  user_type text not null default 'sales' references public.app_roles(user_type),
+  user_type text not null default 'pending' references public.app_roles(user_type),
   role text not null default '',
   channel_partner text,
   status text not null default 'inactive' check (status in ('active', 'inactive')),
@@ -60,6 +66,7 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table public.profiles alter column user_type set default 'pending';
 
 -- Customers / projects.
 create table if not exists public.admin (
@@ -420,7 +427,7 @@ create or replace function solarflow_private.my_profile()
 returns setof public.profiles language sql stable security definer set search_path = '' as $$
   select p.* from public.profiles p
   join public.app_roles r on r.user_type = p.user_type and r.enabled
-  where p.id = auth.uid() and p.status = 'active';
+  where p.id = auth.uid() and p.status = 'active' and p.user_type <> 'pending';
 $$;
 
 create or replace function solarflow_private.my_role()
@@ -464,7 +471,10 @@ returns boolean language sql stable security definer set search_path = '' as $$
   ), false);
 $$;
 
--- Customer visibility per login type; mirrors the portal filters.
+-- Customer visibility per login type; mirrors the portal filters. Only
+-- admin-set keys decide it: a channel partner's channel_partner, a dealer's
+-- name (which only an admin or its office may change) within its partner,
+-- and an installer's directory row linked to the login.
 create or replace function solarflow_private.can_view_customer(
   p_creator uuid, p_channel_partner text, p_sub_channel_partner text, p_vendor text
 )
@@ -476,16 +486,13 @@ returns boolean language sql stable security definer set search_path = '' as $$
       when 'channel_partner_office' then solarflow_private.can_view_lead(p_creator)
       when 'office2' then solarflow_private.can_view_lead(p_creator)
       when 'agent' then p_creator = p.id
-        or lower(trim(p_channel_partner)) = lower(trim(p.name))
+        or lower(trim(p_channel_partner)) = lower(trim(nullif(trim(p.channel_partner), '')))
       when 'agent2' then p_creator = p.id
         or (lower(trim(p_sub_channel_partner)) = lower(trim(p.name))
             and lower(trim(p_channel_partner)) = lower(trim(p.channel_partner)))
       when 'vendor' then exists(
         select 1 from public.vendors v
-        where lower(trim(v.name)) = lower(trim(p_vendor))
-          and (v.profile_id = p.id
-               or (v.profile_id is null and (lower(trim(v.email)) = lower(trim(p.email))
-                                             or lower(trim(v.name)) = lower(trim(p.name)))))
+        where v.profile_id = p.id and lower(trim(v.name)) = lower(trim(p_vendor))
       )
       else false
     end
@@ -505,7 +512,7 @@ returns boolean language sql stable security definer set search_path = '' as $$
       when p.user_type in ('admin', 'sales') then true
       when p.user_type in ('channel_partner_office', 'office2') then p_cpo = solarflow_private.current_cpo()
       when p.user_type = 'agent' then p_user_type = 'agent2'
-        and (p_parent = p.id or lower(trim(p_channel_partner)) = lower(trim(p.name)))
+        and (p_parent = p.id or lower(trim(p_channel_partner)) = lower(trim(nullif(trim(p.channel_partner), ''))))
       else false
     end
     from solarflow_private.my_profile() p
@@ -568,7 +575,7 @@ create trigger stamp_completed_at before insert or update of stage on public.adm
   for each row execute function solarflow_private.stamp_completed_at();
 
 -- Lead ownership. Partner logins always create leads as themselves (a CPO or
--- manager as their office); only head office may reassign a lead.
+-- manager as their office); admin_column_guard keeps reassignment with head office.
 create or replace function solarflow_private.assign_lead_creator()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
@@ -579,14 +586,6 @@ begin
     return new;
   end if;
   select * into p from solarflow_private.my_profile();
-  if tg_op = 'UPDATE' then
-    if new.lead_creator_profile_id is distinct from old.lead_creator_profile_id
-      and coalesce(p.user_type, '') not in ('admin', 'sales') then
-      raise exception 'Lead ownership can only be changed by head office' using errcode = '42501';
-    end if;
-    return new;
-  end if;
-
   if p.user_type in ('channel_partner_office', 'office2') then
     select * into office from public.profiles where id = solarflow_private.current_cpo();
     if office.id is null then
@@ -608,7 +607,7 @@ begin
   return new;
 end $$;
 drop trigger if exists assign_lead_creator on public.admin;
-create trigger assign_lead_creator before insert or update of lead_creator_profile_id on public.admin
+create trigger assign_lead_creator before insert on public.admin
   for each row execute function solarflow_private.assign_lead_creator();
 
 -- cpo_profile_id: a CPO is its own office; managers and dealers belong to their parent.
@@ -625,23 +624,33 @@ drop trigger if exists profiles_set_cpo on public.profiles;
 create trigger profiles_set_cpo before insert or update of user_type, parent_profile_id on public.profiles
   for each row execute function solarflow_private.profiles_set_cpo();
 
--- Signed-in users other than admins may edit their name and phone only.
+-- Signed-in users other than admins may edit the phone number only. The name
+-- decides which leads a dealer sees, so only an admin, or a partner office
+-- for the managers and dealers under it, may change it.
 -- The service role and SQL Editor (not authenticated/anon) are trusted.
 create or replace function solarflow_private.profiles_guard()
 returns trigger language plpgsql set search_path = '' as $$
 begin
-  if current_user in ('authenticated', 'anon') and not solarflow_private.is_admin() and (
-    new.id is distinct from old.id
-    or new.user_type is distinct from old.user_type
-    or new.role is distinct from old.role
-    or new.status is distinct from old.status
-    or new.email is distinct from old.email
-    or new.channel_partner is distinct from old.channel_partner
-    or new.parent_profile_id is distinct from old.parent_profile_id
-    or new.cpo_profile_id is distinct from old.cpo_profile_id
-    or new.created_by is distinct from old.created_by
-  ) then
-    raise exception 'Only an admin can change login type, status, email or partner' using errcode = '42501';
+  if current_user in ('authenticated', 'anon') and not solarflow_private.is_admin() then
+    if new.id is distinct from old.id
+      or new.user_type is distinct from old.user_type
+      or new.role is distinct from old.role
+      or new.status is distinct from old.status
+      or new.email is distinct from old.email
+      or new.channel_partner is distinct from old.channel_partner
+      or new.parent_profile_id is distinct from old.parent_profile_id
+      or new.cpo_profile_id is distinct from old.cpo_profile_id
+      or new.created_by is distinct from old.created_by
+    then
+      raise exception 'Only an admin can change login type, status, email or partner' using errcode = '42501';
+    end if;
+    if new.name is distinct from old.name and not (
+      old.user_type in ('office2', 'agent2')
+      and old.cpo_profile_id = auth.uid()
+      and solarflow_private.my_role() = 'channel_partner_office'
+    ) then
+      raise exception 'Only an admin can change a login name' using errcode = '42501';
+    end if;
   end if;
   if old.user_type = 'admin' and old.status = 'active'
     and (new.user_type <> 'admin' or new.status <> 'active')
@@ -654,6 +663,151 @@ end $$;
 drop trigger if exists profiles_guard on public.profiles;
 create trigger profiles_guard before update on public.profiles
   for each row execute function solarflow_private.profiles_guard();
+
+-- Linking an installer row to a login decides which jobs that login sees, so
+-- only an admin (or add_user) may set or change vendors.profile_id.
+create or replace function solarflow_private.vendors_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if (tg_op = 'INSERT' and new.profile_id is not null)
+    or (tg_op = 'UPDATE' and new.profile_id is distinct from old.profile_id)
+  then
+    if current_user in ('authenticated', 'anon') and not solarflow_private.is_admin() then
+      raise exception 'Only an admin can link an installer to a login' using errcode = '42501';
+    end if;
+    if new.profile_id is not null
+      and not exists(select 1 from public.profiles p where p.id = new.profile_id and p.user_type = 'vendor')
+    then
+      raise exception 'An installer can only be linked to a vendor login';
+    end if;
+  end if;
+  return new;
+end $$;
+drop trigger if exists vendors_guard on public.vendors;
+create trigger vendors_guard before insert or update on public.vendors
+  for each row execute function solarflow_private.vendors_guard();
+
+-- Partner and installer logins may edit project details, but payments, stock,
+-- delivery batches, ownership and Trash stay with head office. Installers may
+-- also set the delivery status. Named to run before the other admin triggers,
+-- so the stock stamp written by issue_delivered_bom_stock is not refused.
+create or replace function solarflow_private.admin_column_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if current_user not in ('authenticated', 'anon') or solarflow_private.is_head_office() then
+    return new;
+  end if;
+  if new.vendor_payment_status is distinct from old.vendor_payment_status
+    or new.vendor_quote is distinct from old.vendor_quote
+    or new.vendor_paid_date is distinct from old.vendor_paid_date
+    or new.vendor_paid_by is distinct from old.vendor_paid_by
+    or new.bom_stock_issued_at is distinct from old.bom_stock_issued_at
+    or new.deleted_at is distinct from old.deleted_at
+    or new.delivery_batch_id is distinct from old.delivery_batch_id
+    or new.lead_creator_profile_id is distinct from old.lead_creator_profile_id
+  then
+    raise exception 'Only head office can change payments, stock, delivery batches, lead ownership or Trash'
+      using errcode = '42501';
+  end if;
+  if new.delivery_status is distinct from old.delivery_status
+    and solarflow_private.my_role() is distinct from 'vendor'
+  then
+    raise exception 'Only head office or the installer can change the delivery status' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists admin_column_guard on public.admin;
+create trigger admin_column_guard before update on public.admin
+  for each row execute function solarflow_private.admin_column_guard();
+
+-- Who wrote a calendar entry or chat message comes from the writer's profile,
+-- never from the request. A linked customer must be one the writer can see.
+-- Inactive callers pass through untouched; row-level security refuses them.
+create or replace function solarflow_private.calendar_attribution()
+returns trigger language plpgsql set search_path = '' as $$
+declare
+  me public.profiles;
+  own_vendor text;
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  select * into me from solarflow_private.my_profile();
+  if me.id is null then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    new.created_by_name := me.name;
+  else
+    new.created_by := old.created_by;
+    new.created_by_name := old.created_by_name;
+  end if;
+
+  if me.user_type = 'vendor' then
+    new.vendor_name := null;
+    if new.kind = 'unavailable' then
+      select v.name into own_vendor from public.vendors v where v.profile_id = me.id order by v.name limit 1;
+      if own_vendor is null then
+        raise exception 'Your login is not linked to an installer yet. Ask an admin to link it in Operations.';
+      end if;
+      new.vendor_name := own_vendor;
+    end if;
+  elsif me.user_type not in ('admin', 'sales') then
+    new.vendor_name := case when tg_op = 'UPDATE' then old.vendor_name end;
+  end if;
+
+  if new.customer_id is not null
+    and (tg_op = 'INSERT' or new.customer_id is distinct from old.customer_id)
+    and not exists(select 1 from public.admin a where a.id = new.customer_id)
+  then
+    raise exception 'You can only link a customer you can see' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists calendar_attribution on public.calendar_events;
+create trigger calendar_attribution before insert or update on public.calendar_events
+  for each row execute function solarflow_private.calendar_attribution();
+
+create or replace function solarflow_private.chat_attribution()
+returns trigger language plpgsql set search_path = '' as $$
+declare me public.profiles;
+begin
+  if current_user not in ('authenticated', 'anon') then
+    return new;
+  end if;
+  select * into me from solarflow_private.my_profile();
+  if me.id is not null then
+    new.sender_name := me.name;
+    new.sender_role := coalesce(nullif(trim(me.role), ''), 'Team Member');
+    new.user_type := me.user_type;
+  end if;
+  return new;
+end $$;
+drop trigger if exists chat_attribution on public.team_chat_messages;
+create trigger chat_attribution before insert on public.team_chat_messages
+  for each row execute function solarflow_private.chat_attribution();
+
+create or replace function solarflow_private.quotation_links_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if current_user not in ('authenticated', 'anon') or not solarflow_private.is_active() then
+    return new;
+  end if;
+  if (new.source_lead_id is not null
+      and (tg_op = 'INSERT' or new.source_lead_id is distinct from old.source_lead_id)
+      and not exists(select 1 from public.admin a where a.id = new.source_lead_id))
+    or (new.converted_lead_id is not null
+      and (tg_op = 'INSERT' or new.converted_lead_id is distinct from old.converted_lead_id)
+      and not exists(select 1 from public.admin a where a.id = new.converted_lead_id))
+  then
+    raise exception 'You can only link a quotation to a customer you can see' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+drop trigger if exists quotation_links_guard on public.quotations;
+create trigger quotation_links_guard before insert or update on public.quotations
+  for each row execute function solarflow_private.quotation_links_guard();
 
 -- ═══ Inventory (stock follows BOMs; deducted when a delivery is marked Delivered) ═══
 
@@ -1175,18 +1329,25 @@ begin
 end $$;
 
 -- ═══ Row-level security ═════════════════════════════════════════════════
--- Policies are rebuilt on every run so the set below is always the whole set.
+-- SolarFlow's own tables. Policies on these are rebuilt on every run, so the
+-- set below is always the whole set (a policy left over from an older version
+-- could otherwise widen access). Other tables in the project are not touched.
+
+create or replace function solarflow_private.own_tables()
+returns text[] language sql immutable set search_path = '' as $$
+  select array[
+    'app_roles', 'app_settings', 'profiles', 'admin', 'metadata', 'vendors', 'drivers', 'activity_log',
+    'documents', 'bom', 'bom_items', 'delivery_batches', 'quotations', 'inventory_items',
+    'inventory_movements', 'staff_attendance', 'team_chat_messages', 'calendar_events'
+  ];
+$$;
 
 do $$
 declare
   t text;
   pol record;
 begin
-  foreach t in array array[
-    'app_roles', 'app_settings', 'profiles', 'admin', 'metadata', 'vendors', 'drivers', 'activity_log',
-    'documents', 'bom', 'bom_items', 'delivery_batches', 'quotations', 'inventory_items',
-    'inventory_movements', 'staff_attendance', 'team_chat_messages', 'calendar_events'
-  ] loop
+  foreach t in array solarflow_private.own_tables() loop
     execute format('alter table public.%I enable row level security', t);
     for pol in select policyname from pg_policies where schemaname = 'public' and tablename = t loop
       execute format('drop policy %I on public.%I', pol.policyname, t);
@@ -1252,10 +1413,11 @@ end $$;
 
 create policy activity_read on public.activity_log for select to authenticated
   using ((select solarflow_private.is_head_office())
-         or user_id = (select auth.uid())
+         or (user_id = (select auth.uid()) and (select solarflow_private.is_active()))
          or (customer_id is not null and exists(select 1 from public.admin a where a.id = customer_id)));
 create policy activity_insert on public.activity_log for insert to authenticated
-  with check (user_id = (select auth.uid()) and (select solarflow_private.is_active()));
+  with check (user_id = (select auth.uid()) and (select solarflow_private.is_active())
+              and (customer_id is null or exists(select 1 from public.admin a where a.id = customer_id)));
 
 create policy quotations_access on public.quotations for all to authenticated
   using ((owner_id = (select auth.uid()) and (select solarflow_private.is_active()))
@@ -1267,12 +1429,14 @@ create policy quotations_access on public.quotations for all to authenticated
 
 -- Head office marks anyone; staff may only file their own pending requests.
 create policy attendance_read on public.staff_attendance for select to authenticated
-  using ((select solarflow_private.is_head_office()) or user_id = (select auth.uid()));
+  using ((select solarflow_private.is_head_office())
+         or (user_id = (select auth.uid()) and (select solarflow_private.is_active())));
 create policy attendance_head_office on public.staff_attendance for all to authenticated
   using ((select solarflow_private.is_head_office()))
   with check ((select solarflow_private.is_head_office()));
 create policy attendance_own_request on public.staff_attendance for all to authenticated
-  using (user_id = (select auth.uid()) and status in ('pending_present', 'holiday_request'))
+  using (user_id = (select auth.uid()) and (select solarflow_private.is_active())
+         and status in ('pending_present', 'holiday_request'))
   with check (user_id = (select auth.uid()) and (select solarflow_private.is_active())
               and status in ('pending_present', 'holiday_request'));
 
@@ -1352,7 +1516,8 @@ end $$;
 --    set, the first user) becomes the active admin;
 -- 2. users made by the add_user function take their login type from
 --    app_metadata, which only the service role can write;
--- 3. anyone else is inactive until an admin activates them.
+-- 3. anyone else is an inactive 'pending' placeholder with no access until an
+--    admin gives it a login type and activates it.
 
 create or replace function solarflow_private.provision_profile(p_id uuid, p_email text, p_app jsonb, p_user jsonb)
 returns void language plpgsql security definer set search_path = '' as $$
@@ -1386,9 +1551,11 @@ begin
     if p_app->>'created_by' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
       select id into creator from public.profiles where id = (p_app->>'created_by')::uuid;
     end if;
+    -- A channel partner's key defaults to its name, as in add_user.
     insert into public.profiles(id, name, email, user_type, role, channel_partner, parent_profile_id, created_by, status)
     values (p_id, display_name, nullif(v_email, ''), granted.user_type, coalesce(nullif(trim(p_app->>'role'), ''), granted.role),
-            nullif(trim(p_app->>'channel_partner'), ''), parent, creator, 'active')
+            coalesce(nullif(trim(p_app->>'channel_partner'), ''), case when granted.user_type = 'agent' then display_name end),
+            parent, creator, 'active')
     -- Only an inactive placeholder is upgraded; an existing login is never changed here.
     on conflict (id) do update set
       name = excluded.name, user_type = excluded.user_type, role = excluded.role,
@@ -1399,7 +1566,7 @@ begin
   end if;
 
   insert into public.profiles(id, name, email, user_type, role, status)
-  values (p_id, display_name, nullif(v_email, ''), 'sales', 'Office', 'inactive')
+  values (p_id, display_name, nullif(v_email, ''), 'pending', 'Not set up', 'inactive')
   on conflict (id) do nothing;
 end $$;
 
@@ -1453,11 +1620,31 @@ create view public.cpo_leads with (security_invoker = true) as
     and solarflow_private.can_view_lead(lead_creator_profile_id);
 
 -- ═══ Grants ═════════════════════════════════════════════════════════════
+-- Reset on SolarFlow's own tables and functions only, then granted below.
 
-revoke all on all tables in schema public from anon, authenticated;
-revoke all on all sequences in schema public from anon, authenticated;
-grant all on all tables in schema public to service_role;
-grant all on all sequences in schema public to service_role;
+do $$
+declare
+  t text;
+  f regprocedure;
+begin
+  foreach t in array solarflow_private.own_tables() || array['cpo_leads'] loop
+    execute format('revoke all on public.%I from anon, authenticated', t);
+    execute format('grant all on public.%I to service_role', t);
+  end loop;
+  for f in
+    select p.oid::regprocedure from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = any(array[
+      'move_stage', 'merge_custom_fields', 'get_dashboard_metrics_scoped', 'get_dashboard_metrics',
+      'get_cpo_dashboard_metrics', 'inventory_item_key', 'sync_inventory_catalog', 'record_inventory_movement',
+      'bom_stock_document', 'get_inventory_bom_lines', 'set_bom_stock_quantity', 'save_delivery_batch_atomic',
+      'delete_delivery_batch_atomic', 'update_delivery_batch_status_atomic'
+    ])
+  loop
+    execute format('revoke all on function %s from public, anon, authenticated', f);
+  end loop;
+end $$;
+revoke all on sequence public.quotations_quotation_no_seq from anon, authenticated;
+grant all on sequence public.quotations_quotation_no_seq to service_role;
 
 grant select on public.app_roles, public.app_settings, public.cpo_leads to authenticated;
 grant select, update, delete on public.profiles to authenticated;
@@ -1470,7 +1657,6 @@ grant select, insert, update, delete on
 to authenticated;
 grant usage, select on sequence public.quotations_quotation_no_seq to authenticated;
 
-revoke all on all functions in schema public from public, anon, authenticated;
 revoke all on all functions in schema solarflow_private from public, anon, authenticated;
 grant execute on function
   public.move_stage(uuid, text, text, text),

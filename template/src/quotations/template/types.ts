@@ -1,14 +1,16 @@
+// Optional artwork for the quotation. Without it the company name is printed
+// instead of a logo, and the emblems and banner are left out.
 export interface AssetImages {
-  solarflowLogoUrl?: string; // Screenshot 1: SolarFlow Logo
-  screenshot2MiddleBannerUrl?: string; // Screenshot 2: Full Page 1 Middle Block (GEDA + MNRE + Modi Banner)
-  demoQualityLogoUrl?: string;
-  demoEnergyLogoUrl?: string;
-  demoBannerUrl?: string;
-  demoPartnerLogoUrl?: string; // Screenshot 3: SolarFlow Plusoof Logo
+  logoUrl?: string;
+  middleBannerUrl?: string; // replaces both emblems and the banner
+  leftEmblemUrl?: string;
+  rightEmblemUrl?: string;
+  bannerUrl?: string;
+  partnerLogoUrl?: string; // footer
 }
 
 export interface BrandQuoteOption {
-  brandName: string; // e.g., "SolarFlow Essential", "SolarFlow Plus", "SolarFlow Premium"
+  brandName: string; // panel brand of this price option
   baseValue: number; // e.g., 189000
   discount: number; // e.g., 0
   netPayableAmount: number; // calculated: baseValue - discount
@@ -27,6 +29,7 @@ export interface QuotationData {
     gstNo: string;
     cinNo: string;
     email: string;
+    phone?: string;
     logoUrl?: string; // custom uploaded logo
   };
 
@@ -41,6 +44,10 @@ export interface QuotationData {
     yoursTrulyPhone: string;
     introParagraph1?: string;
     introParagraph2?: string;
+    showSchemeBanner?: boolean;
+    address?: string;
+    email?: string;
+    validUntil?: string;
   };
 
   // Page 2
@@ -48,8 +55,9 @@ export interface QuotationData {
     solarPanelMake: string; // "Waree 580"
     solarPanelQty: number | string; // "6"
     inverterOption: string; // "Option 1", "Option 2", "Option 3", "Option 4", or "Custom"
-    inverterBrand: string; // "DemoVolt"
-    gebGedaCharge: 'Including' | 'Excluding'; // user prompt: "feda, inclusive or exclusive"
+    inverterBrand: string;
+    gebGedaCharge: 'Including' | 'Excluding';
+    chargesLabel?: string; // the client's name for these charges, e.g. "GEB / GEDA"
     projectType: 'Residential' | 'Commercial'; // user prompt: "residential or commericail"
 
     // Project Size column in Table 2
@@ -65,8 +73,9 @@ export interface QuotationData {
     subsidy: number; // ₹78,000.00
     netPriceAfterSubsidy: number; // calculated: netPayableAmount - subsidy
 
-    // Notes
+    // Notes; those from index customNotesFrom on were added to this quotation
     notes: string[];
+    customNotesFrom?: number;
   };
 
   // Page 3
@@ -96,12 +105,6 @@ export interface QuotationData {
     authorizedPartner: string;
     corporateOffice: string;
     branchOffice: string;
+    contact?: string;
   };
 }
-
-export type InverterPreset = {
-  id: string;
-  label: string;
-  brand: string;
-  specs: string;
-};

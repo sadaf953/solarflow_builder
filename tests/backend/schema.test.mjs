@@ -104,7 +104,7 @@ test('pre-existing users: the owner becomes admin, an earlier stranger stays ina
     assert.equal((await profile(db, people.stranger)).status, 'inactive');
 });
 
-test('new users: add_user app_metadata sets the role; everyone else is inactive', async () => {
+test('new users: add_user app_metadata sets the role; everyone else is an inactive placeholder', async () => {
     people.sales = await addAuthUser(db, 'sales@client.test', viaAddUser('sales'));
     people.cpo = await addAuthUser(db, 'cpo@client.test', viaAddUser('channel_partner_office', { name: 'SUNRISE OFFICE', channel_partner: 'SUNRISE' }));
     people.manager = await addAuthUser(db, 'manager@client.test', viaAddUser('office2', { channel_partner: 'SUNRISE', parent_profile_id: people.cpo }));
@@ -129,7 +129,8 @@ test('new users: add_user app_metadata sets the role; everyone else is inactive'
     for (const id of [people.signup, people.fakeAdmin, people.stamp]) {
         assert.equal((await profile(db, id)).status, 'inactive', 'unknown, invalid or disabled roles stay inactive');
     }
-    assert.equal((await profile(db, people.signup)).user_type, 'sales');
+    assert.equal((await profile(db, people.signup)).user_type, 'pending');
+    assert.equal((await profile(db, people.agent)).channel_partner, 'AGENT A', "a channel partner's key defaults to its name");
 });
 
 test('app_metadata written after the insert (Supabase admin API order) still applies', async () => {
@@ -194,8 +195,12 @@ test('customer visibility follows the login type', async () => {
     assert.deepEqual(await visibleNames(people.agent), ['Agent lead']);
     assert.deepEqual(await visibleNames(people.agent2), []);
     assert.deepEqual(await visibleNames(people.vendor), ['Head office lead']);
-    // An unclaimed directory row matches a vendor login by email or name; a
-    // row linked to another login never does.
+    // An installer sees jobs only through the directory row linked to its login,
+    // never by a matching name or email, and only an admin links the row.
+    assert.deepEqual(await visibleNames(people.vendor2), []);
+    await assert.rejects(as(db, people.sales, tx => tx.query("update public.vendors set profile_id = $1 where name = 'Vendor Two'", [people.vendor2])), /Only an admin/);
+    await assert.rejects(as(db, people.owner, tx => tx.query("update public.vendors set profile_id = $1 where name = 'Vendor Two'", [people.dealer])), /vendor login/);
+    await as(db, people.owner, tx => tx.query("update public.vendors set profile_id = $1 where name = 'Vendor Two'", [people.vendor2]));
     assert.deepEqual(await visibleNames(people.vendor2), ['Other vendor lead']);
     const impostor = await addAuthUser(db, 'impostor@client.test', viaAddUser('vendor', { name: 'Vendor One' }));
     assert.deepEqual(await visibleNames(impostor), []);
@@ -230,6 +235,34 @@ test('writes outside your scope change nothing', async () => {
     await assert.rejects(as(db, people.agent, tx => tx.query("insert into public.activity_log(user_id, action) values ($1, 'x')", [people.owner])), /row-level security/);
 });
 
+test('partners keep their own edits; bookkeeping columns stay with head office', async () => {
+    const update = (uid, id, sql, params = []) => as(db, uid, async tx => (await tx.query(`update public.admin set ${sql} where id = $1`, [id, ...params])).affectedRows);
+    assert.equal(await update(people.vendor, customers.admin.id,
+        "geo_tag_status = 'Done', geo_tag_image = true, installation_date = '2026-10-12', vendor_note = 'ok'"), 1);
+    assert.equal(await update(people.dealer, customers.dealer.id,
+        "material_order_notes = 'urgent', light_bill = true, custom_fields = '{\"roof\": \"tin\"}'"), 1);
+    assert.equal(await update(people.cpo, customers.manager.id, "stage = 'LEADS', internal_remarks = 'call back'"), 1);
+    for (const [uid, id, sql] of [
+        [people.cpo, customers.manager.id, "delivery_status = 'DELIVERED'"],
+        [people.cpo, customers.manager.id, 'deleted_at = now()'],
+        [people.dealer, customers.dealer.id, "delivery_batch_id = 'B-9'"],
+        [people.vendor, customers.admin.id, "vendor_paid_by = 'me', vendor_paid_date = '2026-10-12'"],
+    ]) {
+        await assert.rejects(update(uid, id, sql), /head office/, sql);
+    }
+    assert.equal(await update(people.sales, customers.manager.id, "vendor_quote = 5000, delivery_batch_id = null"), 1);
+});
+
+test('quotations and activity link only to customers the writer can see', async () => {
+    const quote = sql => as(db, people.dealer, tx => tx.query(sql, [customers.admin.id]));
+    await assert.rejects(quote("insert into public.quotations(customer_name, source_lead_id) values ('x', $1)"), /customer you can see/);
+    const own = await as(db, people.dealer, tx => one(tx, "insert into public.quotations(customer_name, source_lead_id) values ('Own', $1) returning id", [customers.dealer.id]));
+    await assert.rejects(as(db, people.dealer, tx => tx.query('update public.quotations set converted_lead_id = $2 where id = $1', [own.id, customers.admin.id])), /customer you can see/);
+    await db.query('delete from public.quotations where id = $1', [own.id]);
+    await assert.rejects(as(db, people.dealer, tx => tx.query("insert into public.activity_log(user_id, customer_id, action) values ($1, $2, 'note')",
+        [people.dealer, customers.admin.id])), /row-level security/);
+});
+
 test('documents, BOMs and storage objects follow customer visibility', async () => {
     await as(db, people.owner, async tx => {
         await tx.query("insert into public.documents(customer_id, file_name, storage_path) values ($1, 'a.pdf', $2), ($3, 'b.pdf', $4)",
@@ -257,7 +290,12 @@ test('profiles: limited directory, and only admins change role, status or partne
             /Only an admin/, `dealer must not change own ${column}`);
     }
     assert.equal((await profile(db, people.dealer)).user_type, 'agent2');
-    await as(db, people.dealer, tx => tx.query("update public.profiles set name = 'DEALER 1', phone_number = '9999999999' where id = $1", [people.dealer]));
+    // The name decides which leads a dealer sees: only an admin or its office renames it.
+    await assert.rejects(as(db, people.dealer, tx => tx.query("update public.profiles set name = 'DEALER 1' where id = $1", [people.dealer])), /Only an admin/);
+    await as(db, people.dealer, tx => tx.query("update public.profiles set phone_number = '9999999999' where id = $1", [people.dealer]));
+    assert.equal((await profile(db, people.dealer)).phone_number, '9999999999');
+    await assert.rejects(as(db, people.cpo, tx => tx.query("update public.profiles set name = 'X' where id = $1", [people.cpo])), /Only an admin/);
+    await as(db, people.cpo, tx => tx.query("update public.profiles set name = 'DEALER 1' where id = $1", [people.dealer]));
     assert.equal((await profile(db, people.dealer)).name, 'DEALER 1');
     const otherRow = await as(db, people.dealer, async tx => (await tx.query("update public.profiles set name = 'x' where id = $1", [people.agent])).affectedRows);
     assert.equal(otherRow, 0);
@@ -317,8 +355,10 @@ test('merge_custom_fields merges and removes null keys', async () => {
 
 test('calendar: everyone active reads and adds; only the creator or head office edits', async () => {
     const event = await as(db, people.vendor, tx => one(tx,
-        "insert into public.calendar_events(title, kind, starts_on, vendor_name, created_by_name) values ('Away', 'unavailable', '2026-11-02', 'Vendor One', 'VENDOR ONE') returning *"));
+        "insert into public.calendar_events(title, kind, starts_on, vendor_name, created_by_name) values ('Away', 'unavailable', '2026-11-02', 'Vendor Two', 'Head office') returning *"));
     assert.equal(event.created_by, people.vendor);
+    assert.equal(event.vendor_name, 'Vendor One', "an installer's entry always names its own directory row");
+    assert.equal(event.created_by_name, 'VENDOR ONE', 'the author comes from the profile');
     assert.equal((await as(db, people.dealer, tx => rows(tx, 'select id from public.calendar_events'))).length, 1);
     assert.equal((await as(db, people.signup, tx => rows(tx, 'select id from public.calendar_events'))).length, 0);
     const edit = (uid, sql) => as(db, uid, async tx => (await tx.query(sql, [event.id])).affectedRows);
@@ -330,6 +370,16 @@ test('calendar: everyone active reads and adds; only the creator or head office 
     await assert.rejects(as(db, people.dealer, tx => tx.query(
         "insert into public.calendar_events(title, kind, starts_on) values ('x', 'party', '2026-11-03')")), /check constraint/);
     assert.equal(await edit(people.vendor, 'delete from public.calendar_events where id = $1'), 1);
+
+    const dealerEvent = await as(db, people.dealer, tx => one(tx,
+        "insert into public.calendar_events(title, kind, starts_on, vendor_name, customer_id) values ('Site', 'unavailable', '2026-11-04', 'Vendor One', $1) returning *", [customers.dealer.id]));
+    assert.equal(dealerEvent.vendor_name, null, 'only head office or the installer names an installer');
+    await assert.rejects(as(db, people.dealer, tx => tx.query(
+        "insert into public.calendar_events(title, starts_on, customer_id) values ('x', '2026-11-04', $1)", [customers.admin.id])), /customer you can see/);
+    const officeEvent = await as(db, people.sales, tx => one(tx,
+        "insert into public.calendar_events(title, kind, starts_on, vendor_name) values ('Vendor away', 'unavailable', '2026-11-05', 'Vendor Two') returning *"));
+    assert.equal(officeEvent.vendor_name, 'Vendor Two');
+    await db.query('delete from public.calendar_events where id = any($1)', [[dealerEvent.id, officeEvent.id]]);
 });
 
 test('staff_attendance: new statuses, and staff file only their own requests', async () => {
@@ -347,7 +397,8 @@ test('staff_attendance: new statuses, and staff file only their own requests', a
 });
 
 test('team chat: own messages only; admins may remove any', async () => {
-    const msg = await as(db, people.dealer, tx => one(tx, "insert into public.team_chat_messages(sender_name, text) values ('DEALER 1', 'hello') returning id"));
+    const msg = await as(db, people.dealer, tx => one(tx, "insert into public.team_chat_messages(sender_name, sender_role, user_type, text) values ('Head Office', 'Admin', 'admin', 'hello') returning *"));
+    assert.deepEqual([msg.sender_name, msg.sender_role, msg.user_type], ['DEALER 1', 'Channel Partner', 'agent2']);
     await assert.rejects(as(db, people.dealer, tx => tx.query("insert into public.team_chat_messages(sender_id, sender_name, text) values ($1, 'x', 'y')", [people.owner])), /row-level security/);
     assert.equal(await as(db, people.vendor, async tx => (await tx.query('delete from public.team_chat_messages where id = $1', [msg.id])).affectedRows), 0);
     assert.equal(await as(db, people.owner, async tx => (await tx.query('delete from public.team_chat_messages where id = $1', [msg.id])).affectedRows), 1);

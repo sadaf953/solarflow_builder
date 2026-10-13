@@ -4,15 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev:template": "vite --config template/vite.config.js",
-    "build:template": "vite build --config template/vite.config.js",
+    "dev:template": "SF_ENV_DIR=. vite --config template/vite.config.js",
+    "build:template": "SF_ENV_DIR=. vite build --config template/vite.config.js",
     "dev:builder": "node scripts/pack-template.mjs && vite --config builder/vite.config.js",
-    "build:builder": "node scripts/pack-template.mjs && vite build --config builder/vite.config.js",
+    "build:builder": "node scripts/check-secrets.mjs && node scripts/pack-template.mjs && vite build --config builder/vite.config.js",
     "pack:template": "node scripts/pack-template.mjs",
     "make-client": "node scripts/make-client.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
     "test": "node --test --test-reporter=dot \"tests/**/*.test.mjs\"",
-    "lint": "eslint template builder scripts"
+    "lint": "eslint builder scripts tests/builder && eslint -c template/eslint.config.js template"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

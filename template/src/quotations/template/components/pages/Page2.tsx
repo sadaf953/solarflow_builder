@@ -31,37 +31,12 @@ export const Page2: React.FC<Page2Props> = ({
 
   const displayProjectSize = page2.projectSize || displayKw;
 
-  // 3 Brand Options with graceful fallback
-  const defaultBrands = [
-    {
-      brandName: 'SolarFlow Essential',
-      baseValue: page2.baseValue || 189000,
-      discount: page2.discount || 0,
-      netPayableAmount: page2.netPayableAmount || 189000,
-      subsidy: page2.subsidy || 78000,
-      netPriceAfterSubsidy: page2.netPriceAfterSubsidy || 111000,
-    },
-    {
-      brandName: 'SolarFlow Plus',
-      baseValue: 198000,
-      discount: 0,
-      netPayableAmount: 198000,
-      subsidy: 78000,
-      netPriceAfterSubsidy: 120000,
-    },
-    {
-      brandName: 'SolarFlow Premium',
-      baseValue: 205000,
-      discount: 0,
-      netPayableAmount: 205000,
-      subsidy: 78000,
-      netPriceAfterSubsidy: 127000,
-    },
-  ];
-
-  const brands = page2.brandOptions && page2.brandOptions.length === 3
-    ? page2.brandOptions
-    : defaultBrands;
+  // Older or incomplete data still shows three columns.
+  const brands = [0, 1, 2].map((i) => page2.brandOptions?.[i] || {
+    brandName: `Option ${i + 1}`, baseValue: 0, discount: 0, netPayableAmount: 0, subsidy: 0, netPriceAfterSubsidy: 0,
+  });
+  const chargesLabel = page2.chargesLabel || 'GEB / GEDA';
+  const customNotesFrom = page2.customNotesFrom ?? 6;
 
   return (
     <div className="a4-page bg-white shadow-xl print:shadow-none border border-gray-200 print:border-none mx-auto w-[210mm] min-h-[297mm] p-[12mm_15mm] flex flex-col justify-between text-gray-900 text-sm relative box-border overflow-hidden">
@@ -70,7 +45,7 @@ export const Page2: React.FC<Page2Props> = ({
         <DocumentHeader
           company={company}
           assets={assets}
-          onEditLogo={() => onOpenAssetSlot?.('solarflowLogoUrl')}
+          onEditLogo={() => onOpenAssetSlot?.('logoUrl')}
         />
 
         {/* Title Header (Corporate Blue in proposal) */}
@@ -125,16 +100,16 @@ export const Page2: React.FC<Page2Props> = ({
                 </td>
               </tr>
 
-              {/* Row 3: GEB / GEDA Charge (Merged Make & Quantity - line removed) */}
+              {/* Row 3: connection / registration charges */}
               <tr>
                 <td className="border border-black px-3 py-1.5 font-bold text-gray-900">
-                  Geb / Geda Charge
+                  {chargesLabel} Charge
                 </td>
                 <td className="border border-black px-3 py-1.5 text-gray-800 font-medium">
                   <HighlightWrapper
                     isChanged={isFieldChanged('page2.gebGedaCharge')}
                     active={highlightChanges}
-                    fieldLabel="Geb / Geda Charge"
+                    fieldLabel={`${chargesLabel} Charge`}
                     onClick={() => onEditField?.('page2.gebGedaCharge')}
                   >
                     <span>{page2.gebGedaCharge}</span>
@@ -325,7 +300,7 @@ export const Page2: React.FC<Page2Props> = ({
           <ul className="list-disc list-inside space-y-1 text-[11px] leading-relaxed text-gray-800 pl-1">
             {page2.notes.map((note, idx) => {
               // Check if this note is a custom appended point
-              const isCustom = idx >= 6;
+              const isCustom = idx >= customNotesFrom;
               return (
                 <li key={idx} className="marker:text-gray-900">
                   <HighlightWrapper
@@ -347,7 +322,7 @@ export const Page2: React.FC<Page2Props> = ({
       <DocumentFooter
         footer={footer}
         assets={assets}
-        onEditLogo={() => onOpenAssetSlot?.('demoPartnerLogoUrl')}
+        onEditLogo={() => onOpenAssetSlot?.('partnerLogoUrl')}
       />
     </div>
   );

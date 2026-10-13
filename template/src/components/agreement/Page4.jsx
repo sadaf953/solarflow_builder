@@ -1,4 +1,4 @@
-import React from 'react';
+import { AGREEMENT_COMPANY, BLANK } from './agreementData.js';
 
 export const Page4 = ({ data, fontSizeClass = 'text-[17px]' }) => {
   const getHighlightStyle = () => ({
@@ -74,18 +74,18 @@ export const Page4 = ({ data, fontSizeClass = 'text-[17px]' }) => {
             <div>
               <span className="font-semibold">Name: </span>
               <span className="font-normal" style={getHighlightStyle()}>
-                {data.consumerName || 'DEMO CUSTOMER ONE'}
+                {data.consumerName || BLANK}
               </span>
             </div>
 
             <div>
               <span className="font-semibold">Address </span>
               <span>Vill: </span>
-              <span className="font-normal" style={getHighlightStyle()}>{data.village || 'DEMO TOWN'}</span>
+              <span className="font-normal" style={getHighlightStyle()}>{data.village || BLANK}</span>
               <span> Tal: </span>
-              <span className="font-normal" style={getHighlightStyle()}>{data.taluka || 'DEMO TOWN'}</span>
+              <span className="font-normal" style={getHighlightStyle()}>{data.taluka || BLANK}</span>
               <span> Dist: </span>
-              <span className="font-normal" style={getHighlightStyle()}>{data.district || ''}</span>
+              <span className="font-normal" style={getHighlightStyle()}>{data.district || BLANK}</span>
             </div>
 
             {/* Signature Box */}
@@ -110,7 +110,7 @@ export const Page4 = ({ data, fontSizeClass = 'text-[17px]' }) => {
             <div className="pt-2">
               <span className="font-semibold">Date-</span>
               <span className="font-normal" style={getHighlightStyle()}>
-                {data.executionDate || '23-06-2026'}
+                {data.executionDate || BLANK}
               </span>
             </div>
           </div>
@@ -121,12 +121,12 @@ export const Page4 = ({ data, fontSizeClass = 'text-[17px]' }) => {
 
             <div>
               <span className="font-semibold">Name - </span>
-              <span className="font-normal">{data.vendorName || 'SolarFlow Demo Energy'}</span>
+              <span className="font-normal">{AGREEMENT_COMPANY.name}</span>
             </div>
 
             <div>
               <span className="font-semibold">Address- </span>
-              <span className="font-normal">{data.vendorAddress || '100 Demo Avenue, Sample City (fictional)'}</span>
+              <span className="font-normal">{AGREEMENT_COMPANY.address}</span>
             </div>
 
             {/* Vendor Stamp & Signature Box - Enlarged by 30% and shifted center-right */}
@@ -156,7 +156,7 @@ export const Page4 = ({ data, fontSizeClass = 'text-[17px]' }) => {
             <div className="pt-2 text-right">
               <span className="font-semibold">Date:</span>
               <span className="font-normal" style={getHighlightStyle()}>
-                {data.executionDate || '23-06-2026'}
+                {data.executionDate || BLANK}
               </span>
             </div>
 

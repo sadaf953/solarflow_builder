@@ -1,21 +1,17 @@
-import solarflowLogoBlue from '../../../assets/solarflow-logo-blue.svg?inline';
+interface LogoProps { url?: string; className?: string; }
 
-interface LogoProps { customLogoUrl?: string; className?: string; }
+/** The company's logo, or its name in the logo's place when no logo was supplied. */
+export const CompanyLogo: React.FC<LogoProps & { name: string }> = ({ url, name, className = 'h-[75px]' }) => (url ? (
+  <img src={url} alt={name} className={`object-contain ${className}`} />
+) : (
+  <span className="block max-w-[320px] text-[24px] font-extrabold uppercase leading-tight tracking-tight text-[#0c3882]">{name}</span>
+));
 
-export const SolarFlowLogo: React.FC<LogoProps> = ({ customLogoUrl, className = 'h-[75px]' }) => (
-  <img src={customLogoUrl || solarflowLogoBlue} alt="SolarFlow Solar Energy" className={`object-contain ${className}`} />
-);
+// Supplied artwork only, in both preview and PDF; nothing is drawn without it.
+export const Emblem: React.FC<LogoProps & { alt: string }> = ({ url, alt, className = 'h-12' }) => (url ? (
+  <img src={url} alt={alt} className={`object-contain ${className}`} />
+) : null);
 
-// Render supplied artwork in both preview and PDF; never substitute duplicate text badges.
-export const DemoQualityBadge: React.FC<LogoProps> = ({ customLogoUrl, className = 'h-12' }) => customLogoUrl ? (
-  <img src={customLogoUrl} alt="GEDA symbol" className={`object-contain ${className}`} />
-) : null;
-export const DemoEnergyBadge: React.FC<LogoProps> = ({ customLogoUrl, className = 'h-12' }) => customLogoUrl ? (
-  <img src={customLogoUrl} alt="Energy emblem" className={`object-contain ${className}`} />
-) : null;
-export const DemoPartnerLogo: React.FC<LogoProps> = ({ customLogoUrl, className = 'h-12' }) => (
-  <img src={customLogoUrl || solarflowLogoBlue} alt="Partner logo" className={`object-contain ${className}`} />
-);
-export const DemoQuoteBanner: React.FC<LogoProps> = ({ customLogoUrl, className = '' }) => (
-  <img src={customLogoUrl || `${import.meta.env.BASE_URL}banner.png`} alt="Solar energy banner" className={`w-full object-contain ${className}`} />
-);
+export const QuoteBanner: React.FC<LogoProps> = ({ url, className = '' }) => (url ? (
+  <img src={url} alt="PM Surya Ghar solar scheme banner" className={`w-full object-contain ${className}`} />
+) : null);

@@ -20,11 +20,20 @@ export const README_PLACEHOLDERS = Object.freeze({
 const ALWAYS_ENABLED_ROLES = ['admin', 'sales'];
 const TERMINAL_STAGES = ['COMPLETED', 'LOST PROJECT'];
 
-// Postgres rejects NUL in text; everything else is safe once quotes are doubled
-// (standard_conforming_strings is on, so backslashes are literal).
-const clean = value => String(value ?? '').replaceAll('\0', '');
+// Postgres rejects NUL in text and lone surrogates in jsonb, so both are
+// removed from every string before it is written. Everything else is safe once
+// quotes are doubled (standard_conforming_strings is on, so backslashes are literal).
+const clean = value => String(value ?? '').toWellFormed().replaceAll('\0', '');
+const cleanDeep = value => {
+    if (typeof value === 'string') return clean(value);
+    if (Array.isArray(value)) return value.map(cleanDeep);
+    if (value && typeof value === 'object') {
+        return Object.fromEntries(Object.entries(value).map(([key, item]) => [clean(key), cleanDeep(item)]));
+    }
+    return value;
+};
 const sqlText = value => `'${clean(value).replaceAll("'", "''")}'`;
-const sqlJson = value => `${sqlText(JSON.stringify(value).replaceAll('\\u0000', ''))}::jsonb`;
+const sqlJson = value => `${sqlText(JSON.stringify(cleanDeep(value)))}::jsonb`;
 const sqlTextArray = values => (values.length ? `array[${values.map(sqlText).join(', ')}]` : `'{}'::text[]`);
 
 export function configSeedSql(config) {

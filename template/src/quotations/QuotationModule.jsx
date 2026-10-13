@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ArrowLeft, ChevronDown, Download, Eye, FileText, Plus, Search, Share2 } from 'lucide-react';
 import { supabase } from '../supabase';
-import AddLeadModal from '../components/AddLeadModal';
+import { lazyWithRetry, LazyBoundary } from '../lib/lazy.js';
+import { BRANDING } from '../config/index.js';
 import { useGlobalPopup } from '../components/GlobalPopup';
 import { canUseQuotations,fromRow,money,toLead,validate } from './model';
 import { quotationRepository as repo } from './client';
@@ -11,6 +12,8 @@ import QuotationForm from './QuotationForm';
 import DocumentPages from './DocumentPages';
 import { downloadQuotationFile, generateQuotationPdf, shareQuotationFile } from './pdf';
 import './quotation.css';
+
+const AddLeadModal = lazyWithRetry(() => import('../components/AddLeadModal'));
 
 export const openQuotations = () => { window.location.hash = '/quotations'; };
 const readRoute = () => window.location.hash.replace(/^#/,'');
@@ -76,7 +79,7 @@ function Preview({ row,onGenerate,onEdit,onBack,busy }) {
     return <div style={full ? {position:'fixed',inset:0,zIndex:55,background:'#f6f7f9',padding:12,overflow:'auto'} : undefined}><div className="q-preview-toolbar"><button onClick={onBack}><ArrowLeft size={16} /> Back to quotations</button><button onClick={onEdit}>Edit values</button><button onClick={() => changeZoom(z => Math.max(.25,z - .1))} aria-label="Zoom out">−</button><span className="q-muted">{Math.round(zoom * 100)}%</span><button onClick={() => changeZoom(z => Math.min(1.5,z + .1))} aria-label="Zoom in">+</button><button onClick={fitToWidth}>Fit width</button><button aria-pressed={highlights} onClick={() => setHighlights(v => !v)}>Highlights: {highlights ? 'on' : 'off'}</button><button onClick={() => { manualZoom.current = false; setFull(v => !v); }}>{full ? 'Exit full screen' : 'Full screen'}</button><button className="q-primary" disabled={busy} onClick={() => onGenerate(row, 'download')}><Download size={16} /> {busy ? 'Generating…' : 'Download'}</button><button disabled={busy} onClick={() => onGenerate(row, 'share')}><Share2 size={16} /> Share</button></div><div className="q-preview-scroll" ref={scrollRef}><div style={{width:794 * zoom,height:(1123 * 3 + 60) * zoom,margin:'0 auto'}}><div className="q-preview-surface" style={{width:794,transform:`scale(${zoom})`,transformOrigin:'top left'}}><DocumentPages row={row} highlights={highlights} /></div></div></div></div>;
 }
 export default function QuotationModule({ user,meta,channelPartners = [],onCreateLead,onViewLead,embedded = false,onClose }) {
-    const { showAlert,showConfirm } = useGlobalPopup();
+    const { showAlert } = useGlobalPopup();
     const [route,setRoute] = useState(readRoute);
     const acceptedRoute = useRef(route);
     const dirty = useRef(false);
@@ -125,7 +128,7 @@ export default function QuotationModule({ user,meta,channelPartners = [],onCreat
     useEffect(() => {
         if (!open || !allowed) return;
         let current = true;
-        supabase.from('profiles').select('*').eq('id',user.id).single().then(({data}) => { if (current && data) setProfile({...user,name:data.name || user.name,phone:data.phone_number || data.phone || data.mobile || ''}); });
+        supabase.from('profiles').select('name, phone_number').eq('id',user.id).single().then(({data}) => { if (current && data) setProfile({...user,name:data.name || user.name,phone:data.phone_number || ''}); });
         return () => { current = false; };
     },[open,allowed,user]);
     useEffect(() => {
@@ -200,7 +203,7 @@ export default function QuotationModule({ user,meta,channelPartners = [],onCreat
     const localCopies = mode === 'list' ? recoveries(user.id) : [];
     const isPartnerPortal = ['agent','agent2'].includes(user?.userType);
     return <div className={`q-module${embedded ? ' q-module-embedded' : ''}${isPartnerPortal ? ' q-module-partner' : ''}`}>
-        {!embedded && <header className="q-header"><button aria-label={mode === 'list' ? 'Back to CRM' : 'Back to quotations'} onClick={() => navigate(mode === 'list' ? '' : '/quotations')}><ArrowLeft size={18} /></button><div style={{flex:1}}><h1>Quotation Maker</h1><p>{validId && row ? `Quote-${row.quotation_no} · ${row.status}` : 'SOLARFLOW · SOLAR ENERGY'}</p></div><FileText size={22} /></header>}
+        {!embedded && <header className="q-header"><button aria-label={mode === 'list' ? 'Back to CRM' : 'Back to quotations'} onClick={() => navigate(mode === 'list' ? '' : '/quotations')}><ArrowLeft size={18} /></button><div style={{flex:1}}><h1>Quotation Maker</h1><p>{validId && row ? `Quote-${row.quotation_no} · ${row.status}` : BRANDING.companyName}</p></div><FileText size={22} /></header>}
         <main className="q-content">
             {embedded && mode !== 'list' && <div className="q-subnav"><button aria-label="Back to quotations" onClick={() => navigate('/quotations')}><ArrowLeft size={16} /> Back to quotations</button><span>{validId && row ? `Quote-${row.quotation_no} · ${row.status}` : mode === 'new' ? 'New quotation' : 'Quotation'}</span></div>}
             {!online && <div className="q-notice" role="status">You’re offline. Draft edits can be recovered on this device. Downloads and outcomes need a connection.</div>}
@@ -219,6 +222,6 @@ export default function QuotationModule({ user,meta,channelPartners = [],onCreat
             {route !== '/quotations' && (!validId || !['new','edit','preview'].includes(mode)) && <div className="q-error">Quotation page not found.</div>}
         </main>
         {lost && <div className="q-dialog" role="dialog" aria-modal="true" aria-labelledby="q-lost-title"><div className="q-panel"><h2 id="q-lost-title">Mark quotation lost</h2><label className="q-field"><span>Reason (required)</span><select value={reason} onChange={e => setReason(e.target.value)}><option value="">Choose reason</option>{['Price','Competitor selected','Project postponed','Not interested','Other'].map(r => <option key={r}>{r}</option>)}</select></label><label className="q-field" style={{marginTop:16}}><span>Remark (optional)</span><textarea maxLength={1000} value={remark} onChange={e => setRemark(e.target.value)} /></label><div className="q-actions"><button disabled={busy} onClick={() => setLost(null)}>Cancel</button><button className="q-primary" disabled={busy || !reason} onClick={() => run(async () => { const latest = await repo.get(lost.id); await repo.outcome(latest,'lost',user,reason,remark); setLost(null); setRefresh(n => n + 1); })}>Mark Lost</button></div></div></div>}
-        {LEAD_INTEGRATION_ENABLED && conversion && <AddLeadModal isOpen initialValues={leadPrefill} user={user} meta={meta} channel_partners={channelPartners} onClose={() => {setConversion(null);dirty.current = false;}} onSave={async (data,files) => { const lead = await onCreateLead(data,files,conversion); dirty.current = false; setConversion(null); setRefresh(n => n + 1); if (lead) { navigate(''); onViewLead(lead); } }} />}
+        {LEAD_INTEGRATION_ENABLED && conversion && <LazyBoundary><AddLeadModal isOpen initialValues={leadPrefill} user={user} meta={meta} channel_partners={channelPartners} onClose={() => {setConversion(null);dirty.current = false;}} onSave={async (data,files) => { const lead = await onCreateLead(data,files,conversion); dirty.current = false; setConversion(null); setRefresh(n => n + 1); if (lead) { navigate(''); onViewLead(lead); } }} /></LazyBoundary>}
     </div>;
 }

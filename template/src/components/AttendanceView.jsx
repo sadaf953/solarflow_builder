@@ -1,1242 +1,434 @@
-// src/components/AttendanceView.jsx
-// Staff Attendance Management for Admin Portal
-// Supports Week View (default) and Month View, linked to office users.
-
-import { useState, useEffect, useMemo, useCallback } from 'react';
-import { 
-    Calendar, ChevronLeft, ChevronRight, CheckCircle2, XCircle, 
-    Clock, Search, Check, AlertCircle, Users, Briefcase, FileSpreadsheet, 
-    Sparkles, Filter, MoreHorizontal, UserCheck, ShieldCheck, Sun, Info, CalendarDays, Download,
-    CalendarPlus, CheckCheck, X, ThumbsUp, ThumbsDown, Send
-} from 'lucide-react';
-import { 
-    fetchOfficeStaff, 
-    getAttendanceRecords, 
-    setStaffAttendance, 
-    markAllStaffPresent, 
-    exportAttendanceToCSV,
-    ATTENDANCE_STATUSES,
-    submitHolidayRequest,
-    submitSelfAttendance,
-    approveAttendanceRequest,
-    rejectAttendanceRequest
-} from '../utils/staffAttendance';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Briefcase, CalendarPlus, Check, CheckCheck, CheckCircle2, ChevronLeft, ChevronRight, Download, Users, X, XCircle } from 'lucide-react';
+import { isOn } from '../config/index.js';
 import { logActivity } from '../utils';
+import { downloadBlob } from '../lib/download.js';
+import { MONTH_NAMES, formatDate, todayIST } from '../lib/format.js';
+import {
+    EmptyState, ErrorBanner, Field, Input, LoadingState, Modal, SearchInput, Spinner, StatTile, SuccessBanner, TagPicker, Textarea, useRefreshOnFocus,
+} from '../ui/index.js';
+import {
+    ATTENDANCE_STATUSES, MARKABLE_STATUSES, MAX_REQUEST_DAYS, attendanceCsv, datesBetween, fetchAttendance, fetchOfficeStaff,
+    fetchPendingRequests, isPendingStatus, markStaffPresent, presentWeight, requestOwnAttendance, reviewRequests, setStaffAttendance,
+} from '../utils/staffAttendance';
 
-const MONTH_NAMES = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-];
+const HEAD_OFFICE = ['admin', 'sales'];
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const STATUS_OPTIONS = MARKABLE_STATUSES.map(id => ({ id, label: ATTENDANCE_STATUSES[id].label }));
 
-const WEEKDAY_NAMES_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const dayDate = iso => new Date(`${iso}T00:00:00Z`);
+const addDays = (iso, n) => {
+    const date = dayDate(iso);
+    date.setUTCDate(date.getUTCDate() + n);
+    return date.toISOString().slice(0, 10);
+};
+const weekStart = iso => addDays(iso, -((dayDate(iso).getUTCDay() + 6) % 7)); // Monday
+const shiftMonth = (iso, n) => {
+    const [y, m] = iso.split('-').map(Number);
+    return new Date(Date.UTC(y, m - 1 + n, 1)).toISOString().slice(0, 10);
+};
+const shortDay = iso => `${Number(iso.slice(8))} ${MONTH_NAMES[Number(iso.slice(5, 7)) - 1].slice(0, 3)}`;
 
-function getStartOfWeek(d) {
-    const date = new Date(d);
-    const day = date.getDay();
-    // Monday as first day of work week
-    const diff = date.getDate() - day + (day === 0 ? -6 : 1);
-    const monday = new Date(date.setDate(diff));
-    monday.setHours(0, 0, 0, 0);
-    return monday;
+// Consecutive days of one person's request show as one card.
+function groupRequests(rows) {
+    const sorted = [...rows].sort((a, b) => a.staff_name.localeCompare(b.staff_name) || a.status.localeCompare(b.status) || a.date.localeCompare(b.date));
+    const groups = [];
+    for (const row of sorted) {
+        const last = groups[groups.length - 1];
+        if (last && last.staff_name === row.staff_name && last.status === row.status && last.notes === row.notes && addDays(last.end, 1) === row.date) {
+            last.end = row.date;
+            last.rows.push(row);
+        } else {
+            groups.push({ key: row.id, staff_name: row.staff_name, status: row.status, notes: row.notes, start: row.date, end: row.date, rows: [row] });
+        }
+    }
+    return groups.sort((a, b) => a.start.localeCompare(b.start));
 }
 
-function formatDateKey(dateObj) {
-    const y = dateObj.getFullYear();
-    const m = String(dateObj.getMonth() + 1).padStart(2, '0');
-    const d = String(dateObj.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+function StatusChip({ status, compact }) {
+    const cfg = ATTENDANCE_STATUSES[status];
+    if (!cfg) return <span className="text-stone-300" aria-label="Not marked">–</span>;
+    return (
+        <span className={`inline-flex items-center justify-center rounded-lg border font-bold ${compact ? 'h-7 min-w-7 px-1 text-[10px]' : 'min-w-14 px-2 py-1 text-[11px]'} ${cfg.bg}`}>
+            {compact ? cfg.short : cfg.label}
+        </span>
+    );
 }
 
 export default function AttendanceView({ currentUser }) {
-    const [viewMode, setViewMode] = useState('week'); // 'week' | 'month'
-    const [anchorDate, setAnchorDate] = useState(() => new Date());
-    const [staffList, setStaffList] = useState([]);
-    const [records, setRecords] = useState({});
+    const today = todayIST();
+    const userType = currentUser?.userType || currentUser?.user_type;
+    const isHeadOffice = HEAD_OFFICE.includes(userType);
+    const markedBy = currentUser?.name || '';
+
+    const [viewMode, setViewMode] = useState('week');
+    const [anchor, setAnchor] = useState(today);
+    const [staff, setStaff] = useState([]);
+    const [rows, setRows] = useState([]);
+    const [pending, setPending] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [searchQuery, setSearchQuery] = useState('');
-    const [roleFilter, setRoleFilter] = useState('all');
-    
-    // Quick Mark Popover / Modal state
-    const [activeCell, setActiveCell] = useState(null); // { staffName, dateStr, currentStatus, currentNotes }
-    const [cellNotes, setCellNotes] = useState('');
-    const [batchSuccessMsg, setBatchSuccessMsg] = useState('');
+    const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
+    const [search, setSearch] = useState('');
+    const [busy, setBusy] = useState(false);
+    const [cell, setCell] = useState(null);
+    const [request, setRequest] = useState(null);
+    const [requestError, setRequestError] = useState('');
 
-    const todayStr = useMemo(() => formatDateKey(new Date()), []);
+    const days = useMemo(() => {
+        if (viewMode === 'week') return datesBetween(weekStart(anchor), addDays(weekStart(anchor), 6));
+        const first = `${anchor.slice(0, 7)}-01`;
+        return datesBetween(first, addDays(shiftMonth(first, 1), -1));
+    }, [viewMode, anchor]);
 
-    const currentUserType = currentUser?.user_type || currentUser?.userType;
-    const isAdmin = currentUserType === 'admin';
-    const currentStaffName = currentUser?.name || 'Staff User';
+    const self = useMemo(() => (currentUser?.id ? { id: currentUser.id, name: String(currentUser.name || '').trim(), role: currentUser.role || '' } : null), [currentUser?.id, currentUser?.name, currentUser?.role]);
 
-    // Holiday Request Modal State
-    const [showHolidayModal, setShowHolidayModal] = useState(false);
-    const [holidayStaff, setHolidayStaff] = useState(() => currentStaffName);
-    const [holidayStartDate, setHolidayStartDate] = useState(() => {
-        const d = new Date();
-        d.setDate(d.getDate() + 1);
-        return formatDateKey(d);
-    });
-    const [holidayEndDate, setHolidayEndDate] = useState(() => {
-        const d = new Date();
-        d.setDate(d.getDate() + 1);
-        return formatDateKey(d);
-    });
-    const [holidayReason, setHolidayReason] = useState('');
-    const [holidaySubmitting, setHolidaySubmitting] = useState(false);
-
-    // Self-Mark Present Modal State
-    const [showSelfMarkModal, setShowSelfMarkModal] = useState(false);
-    const [selfMarkDate, setSelfMarkDate] = useState(() => formatDateKey(new Date()));
-    const [selfMarkNotes, setSelfMarkNotes] = useState('');
-    const [selfMarkSubmitting, setSelfMarkSubmitting] = useState(false);
-
-    // Pending Approvals Calculation
-    const pendingRequests = useMemo(() => {
-        const list = [];
-        Object.entries(records || {}).forEach(([key, rec]) => {
-            if (rec?.status === 'pending_present' || rec?.status === 'holiday_request') {
-                const parts = key.split('_');
-                const dateStr = parts[parts.length - 1];
-                const staffName = parts.slice(0, parts.length - 1).join('_');
-                list.push({
-                    key,
-                    staffName: rec.staff_name || staffName,
-                    dateStr,
-                    status: rec.status,
-                    notes: rec.notes || '',
-                    markedBy: rec.markedBy || rec.marked_by
-                });
-            }
-        });
-        return list.sort((a, b) => b.dateStr.localeCompare(a.dateStr));
-    }, [records]);
-
-    // Load staff members
-    const loadStaff = useCallback(async () => {
-        const staff = await fetchOfficeStaff();
-        setStaffList(staff);
-    }, []);
-
-    // Load attendance records
-    const loadRecords = useCallback(async () => {
-        setLoading(true);
+    const load = useCallback(async () => {
         try {
-            // Determine date bounds
-            let start, end;
-            if (viewMode === 'week') {
-                const mon = getStartOfWeek(anchorDate);
-                const sun = new Date(mon);
-                sun.setDate(sun.getDate() + 6);
-                start = formatDateKey(mon);
-                end = formatDateKey(sun);
-            } else {
-                const y = anchorDate.getFullYear();
-                const m = anchorDate.getMonth();
-                start = `${y}-${String(m + 1).padStart(2, '0')}-01`;
-                const daysInMonth = new Date(y, m + 1, 0).getDate();
-                end = `${y}-${String(m + 1).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
-            }
-            const data = await getAttendanceRecords(start, end);
-            setRecords(data);
+            const [staffList, attendance, requests] = await Promise.all([
+                isHeadOffice ? fetchOfficeStaff() : Promise.resolve(self?.name ? [self] : []),
+                fetchAttendance(days[0], days[days.length - 1]),
+                isHeadOffice ? fetchPendingRequests() : Promise.resolve([]),
+            ]);
+            setStaff(staffList);
+            setRows(attendance);
+            setPending(requests);
+            setError('');
+        } catch (err) {
+            console.error('Could not load attendance:', err);
+            setError(err.message || 'Check your connection and try again.');
         } finally {
             setLoading(false);
         }
-    }, [viewMode, anchorDate]);
+    }, [isHeadOffice, self, days]);
 
-    useEffect(() => {
-        loadStaff();
-    }, [loadStaff]);
+    useEffect(() => { load(); }, [load]);
+    useRefreshOnFocus(load);
 
-    useEffect(() => {
-        loadRecords();
-    }, [loadRecords]);
-
-    // Re-sync on external change
-    useEffect(() => {
-        const handleSync = () => loadRecords();
-        window.addEventListener('solarflow-attendance-changed', handleSync);
-        return () => window.removeEventListener('solarflow-attendance-changed', handleSync);
-    }, [loadRecords]);
-
-    // Navigation handlers
-    const handlePrev = () => {
-        setAnchorDate(prev => {
-            const next = new Date(prev);
-            if (viewMode === 'week') {
-                next.setDate(next.getDate() - 7);
-            } else {
-                next.setMonth(next.getMonth() - 1, 1);
-            }
-            return next;
-        });
-    };
-
-    const handleNext = () => {
-        setAnchorDate(prev => {
-            const next = new Date(prev);
-            if (viewMode === 'week') {
-                next.setDate(next.getDate() + 7);
-            } else {
-                next.setMonth(next.getMonth() + 1, 1);
-            }
-            return next;
-        });
-    };
-
-    const handleToday = () => {
-        setAnchorDate(new Date());
-    };
-
-    // Calculate columns for Week View (Mon - Sun)
-    const weekDays = useMemo(() => {
-        const mon = getStartOfWeek(anchorDate);
-        const days = [];
-        for (let i = 0; i < 7; i++) {
-            const d = new Date(mon);
-            d.setDate(d.getDate() + i);
-            const dateStr = formatDateKey(d);
-            days.push({
-                dateObj: d,
-                dateStr,
-                dayName: WEEKDAY_NAMES_SHORT[d.getDay()],
-                dayNum: d.getDate(),
-                monthShort: MONTH_NAMES[d.getMonth()].slice(0, 3),
-                isToday: dateStr === todayStr,
-                isSunday: d.getDay() === 0
-            });
+    // Rows are matched to people by login id, or by name for rows without one.
+    const statusByKey = useMemo(() => {
+        const map = new Map();
+        for (const row of rows) {
+            if (row.user_id) map.set(`${row.user_id}|${row.date}`, row);
+            map.set(`name:${row.staff_name.toLowerCase()}|${row.date}`, row);
         }
-        return days;
-    }, [anchorDate, todayStr]);
+        return map;
+    }, [rows]);
+    const entryFor = useCallback((person, day) => statusByKey.get(`${person.id}|${day}`) || statusByKey.get(`name:${person.name.toLowerCase()}|${day}`), [statusByKey]);
+    const statusOf = useCallback((person, day) => entryFor(person, day)?.status, [entryFor]);
 
-    // Calculate columns for Month View
-    const monthDays = useMemo(() => {
-        const y = anchorDate.getFullYear();
-        const m = anchorDate.getMonth();
-        const count = new Date(y, m + 1, 0).getDate();
-        const days = [];
-        for (let i = 1; i <= count; i++) {
-            const d = new Date(y, m, i);
-            const dateStr = formatDateKey(d);
-            days.push({
-                dateObj: d,
-                dateStr,
-                dayNum: i,
-                dayName: WEEKDAY_NAMES_SHORT[d.getDay()],
-                isToday: dateStr === todayStr,
-                isSunday: d.getDay() === 0
-            });
-        }
-        return days;
-    }, [anchorDate, todayStr]);
-
-    const activeColumns = viewMode === 'week' ? weekDays : monthDays;
-
-    // Filter staff
     const filteredStaff = useMemo(() => {
-        return staffList.filter(s => {
-            const matchesSearch = !searchQuery || 
-                s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (s.role && s.role.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                (s.department && s.department.toLowerCase().includes(searchQuery.toLowerCase()));
-            
-            const matchesRole = roleFilter === 'all' || 
-                (s.role && s.role.toLowerCase().includes(roleFilter.toLowerCase()));
+        const q = search.trim().toLowerCase();
+        return q ? staff.filter(p => `${p.name} ${p.role}`.toLowerCase().includes(q)) : staff;
+    }, [staff, search]);
 
-            return matchesSearch && matchesRole;
-        });
-    }, [staffList, searchQuery, roleFilter]);
-
-    // Cell status click handler
-    const handleCellClick = (staffName, dateStr) => {
-        const key = `${staffName}_${dateStr}`;
-        const current = records[key];
-        setActiveCell({
-            staffName,
-            dateStr,
-            currentStatus: current?.status || null,
-            currentNotes: current?.notes || ''
-        });
-        setCellNotes(current?.notes || '');
-    };
-
-    const handleApplyStatus = async (status) => {
-        if (!activeCell) return;
-        const { staffName, dateStr } = activeCell;
-        
-        // Optimistic update
-        const key = `${staffName}_${dateStr}`;
-        const updated = {
-            ...records,
-            [key]: status ? { status, notes: cellNotes, markedAt: new Date().toISOString() } : undefined
-        };
-        setRecords(updated);
-        setActiveCell(null);
-
-        const statusLabel = ATTENDANCE_STATUSES[status]?.label || (status ? status : 'Cleared');
-        await setStaffAttendance(staffName, dateStr, status, cellNotes, currentUser?.name || 'Admin');
-        await logActivity(
-            currentUser?.id,
-            'attendance',
-            `Staff Attendance: ${staffName} marked as ${statusLabel} for ${dateStr}`,
-            cellNotes ? `Notes: ${cellNotes}` : `Status: ${statusLabel}`
-        );
-    };
-
-    // One-click batch mark all staff present today
-    const handleMarkAllPresentToday = async () => {
-        if (!staffList.length) return;
-        await markAllStaffPresent(staffList, todayStr, currentUser?.name || 'Admin');
-        await logActivity(
-            currentUser?.id,
-            'attendance',
-            `Staff Attendance: Marked all ${staffList.length} staff as Present for today (${todayStr})`,
-            `Staff count: ${staffList.length}, Date: ${todayStr}`
-        );
-        
-        // Optimistically update
-        const nextRecords = { ...records };
-        staffList.forEach(s => {
-            nextRecords[`${s.name}_${todayStr}`] = {
-                status: 'present',
-                notes: 'Marked present',
-                markedAt: new Date().toISOString()
-            };
-        });
-        setRecords(nextRecords);
-        setBatchSuccessMsg(`All ${staffList.length} staff marked Present for today (${todayStr})`);
-        setTimeout(() => setBatchSuccessMsg(''), 3000);
-    };
-
-    const handleExportCSV = () => {
-        const title = viewMode === 'week'
-            ? `${weekDays[0].dayNum} ${weekDays[0].monthShort} - ${weekDays[6].dayNum} ${weekDays[6].monthShort} ${weekDays[0].dateObj.getFullYear()}`
-            : `${MONTH_NAMES[anchorDate.getMonth()]} ${anchorDate.getFullYear()}`;
-
-        exportAttendanceToCSV({
-            staffList: filteredStaff,
-            columns: activeColumns,
-            records,
-            viewMode,
-            title
-        });
-    };
-
-    const handleApproveRequest = async (req) => {
-        const adminName = currentUser?.name || 'Admin';
-        await approveAttendanceRequest(req.staffName, req.dateStr, req.status, adminName);
-        await logActivity(
-            currentUser?.id,
-            'attendance',
-            `Approved attendance/leave for ${req.staffName} on ${req.dateStr}`,
-            `Status: ${req.status === 'holiday_request' ? 'Holiday' : 'Present'}`
-        );
-        setBatchSuccessMsg(`Approved request for ${req.staffName} on ${req.dateStr}`);
-        setTimeout(() => setBatchSuccessMsg(''), 4000);
-        await loadRecords();
-    };
-
-    const handleRejectRequest = async (req) => {
-        const adminName = currentUser?.name || 'Admin';
-        await rejectAttendanceRequest(req.staffName, req.dateStr, 'Rejected by Admin', adminName);
-        await logActivity(
-            currentUser?.id,
-            'attendance',
-            `Rejected attendance/leave for ${req.staffName} on ${req.dateStr}`,
-            `Reason: Rejected by ${adminName}`
-        );
-        setBatchSuccessMsg(`Rejected request for ${req.staffName} on ${req.dateStr}`);
-        setTimeout(() => setBatchSuccessMsg(''), 4000);
-        await loadRecords();
-    };
-
-    const handleHolidaySubmit = async (e) => {
-        e.preventDefault();
-        if (!holidayStaff || !holidayStartDate) return;
-        setHolidaySubmitting(true);
-        try {
-            await submitHolidayRequest(
-                holidayStaff,
-                holidayStartDate,
-                holidayEndDate || holidayStartDate,
-                holidayReason,
-                currentUser?.name || 'Staff'
-            );
-            await logActivity(
-                currentUser?.id,
-                'attendance',
-                `Holiday Request submitted for ${holidayStaff} (${holidayStartDate} to ${holidayEndDate || holidayStartDate})`,
-                `Reason: ${holidayReason || 'Not specified'}`
-            );
-            setShowHolidayModal(false);
-            setHolidayReason('');
-            setBatchSuccessMsg(`Holiday request submitted for ${holidayStaff}. Awaiting admin approval.`);
-            setTimeout(() => setBatchSuccessMsg(''), 4000);
-            await loadRecords();
-        } finally {
-            setHolidaySubmitting(false);
+    const todayCounts = useMemo(() => {
+        const tally = { present: 0, on_duty: 0, away: 0 };
+        for (const person of staff) {
+            const status = statusOf(person, today);
+            if (status === 'present') tally.present += 1;
+            else if (status === 'on_duty') tally.on_duty += 1;
+            else if (['absent', 'leave', 'half_day', 'holiday'].includes(status)) tally.away += 1;
         }
-    };
+        return tally;
+    }, [staff, statusOf, today]);
 
-    const handleSelfMarkSubmit = async (e) => {
-        e.preventDefault();
-        const staffName = currentStaffName || staffList[0]?.name || 'Office Staff';
-        setSelfMarkSubmitting(true);
+    const pendingGroups = useMemo(() => groupRequests(pending), [pending]);
+    const say = text => { setNotice(text); setTimeout(() => setNotice(current => (current === text ? '' : current)), 4000); };
+
+    async function run(action, success) {
+        setBusy(true);
+        setError('');
         try {
-            if (isAdmin) {
-                await setStaffAttendance(staffName, selfMarkDate, 'present', selfMarkNotes || 'Checked in', currentUser?.name || 'Admin');
-                setBatchSuccessMsg(`Marked ${staffName} Present for ${selfMarkDate}`);
-            } else {
-                await submitSelfAttendance(staffName, selfMarkDate, selfMarkNotes, currentUser?.name || 'Staff');
-                setBatchSuccessMsg(`Marked present for ${selfMarkDate} (pending Admin approval)`);
-            }
-            await logActivity(
-                currentUser?.id,
-                'attendance',
-                `${staffName} self-marked attendance for ${selfMarkDate}`,
-                `Notes: ${selfMarkNotes || 'Checked in'}`
-            );
-            setShowSelfMarkModal(false);
-            setSelfMarkNotes('');
-            setTimeout(() => setBatchSuccessMsg(''), 4000);
-            await loadRecords();
+            await action();
+            if (success) say(success);
+            await load();
+            return true;
+        } catch (err) {
+            console.error('Attendance change failed:', err);
+            setError(err.message || 'The change was not saved.');
+            return false;
         } finally {
-            setSelfMarkSubmitting(false);
+            setBusy(false);
         }
-    };
+    }
 
-    // Calculate Summary KPIs
-    const kpiSummary = useMemo(() => {
-        let presentToday = 0;
-        let absentToday = 0;
-        let leaveToday = 0;
-        let onDutyToday = 0;
+    async function applyStatus(status) {
+        const { person, day } = cell;
+        const ok = await run(() => setStaffAttendance({ staff: person, date: day, status, notes: cell.notes, markedBy }));
+        if (!ok) return;
+        setCell(null);
+        const label = status ? ATTENDANCE_STATUSES[status].label : 'not marked';
+        logActivity(currentUser?.id, 'attendance', `Attendance: ${person.name} set to ${label} for ${formatDate(day, 'short')}`, cell.notes ? `Notes: ${cell.notes}` : '');
+    }
 
-        staffList.forEach(s => {
-            const entry = records[`${s.name}_${todayStr}`];
-            if (entry?.status === 'present') presentToday++;
-            else if (entry?.status === 'absent') absentToday++;
-            else if (entry?.status === 'leave' || entry?.status === 'half_day') leaveToday++;
-            else if (entry?.status === 'on_duty') onDutyToday++;
-        });
+    async function markAllPresent() {
+        const unmarked = staff.filter(person => !statusOf(person, today));
+        if (!unmarked.length) { say('Everyone already has an entry for today.'); return; }
+        const ok = await run(() => markStaffPresent(unmarked, today, markedBy), `${unmarked.length} marked present for today.`);
+        if (ok) logActivity(currentUser?.id, 'attendance', `Attendance: ${unmarked.length} staff marked present for ${formatDate(today, 'short')}`, '');
+    }
 
-        const totalStaff = staffList.length || 1;
-        const presentRate = Math.round((presentToday / totalStaff) * 100);
+    async function review(group, approve) {
+        const ok = await run(() => reviewRequests(group.rows, approve, markedBy),
+            `${approve ? 'Approved' : 'Rejected'}: ${group.staff_name}, ${group.start === group.end ? formatDate(group.start, 'short') : `${formatDate(group.start, 'short')} – ${formatDate(group.end, 'short')}`}.`);
+        if (ok) logActivity(currentUser?.id, 'attendance', `${approve ? 'Approved' : 'Rejected'} ${ATTENDANCE_STATUSES[group.status].label.toLowerCase()} for ${group.staff_name}`, `${group.start} to ${group.end}`);
+    }
 
-        return {
-            totalStaff: staffList.length,
-            presentToday,
-            absentToday,
-            leaveToday,
-            onDutyToday,
-            presentRate
-        };
-    }, [staffList, records, todayStr]);
+    async function submitRequest() {
+        const { kind, start, end, notes } = request;
+        if (!self?.name) { setRequestError('Your profile has no name. Ask head office to add one.'); return; }
+        const last = kind === 'leave' ? end || start : today;
+        if (!start || last < start) { setRequestError('The end date must be on or after the start date.'); return; }
+        const dates = datesBetween(kind === 'leave' ? start : today, last);
+        if (dates.length > MAX_REQUEST_DAYS) { setRequestError(`Ask for at most ${MAX_REQUEST_DAYS} days at a time.`); return; }
+        setBusy(true);
+        setRequestError('');
+        try {
+            const status = kind === 'leave' ? 'holiday_request' : 'pending_present';
+            const { saved, skipped } = isHeadOffice && kind === 'present'
+                ? await setStaffAttendance({ staff: self, date: today, status: 'present', notes, markedBy }).then(() => ({ saved: [today], skipped: [] }))
+                : await requestOwnAttendance({ user: self, dates, status, notes });
+            setRequest(null);
+            const skippedText = skipped.length ? ` ${skipped.length} ${skipped.length === 1 ? 'day was' : 'days were'} already marked by the office and left as they are.` : '';
+            say(saved.length
+                ? `${kind === 'leave' ? 'Leave request sent' : isHeadOffice ? 'Marked present for today' : 'Check-in sent'}${isHeadOffice && kind === 'present' ? '' : ' for approval'}.${skippedText}`
+                : `Nothing was sent.${skippedText}`);
+            if (saved.length) logActivity(currentUser?.id, 'attendance', `${self.name}: ${kind === 'leave' ? 'leave requested' : 'checked in'} (${saved[0]}${saved.length > 1 ? ` to ${saved[saved.length - 1]}` : ''})`, notes ? `Notes: ${notes}` : '');
+            await load();
+        } catch (err) {
+            console.error('Attendance request failed:', err);
+            setRequestError(err.message || 'The request was not sent.');
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    function exportCsv() {
+        const period = viewMode === 'week' ? `${days[0]}_to_${days[days.length - 1]}` : anchor.slice(0, 7);
+        downloadBlob(attendanceCsv(filteredStaff, days, statusOf), 'text/csv;charset=utf-8', `attendance_${period}.csv`);
+    }
+
+    const step = n => setAnchor(viewMode === 'week' ? addDays(anchor, 7 * n) : shiftMonth(anchor, n));
+    const periodLabel = viewMode === 'week'
+        ? `${shortDay(days[0])} – ${shortDay(days[6])} ${days[6].slice(0, 4)}`
+        : `${MONTH_NAMES[Number(anchor.slice(5, 7)) - 1]} ${anchor.slice(0, 4)}`;
+    const compact = viewMode === 'month';
+    const inPeriod = days.includes(today);
+    const openRequest = kind => { setRequestError(''); setRequest({ kind, start: kind === 'leave' ? addDays(today, 1) : today, end: '', notes: '' }); };
 
     return (
-        <div className="space-y-6">
-            
-            {/* Header Controls */}
-            <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="space-y-5">
+            <div className="flex flex-col gap-3 rounded-2xl border border-stone-200 bg-white p-4 lg:flex-row lg:items-center lg:justify-between">
                 <div>
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-bold">
-                            <UserCheck className="w-5 h-5" />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <h2 className="text-base font-bold text-stone-900">
-                                    Office Staff & Team Attendance
-                                </h2>
-                                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 flex items-center gap-1">
-                                    <ShieldCheck className="w-3 h-3" /> Admin Manager
-                                </span>
-                            </div>
-                            <p className="text-xs text-stone-500">
-                                Centralized office attendance register linked to system staff. Week & month rosters.
-                            </p>
-                        </div>
-                    </div>
+                    <h2 className="text-base font-bold text-stone-900">Attendance</h2>
+                    <p className="text-xs text-stone-600">
+                        {isHeadOffice ? 'Tap a day to mark it. Check-ins and leave requests from staff wait for your approval.' : 'Check in for today or ask for leave. Head office approves both.'}
+                    </p>
                 </div>
-
-                <div className="flex flex-wrap items-center gap-2.5">
-                    {/* View Switcher: Week vs Month */}
-                    <div className="flex items-center bg-stone-100 p-1 rounded-xl border border-stone-200">
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('week')}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                                viewMode === 'week' 
-                                    ? 'bg-white text-stone-900 shadow-xs border border-stone-200' 
-                                    : 'text-stone-500 hover:text-stone-800'
-                            }`}
-                        >
-                            <CalendarDays className="w-3.5 h-3.5" />
-                            Week View
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setViewMode('month')}
-                            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5 ${
-                                viewMode === 'month' 
-                                    ? 'bg-white text-stone-900 shadow-xs border border-stone-200' 
-                                    : 'text-stone-500 hover:text-stone-800'
-                            }`}
-                        >
-                            <Calendar className="w-3.5 h-3.5" />
-                            Month View
-                        </button>
-                    </div>
-
-                    {/* Batch Mark All Present Button ("one tab added present") */}
-                    {isAdmin && (
-                        <button
-                            type="button"
-                            onClick={handleMarkAllPresentToday}
-                            className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                            title="One-click mark all active staff present for today"
-                        >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Mark All Present (Today)
+                <div className="flex flex-wrap items-center gap-2">
+                    {isHeadOffice && (
+                        <button type="button" onClick={markAllPresent} disabled={busy || !staff.length} className="sf-btn-success min-h-11 disabled:opacity-50">
+                            <CheckCircle2 size={14} aria-hidden="true" /> Mark everyone present today
                         </button>
                     )}
-
-                    {/* Leave / Holiday Request */}
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setHolidayStaff(currentStaffName || staffList[0]?.name || 'Staff User');
-                            setShowHolidayModal(true);
-                        }}
-                        className="px-3.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                        title="Submit a holiday or leave request"
-                    >
-                        <CalendarPlus className="w-3.5 h-3.5 text-blue-600" />
-                        Request Leave / Holiday
+                    <button type="button" onClick={() => openRequest('present')} disabled={busy} className="sf-btn-secondary min-h-11">
+                        <CheckCheck size={14} aria-hidden="true" /> Check in today
                     </button>
-
-                    {/* Self-Mark Present Button */}
-                    <button
-                        type="button"
-                        onClick={() => setShowSelfMarkModal(true)}
-                        className="px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
-                        title="Mark attendance for today"
-                    >
-                        <CheckCheck className="w-3.5 h-3.5 text-amber-600" />
-                        Mark Present (Check-in)
+                    <button type="button" onClick={() => openRequest('leave')} disabled={busy} className="sf-btn-secondary min-h-11">
+                        <CalendarPlus size={14} aria-hidden="true" /> Ask for leave
                     </button>
-
-                    {/* Export CSV Button */}
-                    <button
-                        type="button"
-                        onClick={handleExportCSV}
-                        className="px-3.5 py-1.5 bg-white hover:bg-stone-50 text-stone-700 text-xs font-bold rounded-xl shadow-xs transition-all flex items-center gap-1.5 cursor-pointer border border-stone-200"
-                        title="Download formatted attendance CSV"
-                    >
-                        <Download className="w-3.5 h-3.5 text-stone-500" />
-                        Export CSV
-                    </button>
-
-                    {/* Today button */}
-                    <button
-                        type="button"
-                        onClick={handleToday}
-                        className="px-3 py-1.5 text-xs font-bold text-stone-700 bg-stone-100 hover:bg-stone-200 rounded-xl transition-colors cursor-pointer"
-                    >
-                        Today
-                    </button>
-
-                    {/* Navigation Prev / Next */}
-                    <div className="flex items-center border border-stone-200 rounded-xl overflow-hidden bg-white shadow-xs">
-                        <button
-                            type="button"
-                            onClick={handlePrev}
-                            className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-50 border-r border-stone-200 cursor-pointer"
-                            title={viewMode === 'week' ? 'Previous Week' : 'Previous Month'}
-                        >
-                            <ChevronLeft className="w-4 h-4" />
+                    {isOn('dataExports') && isHeadOffice && (
+                        <button type="button" onClick={exportCsv} disabled={!filteredStaff.length} className="sf-btn-secondary min-h-11">
+                            <Download size={14} aria-hidden="true" /> Export CSV
                         </button>
-                        
-                        <div className="px-3.5 py-1.5 text-xs font-bold text-stone-800 min-w-[145px] text-center">
-                            {viewMode === 'week' ? (
-                                <span>
-                                    {weekDays[0].monthShort} {weekDays[0].dayNum} — {weekDays[6].monthShort} {weekDays[6].dayNum}, {weekDays[0].dateObj.getFullYear()}
-                                </span>
-                            ) : (
-                                <span>
-                                    {MONTH_NAMES[anchorDate.getMonth()]} {anchorDate.getFullYear()}
-                                </span>
-                            )}
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={handleNext}
-                            className="p-2 text-stone-600 hover:text-stone-900 hover:bg-stone-50 cursor-pointer"
-                            title={viewMode === 'week' ? 'Next Week' : 'Next Month'}
-                        >
-                            <ChevronRight className="w-4 h-4" />
-                        </button>
-                    </div>
+                    )}
                 </div>
             </div>
 
-            {/* Batch Feedback Notification */}
-            {batchSuccessMsg && (
-                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs font-bold text-emerald-800 flex items-center justify-between animate-in fade-in duration-200">
-                    <div className="flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                        <span>{batchSuccessMsg}</span>
-                    </div>
-                    <button onClick={() => setBatchSuccessMsg('')} className="text-emerald-700 hover:text-emerald-900 cursor-pointer">✕</button>
-                </div>
-            )}
+            <ErrorBanner onRetry={load}>{error}</ErrorBanner>
+            <SuccessBanner>{notice}</SuccessBanner>
 
-            {/* Pending Requests Banner (Admin Review Required) */}
-            {pendingRequests.length > 0 && (
-                <div className="bg-amber-50/90 border border-amber-300 rounded-2xl p-4 shadow-xs space-y-3">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping" />
-                            <h3 className="text-xs font-bold text-amber-950 uppercase tracking-wider">
-                                Pending Attendance &amp; Leave Requests ({pendingRequests.length})
-                            </h3>
-                        </div>
-                        <span className="text-[11px] text-amber-800 font-bold bg-amber-100/90 px-2 py-0.5 rounded-md">
-                            {isAdmin ? 'Admin Approval Required' : 'Awaiting Admin Review'}
-                        </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {pendingRequests.map(req => {
-                            const isHoliday = req.status === 'holiday_request';
-                            return (
-                                <div key={req.key} className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-2xs flex flex-col justify-between gap-2.5">
-                                    <div>
-                                        <div className="flex items-center justify-between gap-2">
-                                            <span className="text-xs font-black text-stone-900">{req.staffName}</span>
-                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                                isHoliday 
-                                                    ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                                                    : 'bg-amber-100 text-amber-800 border border-amber-200'
-                                            }`}>
-                                                {isHoliday ? 'Holiday / Leave Request' : 'Self-Marked Present'}
-                                            </span>
-                                        </div>
-                                        <p className="text-[11px] text-stone-500 mt-1">
-                                            <span className="font-semibold text-stone-700">Date:</span> {req.dateStr}
-                                        </p>
-                                        {req.notes && (
-                                            <p className="text-xs text-stone-700 bg-stone-50 p-2 rounded-lg mt-1.5 italic border border-stone-100">
-                                                "{req.notes}"
-                                            </p>
-                                        )}
+            {isHeadOffice && pendingGroups.length > 0 && (
+                <section aria-labelledby="attendance-pending" className="space-y-3 rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                    <h3 id="attendance-pending" className="text-xs font-bold uppercase tracking-wider text-amber-950">Waiting for approval ({pendingGroups.length})</h3>
+                    <div className="grid gap-3 md:grid-cols-2">
+                        {pendingGroups.map(group => (
+                            <div key={group.key} className="flex flex-col justify-between gap-2 rounded-xl border border-amber-200 bg-white p-3">
+                                <div>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-bold text-stone-900">{group.staff_name}</span>
+                                        <StatusChip status={group.status} />
                                     </div>
-
-                                    {isAdmin && (
-                                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
-                                            <button
-                                                type="button"
-                                                onClick={() => handleApproveRequest(req)}
-                                                className="px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer shadow-2xs"
-                                            >
-                                                <Check className="w-3.5 h-3.5" /> Approve
-                                            </button>
-                                            <button
-                                                type="button"
-                                                onClick={() => handleRejectRequest(req)}
-                                                className="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition flex items-center gap-1 cursor-pointer border border-rose-200"
-                                            >
-                                                <X className="w-3.5 h-3.5" /> Reject
-                                            </button>
-                                        </div>
-                                    )}
+                                    <p className="mt-1 text-xs text-stone-600">
+                                        {group.start === group.end ? formatDate(group.start, 'short') : `${formatDate(group.start, 'short')} – ${formatDate(group.end, 'short')} (${group.rows.length} days)`}
+                                    </p>
+                                    {group.notes && <p className="mt-1.5 rounded-lg bg-stone-50 p-2 text-xs text-stone-700">{group.notes}</p>}
                                 </div>
-                            );
-                        })}
+                                <div className="flex justify-end gap-2 border-t border-stone-100 pt-2">
+                                    <button type="button" onClick={() => review(group, false)} disabled={busy} className="sf-btn-secondary min-h-11 text-rose-700">
+                                        <X size={14} aria-hidden="true" /> Reject
+                                    </button>
+                                    <button type="button" onClick={() => review(group, true)} disabled={busy} className="sf-btn-success min-h-11 disabled:opacity-50">
+                                        <Check size={14} aria-hidden="true" /> Approve
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
                     </div>
+                </section>
+            )}
+
+            {isHeadOffice && (
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <StatTile icon={Users} tone="stone" label="Staff" value={staff.length} />
+                    <StatTile icon={CheckCircle2} tone="green" label="Present today" value={todayCounts.present} />
+                    <StatTile icon={Briefcase} tone="orange" label="On duty today" value={todayCounts.on_duty} />
+                    <StatTile icon={XCircle} tone="red" label="Away today" hint="Absent, leave, half day or holiday" value={todayCounts.away} />
                 </div>
             )}
 
-            {/* KPI Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-4 bg-white rounded-xl border border-stone-200 shadow-xs flex items-center justify-between">
-                    <div>
-                        <div className="text-[10px] font-bold uppercase text-stone-400">Office Team</div>
-                        <div className="text-xl font-black text-stone-900 mt-0.5">{kpiSummary.totalStaff} Staff</div>
-                    </div>
-                    <div className="w-9 h-9 rounded-lg bg-stone-100 text-stone-600 flex items-center justify-center font-bold">
-                        <Users className="w-4 h-4" />
-                    </div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-center gap-1">
+                    <button type="button" onClick={() => step(-1)} aria-label={viewMode === 'week' ? 'Previous week' : 'Previous month'}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
+                        <ChevronLeft size={18} aria-hidden="true" />
+                    </button>
+                    <p className="min-w-44 text-center text-sm font-bold text-stone-900" aria-live="polite">{periodLabel}</p>
+                    <button type="button" onClick={() => step(1)} aria-label={viewMode === 'week' ? 'Next week' : 'Next month'}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl border border-stone-200 bg-white text-stone-700 hover:bg-stone-50">
+                        <ChevronRight size={18} aria-hidden="true" />
+                    </button>
+                    {!inPeriod && <button type="button" onClick={() => setAnchor(today)} className="sf-btn-secondary ml-1 min-h-11">Today</button>}
                 </div>
-
-                <div className="p-4 bg-emerald-50/70 rounded-xl border border-emerald-200 shadow-xs flex items-center justify-between">
-                    <div>
-                        <div className="text-[10px] font-bold uppercase text-emerald-700">Present Today</div>
-                        <div className="text-xl font-black text-emerald-900 mt-0.5">
-                            {kpiSummary.presentToday} <span className="text-xs font-semibold text-emerald-700">({kpiSummary.presentRate}%)</span>
-                        </div>
-                    </div>
-                    <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center font-bold">
-                        <CheckCircle2 className="w-4 h-4" />
-                    </div>
-                </div>
-
-                <div className="p-4 bg-orange-50/70 rounded-xl border border-orange-200 shadow-xs flex items-center justify-between">
-                    <div>
-                        <div className="text-[10px] font-bold uppercase text-orange-700">On Duty / Field</div>
-                        <div className="text-xl font-black text-orange-900 mt-0.5">{kpiSummary.onDutyToday} Staff</div>
-                    </div>
-                    <div className="w-9 h-9 rounded-lg bg-orange-100 text-orange-700 flex items-center justify-center font-bold">
-                        <Briefcase className="w-4 h-4" />
-                    </div>
-                </div>
-
-                <div className="p-4 bg-rose-50/70 rounded-xl border border-rose-200 shadow-xs flex items-center justify-between">
-                    <div>
-                        <div className="text-[10px] font-bold uppercase text-rose-700">Absent / Leave</div>
-                        <div className="text-xl font-black text-rose-900 mt-0.5">{kpiSummary.absentToday + kpiSummary.leaveToday} Staff</div>
-                    </div>
-                    <div className="w-9 h-9 rounded-lg bg-rose-100 text-rose-700 flex items-center justify-center font-bold">
-                        <XCircle className="w-4 h-4" />
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    {isHeadOffice && <SearchInput value={search} onChange={setSearch} label="Search staff" placeholder="Search staff…" className="sm:w-56" />}
+                    <div className="w-full sm:w-48">
+                        <TagPicker label="Show" columns={2} value={viewMode} onChange={setViewMode}
+                            options={[{ id: 'week', label: 'Week' }, { id: 'month', label: 'Month' }]} />
                     </div>
                 </div>
             </div>
 
-            {/* Filter & Search Bar */}
-            <div className="bg-white rounded-xl border border-stone-200 p-3 shadow-xs flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 flex-1 min-w-[220px]">
-                    <div className="relative flex-1 max-w-sm">
-                        <Search className="w-3.5 h-3.5 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                        <input
-                            type="text"
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search staff by name, role, department..."
-                            className="w-full pl-8 pr-3 py-1.5 text-xs border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-stone-50/50"
-                        />
-                    </div>
-                    {searchQuery && (
-                        <button
-                            onClick={() => setSearchQuery('')}
-                            className="text-xs text-stone-400 hover:text-stone-600"
-                        >
-                            Clear
-                        </button>
-                    )}
-                </div>
-
-                {/* Status Legend */}
-                <div className="flex flex-wrap items-center gap-2 text-[11px] font-bold">
-                    <span className="text-stone-400 uppercase text-[10px]">Legend:</span>
-                    <span className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        P = Present
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 border border-rose-200">
-                        A = Absent
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200">
-                        HD = Half Day
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
-                        L = Leave
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-orange-100 text-orange-800 border border-orange-200">
-                        OD = On Duty
-                    </span>
-                </div>
-            </div>
-
-            {/* Main Attendance Table */}
-            <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse text-xs">
-                        
-                        {/* Table Header: Dates On Top */}
-                        <thead>
-                            <tr className="bg-stone-50/80 border-b border-stone-200 text-stone-600 font-bold">
-                                {/* Fixed Staff Info Header */}
-                                <th className="p-3.5 min-w-[200px] border-r border-stone-200 sticky left-0 bg-stone-50 z-10 shadow-2xs">
-                                    <div className="flex items-center gap-1.5">
-                                        <Users className="w-3.5 h-3.5 text-stone-500" />
-                                        <span>Staff Member / Role</span>
-                                    </div>
-                                </th>
-
-                                {/* Date Column Headers On Top */}
-                                {activeColumns.map(col => {
-                                    return (
-                                        <th 
-                                            key={col.dateStr}
-                                            className={`p-2.5 text-center border-r border-stone-200 transition-colors ${
-                                                viewMode === 'week' ? 'min-w-[90px]' : 'min-w-[42px]'
-                                            } ${
-                                                col.isToday 
-                                                    ? 'bg-amber-100/70 text-amber-900 border-amber-300' 
-                                                    : col.isSunday 
-                                                        ? 'bg-stone-100/60 text-rose-600' 
-                                                        : 'text-stone-700'
-                                            }`}
-                                        >
-                                            <div className="flex flex-col items-center">
-                                                <span className="text-[10px] font-semibold uppercase text-stone-500">
-                                                    {col.dayName}
-                                                </span>
-                                                <span className={`text-xs font-black px-1.5 py-0.2 rounded-full ${
-                                                    col.isToday ? 'bg-amber-500 text-white' : ''
-                                                }`}>
-                                                    {col.dayNum}
-                                                </span>
-                                                {viewMode === 'week' && (
-                                                    <span className="text-[9px] font-normal text-stone-400">
-                                                        {col.monthShort}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </th>
-                                    );
-                                })}
-
-                                {/* Total summary column */}
-                                <th className="p-3 text-center min-w-[70px] bg-stone-50 font-bold text-stone-700">
-                                    Present
-                                </th>
-                            </tr>
-                        </thead>
-
-                        {/* Table Body: Staff Rows */}
-                        <tbody className="divide-y divide-stone-100">
-                            {filteredStaff.length === 0 ? (
-                                <tr>
-                                    <td colSpan={activeColumns.length + 2} className="p-8 text-center text-stone-400">
-                                        No staff members found matching criteria.
-                                    </td>
+            {loading ? <LoadingState label="Loading attendance…" /> : filteredStaff.length === 0 ? (
+                <EmptyState icon={Users} title={search ? 'No staff match your search' : 'No staff to show'}>
+                    {isHeadOffice && !search ? 'Head-office logins (admin and office staff) appear here once they are added under Staff.' : null}
+                </EmptyState>
+            ) : (
+                <div className="overflow-hidden rounded-2xl border border-stone-200 bg-white">
+                    <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-left text-xs">
+                            <thead>
+                                <tr className="border-b border-stone-200 bg-stone-50 font-bold text-stone-600">
+                                    <th scope="col" className="sticky left-0 z-10 min-w-40 border-r border-stone-200 bg-stone-50 p-3">Staff</th>
+                                    {days.map(day => {
+                                        const weekday = dayDate(day).getUTCDay();
+                                        return (
+                                            <th key={day} scope="col" className={`border-r border-stone-200 p-2 text-center ${compact ? 'min-w-10' : 'min-w-20'} ${day === today ? 'bg-orange-100 text-orange-900' : weekday === 0 ? 'text-rose-600' : ''}`}>
+                                                <span className="block text-[10px] font-semibold uppercase text-stone-500">{WEEKDAYS[weekday]}</span>
+                                                <span className="block font-bold">{compact ? Number(day.slice(8)) : shortDay(day)}</span>
+                                            </th>
+                                        );
+                                    })}
+                                    <th scope="col" className="min-w-16 p-2 text-center">Present</th>
                                 </tr>
-                            ) : (
-                                filteredStaff.map((staff, rowIdx) => {
-                                    // Count presents for this staff member across current columns
-                                    let presentCount = 0;
-                                    activeColumns.forEach(col => {
-                                        const entry = records[`${staff.name}_${col.dateStr}`];
-                                        if (entry?.status === 'present' || entry?.status === 'on_duty') presentCount++;
-                                        else if (entry?.status === 'half_day') presentCount += 0.5;
-                                    });
-
-                                    return (
-                                        <tr key={staff.id || staff.name} className="hover:bg-amber-50/20 transition-colors">
-                                            
-                                            {/* Staff details cell (Sticky left) */}
-                                            <td className="p-3 border-r border-stone-200 sticky left-0 bg-white z-10 shadow-2xs">
-                                                <div className="flex items-center gap-2.5">
-                                                    <div className="w-7 h-7 rounded-lg bg-stone-100 text-stone-700 font-black text-xs flex items-center justify-center shrink-0 border border-stone-200">
-                                                        {staff.name.slice(0, 2).toUpperCase()}
-                                                    </div>
-                                                    <div className="overflow-hidden">
-                                                        <div className="font-bold text-stone-900 truncate">
-                                                            {staff.name}
-                                                        </div>
-                                                        <div className="text-[10px] text-stone-400 truncate flex items-center gap-1">
-                                                            <span>{staff.role || 'Office Staff'}</span>
-                                                            {staff.department && (
-                                                                <>
-                                                                    <span>•</span>
-                                                                    <span className="text-stone-500">{staff.department}</span>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </td>
-
-                                            {/* Date Cells */}
-                                            {activeColumns.map(col => {
-                                                const recordKey = `${staff.name}_${col.dateStr}`;
-                                                const entry = records[recordKey];
-                                                const statusKey = entry?.status;
-                                                const statusCfg = statusKey ? ATTENDANCE_STATUSES[statusKey] : null;
-
-                                                return (
-                                                    <td 
-                                                        key={col.dateStr}
-                                                        onClick={() => handleCellClick(staff.name, col.dateStr)}
-                                                        className={`p-1.5 text-center border-r border-stone-100 cursor-pointer transition-all hover:ring-2 hover:ring-emerald-400 hover:ring-inset ${
-                                                            col.isToday ? 'bg-amber-50/30' : col.isSunday ? 'bg-stone-50/40' : ''
-                                                        }`}
-                                                        title={`${staff.name} on ${col.dateStr}: ${statusCfg ? statusCfg.label : 'Not marked'}${entry?.notes ? ` (${entry.notes})` : ''} - Click to change`}
-                                                    >
-                                                        {statusCfg ? (
-                                                            <div className={`inline-flex items-center justify-center font-black rounded-lg shadow-2xs transition-all ${
-                                                                viewMode === 'week' 
-                                                                    ? 'px-2 py-1 text-[11px] gap-1 min-w-[55px]' 
-                                                                    : 'w-7 h-7 text-[10px]'
-                                                            } ${statusCfg.bg}`}>
-                                                                <span>{viewMode === 'week' ? statusCfg.label : statusCfg.short}</span>
-                                                            </div>
-                                                        ) : (
-                                                            <div className="inline-flex items-center justify-center w-7 h-7 rounded-lg text-stone-300 hover:bg-stone-100 hover:text-stone-500 transition-colors">
-                                                                <span className="text-xs">―</span>
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                );
-                                            })}
-
-                                            {/* Summary count */}
-                                            <td className="p-2 text-center font-bold text-emerald-700 bg-emerald-50/30">
-                                                {presentCount}
-                                            </td>
-                                        </tr>
-                                    );
-                                })
-                            )}
-                        </tbody>
-
-                        {/* Summary Footer Row */}
-                        <tfoot>
-                            <tr className="bg-stone-50 border-t border-stone-200 text-stone-700 font-bold">
-                                <td className="p-3 border-r border-stone-200 sticky left-0 bg-stone-50 font-black text-xs">
-                                    Daily Present Total
-                                </td>
-                                {activeColumns.map(col => {
-                                    let colPresentCount = 0;
-                                    staffList.forEach(s => {
-                                        const entry = records[`${s.name}_${col.dateStr}`];
-                                        if (entry?.status === 'present' || entry?.status === 'on_duty') colPresentCount++;
-                                        else if (entry?.status === 'half_day') colPresentCount += 0.5;
-                                    });
-
-                                    return (
-                                        <td 
-                                            key={col.dateStr} 
-                                            className={`p-2 text-center border-r border-stone-200 ${
-                                                col.isToday ? 'bg-amber-100/50 font-black text-amber-900' : ''
-                                            }`}
-                                        >
-                                            <span className="text-xs font-bold text-stone-800">
-                                                {colPresentCount}
-                                            </span>
+                            </thead>
+                            <tbody className="divide-y divide-stone-100">
+                                {filteredStaff.map(person => (
+                                    <tr key={person.id || person.name}>
+                                        <th scope="row" className="sticky left-0 z-10 border-r border-stone-200 bg-white p-3 font-normal">
+                                            <span className="block truncate font-bold text-stone-900">{person.name}</span>
+                                            {person.role && <span className="block truncate text-[11px] text-stone-500">{person.role}</span>}
+                                        </th>
+                                        {days.map(day => {
+                                            const entry = entryFor(person, day);
+                                            const label = `${person.name}, ${formatDate(day, 'long')}: ${ATTENDANCE_STATUSES[entry?.status]?.label || 'not marked'}`;
+                                            return (
+                                                <td key={day} className={`border-r border-stone-100 p-1 text-center ${day === today ? 'bg-orange-50/50' : ''}`}>
+                                                    {isHeadOffice ? (
+                                                        <button type="button" aria-label={`${label}. Change`} title={entry?.notes || undefined}
+                                                            onClick={() => setCell({ person, day, notes: entry?.notes || '', status: entry?.status || null })}
+                                                            className="flex min-h-11 w-full items-center justify-center rounded-lg hover:bg-stone-100">
+                                                            <StatusChip status={entry?.status} compact={compact} />
+                                                        </button>
+                                                    ) : (
+                                                        <span className="flex min-h-11 items-center justify-center" aria-label={label} title={entry?.notes || undefined}>
+                                                            <StatusChip status={entry?.status} compact={compact} />
+                                                        </span>
+                                                    )}
+                                                </td>
+                                            );
+                                        })}
+                                        <td className="bg-emerald-50/40 p-2 text-center font-bold text-emerald-800">
+                                            {days.reduce((sum, day) => sum + presentWeight(statusOf(person, day)), 0)}
                                         </td>
-                                    );
-                                })}
-                                <td className="p-2 text-center bg-stone-100 font-black text-stone-900">
-                                    ―
-                                </td>
-                            </tr>
-                        </tfoot>
-
-                    </table>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            )}
 
-            {/* Cell Quick-Mark / Status Selection Modal */}
-            {activeCell && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs animate-in fade-in duration-150">
-                    <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-sm w-full p-5 space-y-4">
-                        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-                            <div>
-                                <h3 className="text-sm font-bold text-stone-900">
-                                    Mark Attendance
-                                </h3>
-                                <p className="text-xs text-stone-500">
-                                    <strong>{activeCell.staffName}</strong> • {activeCell.dateStr}
-                                </p>
-                            </div>
-                            <button
-                                onClick={() => setActiveCell(null)}
-                                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 cursor-pointer"
-                            >
-                                ✕
-                            </button>
-                        </div>
+            <ul className="flex flex-wrap gap-2 text-[11px]" aria-label="Key">
+                {Object.values(ATTENDANCE_STATUSES).map(cfg => (
+                    <li key={cfg.id} className="flex items-center gap-1.5"><StatusChip status={cfg.id} compact /> <span className="text-stone-600">{cfg.label}</span></li>
+                ))}
+            </ul>
 
-                        {/* Status Selection Buttons */}
-                        <div className="space-y-2">
-                            <label className="block text-[11px] font-bold uppercase text-stone-400 tracking-wider">
-                                Select Status
-                            </label>
-                            <div className="grid grid-cols-1 gap-1.5">
-                                {Object.values(ATTENDANCE_STATUSES).map(status => {
-                                    const isSelected = activeCell.currentStatus === status.id;
-                                    return (
-                                        <button
-                                            key={status.id}
-                                            type="button"
-                                            onClick={() => handleApplyStatus(status.id)}
-                                            className={`w-full py-2 px-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
-                                                isSelected 
-                                                    ? `${status.activeBg} border-transparent shadow-xs` 
-                                                    : `${status.bg} hover:brightness-95`
-                                            }`}
-                                        >
-                                            <div className="flex items-center gap-2">
-                                                <span className={`w-2 h-2 rounded-full ${isSelected ? 'bg-white' : status.dot}`} />
-                                                <span>{status.label}</span>
-                                            </div>
-                                            <span className="text-[11px] opacity-80">({status.short})</span>
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* Admin Approval Quick Action for Pending Requests */}
-                        {isAdmin && (activeCell.currentStatus === 'holiday_request' || activeCell.currentStatus === 'pending_present') && (
-                            <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 space-y-2">
-                                <div className="text-[11px] font-bold text-amber-900">
-                                    Pending Approval: {activeCell.currentStatus === 'holiday_request' ? 'Holiday Request' : 'Self-Marked Present'}
-                                </div>
-                                <div className="flex gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            handleApproveRequest({
-                                                staffName: activeCell.staffName,
-                                                dateStr: activeCell.dateStr,
-                                                status: activeCell.currentStatus
-                                            });
-                                            setActiveCell(null);
-                                        }}
-                                        className="flex-1 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer"
-                                    >
-                                        <Check className="w-3.5 h-3.5" /> Approve
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => {
-                                            handleRejectRequest({
-                                                staffName: activeCell.staffName,
-                                                dateStr: activeCell.dateStr
-                                            });
-                                            setActiveCell(null);
-                                        }}
-                                        className="flex-1 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1 cursor-pointer border border-rose-200"
-                                    >
-                                        <X className="w-3.5 h-3.5" /> Reject
-                                    </button>
-                                </div>
-                            </div>
+            <Modal open={Boolean(cell)} onClose={() => setCell(null)} busy={busy} size="sm"
+                title={cell ? `${cell.person.name} · ${formatDate(cell.day, 'short')}` : ''}
+                footer={cell?.status && (
+                    <button type="button" onClick={() => applyStatus(null)} disabled={busy} className="sf-btn-secondary mr-auto min-h-11">Clear this day</button>
+                )}>
+                {cell && (
+                    <div className="space-y-4">
+                        {isPendingStatus(cell.status) && (
+                            <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                                {cell.person.name} asked for <strong>{ATTENDANCE_STATUSES[cell.status].label.toLowerCase()}</strong>. Pick a status to decide.
+                            </p>
                         )}
-
-                        {/* Optional Notes Input */}
-                        <div>
-                            <label className="block text-xs font-bold text-stone-700 mb-1">
-                                Optional Notes / Remarks
-                            </label>
-                            <input
-                                type="text"
-                                value={cellNotes}
-                                onChange={e => setCellNotes(e.target.value)}
-                                placeholder="e.g. Doctor visit, Surat site visit, half day"
-                                className="w-full px-3 py-2 text-xs border border-stone-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                            />
-                        </div>
-
-                        {/* Clear Status Button */}
-                        <div className="pt-2 flex gap-2 border-t border-stone-100">
-                            {activeCell.currentStatus && (
-                                <button
-                                    type="button"
-                                    onClick={() => handleApplyStatus(null)}
-                                    className="flex-1 py-2 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                                >
-                                    Clear Status
-                                </button>
-                            )}
-                            <button
-                                type="button"
-                                onClick={() => setActiveCell(null)}
-                                className="flex-1 py-2 bg-stone-900 hover:bg-stone-800 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-                            >
-                                Done
-                            </button>
-                        </div>
+                        <Field label="Notes (optional)" htmlFor="attendance-notes">
+                            <Input id="attendance-notes" value={cell.notes} maxLength={200} onChange={e => setCell(prev => ({ ...prev, notes: e.target.value }))} />
+                        </Field>
+                        <TagPicker label="Status" columns={2} options={STATUS_OPTIONS} value={cell.status} disabled={busy} onChange={applyStatus} />
+                        {busy && <p className="flex items-center gap-2 text-xs text-stone-500"><Spinner size={12} /> Saving…</p>}
                     </div>
-                </div>
-            )}
+                )}
+            </Modal>
 
-            {/* Holiday / Leave Request Modal */}
-            {showHolidayModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs animate-in fade-in duration-150">
-                    <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-md w-full p-6 space-y-4">
-                        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                                    <CalendarPlus className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-bold text-stone-900">Request Leave / Holiday</h3>
-                                    <p className="text-[11px] text-stone-500">Submit planned time-off for Admin review</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowHolidayModal(false)}
-                                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 cursor-pointer"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleHolidaySubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-stone-700 mb-1">Staff Member</label>
-                                {isAdmin ? (
-                                    <select
-                                        value={holidayStaff}
-                                        onChange={e => setHolidayStaff(e.target.value)}
-                                        className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl bg-stone-50 font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    >
-                                        {staffList.map(s => (
-                                            <option key={s.id || s.name} value={s.name}>{s.name} ({s.role || 'Staff'})</option>
-                                        ))}
-                                    </select>
-                                ) : (
-                                    <input
-                                        type="text"
-                                        readOnly
-                                        value={holidayStaff}
-                                        className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl bg-stone-100 font-semibold text-stone-700"
-                                    />
-                                )}
-                            </div>
-
+            <Modal open={Boolean(request)} onClose={() => setRequest(null)} busy={busy} size="sm"
+                title={request?.kind === 'leave' ? 'Ask for leave' : 'Check in for today'}
+                footer={(
+                    <>
+                        <button type="button" onClick={() => setRequest(null)} disabled={busy} className="sf-btn-secondary min-h-11">Cancel</button>
+                        <button type="button" onClick={submitRequest} disabled={busy} className="sf-btn-primary min-h-11">
+                            {busy && <Spinner size={14} />} {request?.kind === 'leave' ? 'Send request' : isHeadOffice ? 'Mark present' : 'Send check-in'}
+                        </button>
+                    </>
+                )}>
+                {request && (
+                    <div className="space-y-4">
+                        <ErrorBanner>{requestError}</ErrorBanner>
+                        {request.kind === 'leave' ? (
                             <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-bold text-stone-700 mb-1">Start Date</label>
-                                    <input
-                                        type="date"
-                                        required
-                                        value={holidayStartDate}
-                                        onChange={e => {
-                                            setHolidayStartDate(e.target.value);
-                                            if (!holidayEndDate || holidayEndDate < e.target.value) {
-                                                setHolidayEndDate(e.target.value);
-                                            }
-                                        }}
-                                        className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-bold text-stone-700 mb-1">End Date</label>
-                                    <input
-                                        type="date"
-                                        required
-                                        min={holidayStartDate}
-                                        value={holidayEndDate}
-                                        onChange={e => setHolidayEndDate(e.target.value)}
-                                        className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    />
-                                </div>
+                                <Field label="From" htmlFor="leave-start" required>
+                                    <Input id="leave-start" type="date" value={request.start} onChange={e => setRequest(prev => ({ ...prev, start: e.target.value }))} />
+                                </Field>
+                                <Field label="Until" htmlFor="leave-end" hint="Leave blank for one day.">
+                                    <Input id="leave-end" type="date" value={request.end} min={request.start || undefined} onChange={e => setRequest(prev => ({ ...prev, end: e.target.value }))} />
+                                </Field>
                             </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-stone-700 mb-1">Reason / Notes</label>
-                                <textarea
-                                    rows={3}
-                                    required
-                                    value={holidayReason}
-                                    onChange={e => setHolidayReason(e.target.value)}
-                                    placeholder="e.g. Family function, personal leave, festival..."
-                                    className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-
-                            <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-100">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowHolidayModal(false)}
-                                    className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl transition cursor-pointer"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={holidaySubmitting}
-                                    className="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl transition shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                                >
-                                    <Send className="w-3.5 h-3.5" />
-                                    {holidaySubmitting ? 'Submitting...' : 'Submit Request'}
-                                </button>
-                            </div>
-                        </form>
+                        ) : (
+                            <p className="text-sm text-stone-700">{self?.name}, {formatDate(today, 'long')}.</p>
+                        )}
+                        <Field label={request.kind === 'leave' ? 'Reason (optional)' : 'Notes (optional)'} htmlFor="request-notes">
+                            <Textarea id="request-notes" rows={2} value={request.notes} maxLength={300}
+                                onChange={e => setRequest(prev => ({ ...prev, notes: e.target.value }))} />
+                        </Field>
                     </div>
-                </div>
-            )}
-
-            {/* Self-Mark Present Modal */}
-            {showSelfMarkModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-2xs animate-in fade-in duration-150">
-                    <div className="bg-white rounded-2xl shadow-xl border border-stone-200 max-w-sm w-full p-6 space-y-4">
-                        <div className="flex items-center justify-between border-b border-stone-100 pb-3">
-                            <div className="flex items-center gap-2">
-                                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                                    <CheckCheck className="w-4 h-4" />
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-bold text-stone-900">Mark Attendance Check-in</h3>
-                                    <p className="text-[11px] text-stone-500">{isAdmin ? 'Direct mark present' : 'Submits to Admin for approval'}</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowSelfMarkModal(false)}
-                                className="p-1 rounded-lg text-stone-400 hover:text-stone-700 cursor-pointer"
-                            >
-                                ✕
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleSelfMarkSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-bold text-stone-700 mb-1">Staff Member</label>
-                                <input
-                                    type="text"
-                                    readOnly
-                                    value={currentStaffName}
-                                    className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl bg-stone-100 font-semibold text-stone-700"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-stone-700 mb-1">Date</label>
-                                <input
-                                    type="date"
-                                    required
-                                    value={selfMarkDate}
-                                    onChange={e => setSelfMarkDate(e.target.value)}
-                                    className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-bold text-stone-700 mb-1">Check-in Notes / Time</label>
-                                <input
-                                    type="text"
-                                    value={selfMarkNotes}
-                                    onChange={e => setSelfMarkNotes(e.target.value)}
-                                    placeholder="e.g. Checked in at 9:30 AM · Office HQ"
-                                    className="w-full px-3 py-2 text-xs border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                                />
-                            </div>
-
-                            <div className="pt-2 flex items-center justify-end gap-2 border-t border-stone-100">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowSelfMarkModal(false)}
-                                    className="px-4 py-2 text-xs font-bold text-stone-600 hover:bg-stone-100 rounded-xl transition cursor-pointer"
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={selfMarkSubmitting}
-                                    className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl transition shadow-xs disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
-                                >
-                                    <Check className="w-3.5 h-3.5" />
-                                    {selfMarkSubmitting ? 'Recording...' : isAdmin ? 'Mark Present' : 'Submit for Approval'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-
+                )}
+            </Modal>
         </div>
     );
 }

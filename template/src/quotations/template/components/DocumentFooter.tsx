@@ -1,5 +1,5 @@
 import React from 'react';
-import { DemoPartnerLogo } from './CompanyLogos';
+import { Emblem } from './CompanyLogos';
 import { QuotationData } from '../types';
 
 interface DocumentFooterProps {
@@ -10,7 +10,7 @@ interface DocumentFooterProps {
 
 export const DocumentFooter: React.FC<DocumentFooterProps> = ({ footer, assets, onEditLogo }) => {
   const footerOrange = '#F89520';
-  const corporateParts = footer.corporateOffice.split(',').map((part) => part.trim()).filter(Boolean);
+  const corporateParts = (footer.corporateOffice || '').split(',').map((part) => part.trim()).filter(Boolean);
   const hasBalancedCorporateLines = corporateParts.length >= 3;
   const corporateLine1 = hasBalancedCorporateLines
     ? corporateParts.slice(0, -2).join(', ')
@@ -24,12 +24,16 @@ export const DocumentFooter: React.FC<DocumentFooterProps> = ({ footer, assets, 
       <div className="flex items-end justify-between gap-2">
         {/* Left: Authorized Partner */}
         <div className="ml-5 flex w-[252px] shrink-0 flex-col items-start">
-          <span className="mb-1 whitespace-nowrap text-[11.5px] font-extrabold font-sans text-[#0c3882] tracking-tight">
-            Fictional Demo Aurora Solar
+          <span className="mb-1 text-[11.5px] font-extrabold font-sans text-[#0c3882] tracking-tight">
+            {footer.authorizedPartner}
           </span>
-          <div className="mb-2">
-            <DemoPartnerLogo customLogoUrl={assets?.demoPartnerLogoUrl} className="h-[52px]" />
-          </div>
+          {assets?.partnerLogoUrl ? (
+            <div className="mb-2">
+              <Emblem url={assets.partnerLogoUrl} alt="Partner logo" className="h-[52px]" />
+            </div>
+          ) : footer.contact && (
+            <span className="mb-2 text-[10px] font-semibold text-gray-700">{footer.contact}</span>
+          )}
         </div>
 
         {/* Right: Office Address Badge with exact rounded diagonal slant & orange accent matching reference */}
@@ -69,17 +73,21 @@ export const DocumentFooter: React.FC<DocumentFooterProps> = ({ footer, assets, 
               className="flex flex-col gap-1 text-[9.9px] leading-[1.2] text-center text-white"
               style={{ fontFamily: 'Arial, Helvetica, sans-serif' }}
             >
-              <div>
-                <span className="font-bold">Corporate Office:</span>{' '}
-                <span className="font-semibold">
-                  {corporateLine1}
-                  {hasBalancedCorporateLines && <><br />{corporateLine2}</>}
-                </span>
-              </div>
-              <div>
-                <span className="font-bold">Branch Office:</span>{' '}
-                <span className="font-semibold">{footer.branchOffice}</span>
-              </div>
+              {footer.corporateOffice && (
+                <div>
+                  <span className="font-bold">{footer.branchOffice ? 'Corporate Office:' : 'Office:'}</span>{' '}
+                  <span className="font-semibold">
+                    {corporateLine1}
+                    {hasBalancedCorporateLines && <><br />{corporateLine2}</>}
+                  </span>
+                </div>
+              )}
+              {footer.branchOffice && (
+                <div>
+                  <span className="font-bold">Branch Office:</span>{' '}
+                  <span className="font-semibold">{footer.branchOffice}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

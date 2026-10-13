@@ -1,14 +1,15 @@
-import {containDialogFocus} from '../utils/dialogFocus';
 // ─── GlobalPopup.jsx ────────────────────────────────────────────────────────
-// A single, app-wide replacement for native alert()/confirm(). Generalizes
-// the custom popup design that already existed locally in StampPortal.jsx
-// so every component can use the same look via useGlobalPopup(), instead of
-// each screen inventing its own or falling back to the plain browser dialog.
+// A single, app-wide replacement for native alert()/confirm(), so every screen
+// uses the same look via useGlobalPopup() instead of the plain browser dialog.
 // ────────────────────────────────────────────────────────────────────────────
 
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AlertCircle, AlertTriangle, CheckCircle2, Info, Share2 } from 'lucide-react';
-import ImageCropModal from './ImageCropModal';
+import { containDialogFocus } from '../utils/dialogFocus';
+import { lazyWithRetry, LazyBoundary } from '../lib/lazy.js';
+
+// The cropper is only downloaded the first time an image is picked.
+const ImageCropModal = lazyWithRetry(() => import('./ImageCropModal'));
 
 const GlobalPopupContext = createContext(null);
 
@@ -144,14 +145,16 @@ export function GlobalPopupProvider({ children }) {
         <GlobalPopupContext.Provider value={{ showAlert, showConfirm, showChoice, showImageCropper }}>
             {children}
             {popup?.mode === 'image-cropper' ? (
-                <ImageCropModal
-                    isOpen={true}
-                    file={popup.file}
-                    title={popup.title}
-                    onCropSave={(cropped) => popup.onResolve(cropped)}
-                    onSkip={(orig) => popup.onResolve(orig)}
-                    onClose={() => popup.onResolve(null)}
-                />
+                <LazyBoundary>
+                    <ImageCropModal
+                        isOpen={true}
+                        file={popup.file}
+                        title={popup.title}
+                        onCropSave={(cropped) => popup.onResolve(cropped)}
+                        onSkip={(orig) => popup.onResolve(orig)}
+                        onClose={() => popup.onResolve(null)}
+                    />
+                </LazyBoundary>
             ) : popup ? (
                 <dialog onKeyDown={containDialogFocus}
                     ref={dialogRef}

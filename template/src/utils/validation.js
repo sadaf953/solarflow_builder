@@ -1,127 +1,82 @@
-import { z } from 'zod';
+// Checks a new lead before it is saved.
+//
+// Only a name and a phone number are needed to create a lead; anything else
+// that is filled in must be valid. Fields the form sends that are not checked
+// here are passed through unchanged. `safeParse` / `parse` follow the shape the
+// form used with zod: { success, data, error: { issues: [{ path, message }] } }.
 
-// Configure Zod in jitless mode to prevent new Function() probe from triggering CSP eval warnings
-z.config({ jitless: true });
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const OPTIONAL_TEXT = [
+    'consumer_no', 'villages', 'channel_partner', 'module_brand', 'module_wp',
+    'no_of_modules', 'system_capacity_kwp', 'sub_divisions', 'district', 'full_address',
+];
 
-const emptyToUndefined = (schema) => z.preprocess((val) => {
-    if (typeof val === 'string' && val.trim() === '') return undefined;
-    return val;
-}, schema);
+const isBlank = value => value == null || String(value).trim() === '';
 
-const cleanPhone = (val) => {
-    if (!val) return val;
-    let s = String(val).replace(/[^0-9]/g, '');
-    if (s.length === 11 && s.startsWith('0')) s = s.slice(1);
-    if (s.length === 12 && s.startsWith('91')) s = s.slice(2);
-    return s;
+// Indian mobile number as 10 digits; drops a leading 0 or 91 from pasted numbers.
+const cleanPhone = value => {
+    let digits = String(value).replace(/[^0-9]/g, '');
+    if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+    if (digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+    return digits;
 };
 
-// NOTE: .passthrough() is essential. Zod objects strip undeclared keys, and this
-// schema declares 12 of the 67 fields the lead form sends - so every other field
-// (sub_channel_partner, stage, roof_shed, folder_no, installation_status, …) was
-// being silently deleted between validation and the database insert.
-export const leadSchema = z.object({
-    customer_name: z.string({
-        error: "Customer Name is required",
-    })
-    .min(2, "Customer Name must be at least 2 characters")
-    .max(100, "Customer Name cannot exceed 100 characters")
-    .trim(),
-    
-    phone_number: z.preprocess(
-        cleanPhone,
-        z.string({
-            error: "Phone Number is required",
-        })
-        .regex(/^[0-9]{10}$/, "Phone Number must be exactly 10 digits")
-    ),
-    
-    // Marked * in the form, so it is enforced here too.
-    email_address: z.string({ error: "Email Address is required" })
-        .trim()
-        .min(1, "Email Address is required")
-        .pipe(z.email("Invalid email format")),
-    
-    consumer_no: z.string({
-        error: "Consumer Number is required",
-    })
-    .min(3, "Consumer/EB Number must be at least 3 characters")
-    .max(30, "Consumer/EB Number cannot exceed 30 characters")
-    .trim(),
+function checkLead(input) {
+    const data = { ...(input || {}) };
+    const issues = [];
+    const fail = (key, message) => issues.push({ path: [key], message });
 
-    villages: z.string({
-        error: "Villages / Address is required",
-    })
-    .min(2, "Address must be at least 2 characters")
-    .trim(),
+    if (typeof data.customer_name !== 'string') {
+        fail('customer_name', 'Customer Name is required');
+    } else {
+        data.customer_name = data.customer_name.trim();
+        if (data.customer_name.length < 2) fail('customer_name', 'Customer Name must be at least 2 characters');
+        else if (data.customer_name.length > 100) fail('customer_name', 'Customer Name cannot exceed 100 characters');
+    }
 
-    full_address: z.string().trim().optional().or(z.literal('')),
-    pincode: z.string().trim().refine(value => value === '' || /^\d{6}$/.test(value), {
-        message: 'Pincode must contain exactly 6 digits'
-    }).optional(),
+    if (isBlank(data.phone_number)) {
+        fail('phone_number', 'Phone Number is required');
+    } else {
+        data.phone_number = cleanPhone(data.phone_number);
+        if (!/^[0-9]{10}$/.test(data.phone_number)) fail('phone_number', 'Phone Number must be exactly 10 digits');
+    }
 
-    channel_partner: z.string({
-        error: "Channel Partner Name is required",
-    })
-    .min(1, "Channel Partner Name is required")
-    .trim(),
+    for (const key of OPTIONAL_TEXT) {
+        if (typeof data[key] === 'string') data[key] = data[key].trim();
+    }
 
-    module_brand: z.string({
-        error: "Module Brand is required",
-    })
-    .min(1, "Module Brand is required")
-    .trim(),
+    if (typeof data.email_address === 'string') {
+        data.email_address = data.email_address.trim();
+        if (data.email_address && !EMAIL.test(data.email_address)) fail('email_address', 'Invalid email format');
+    }
 
-    module_wp: z.string({
-        error: "Module Wp is required",
-    })
-    .min(1, "Module Wp is required"),
+    if (typeof data.pincode === 'string') {
+        data.pincode = data.pincode.trim();
+        if (data.pincode && !/^\d{6}$/.test(data.pincode)) fail('pincode', 'Pincode must contain exactly 6 digits');
+    }
 
-    no_of_modules: z.string({
-        error: "No of Modules is required",
-    })
-    .min(1, "No of Modules is required"),
+    // Stored as 'Cash' or 'Loan'; left out when nothing was chosen.
+    if (isBlank(data.payment_type)) delete data.payment_type;
+    else data.payment_type = String(data.payment_type).trim().toUpperCase() === 'LOAN' ? 'Loan' : 'Cash';
 
-    system_capacity_kwp: z.string({
-        error: "System Capacity is required",
-    })
-    .min(1, "System Capacity is required"),
+    return { data, issues };
+}
 
-    sub_divisions: z.string({
-        error: "Tehsil / Sub Division is required",
-    })
-    .min(1, "Tehsil / Sub Division is required")
-    .trim(),
+export const leadSchema = {
+    safeParse(input) {
+        const { data, issues } = checkLead(input);
+        return issues.length ? { success: false, error: { issues } } : { success: true, data };
+    },
+    parse(input) {
+        const result = this.safeParse(input);
+        if (!result.success) {
+            const error = new Error(result.error.issues.map(issue => issue.message).join('\n'));
+            error.issues = result.error.issues;
+            throw error;
+        }
+        return result.data;
+    },
+};
 
-    district: z.string({
-        error: "District is required",
-    })
-    .min(1, "District is required")
-    .trim(),
-
-    // Was: `if (!val) return 'Cash'` - an empty Payment Type was silently
-    // rewritten to Cash before the enum saw it, so a lead could be submitted
-    // with none chosen. Empty now stays empty and fails the enum.
-    payment_type: z.preprocess(
-        (val) => {
-            if (val === null || val === undefined || String(val).trim() === '') return undefined;
-            const s = String(val).trim().toUpperCase();
-            return s === 'LOAN' ? 'Loan' : 'Cash';
-        },
-        z.enum(['Cash', 'Loan'], {
-            error: () => "Payment Type is required - choose Cash or Loan"
-        })
-    ),
-}).passthrough();
-
-export const customerSchema = leadSchema.partial();
-
-// This isolated demo collects only name and phone initially. Optional fields
-// remain in the payload; valid supplied email/pincode still get checked.
-export const demoLeadSchema = leadSchema.partial().extend({
- customer_name: z.string().trim().min(2,'Customer Name must be at least 2 characters').max(100),
- phone_number: leadSchema.shape.phone_number,
- ...Object.fromEntries(['consumer_no','villages','channel_partner','module_brand','module_wp','no_of_modules','system_capacity_kwp','sub_divisions','district'].map(key=>[key,z.string().trim().optional().or(z.literal(''))])),
- email_address: z.string().trim().email('Invalid email format').optional().or(z.literal('')),
- payment_type: z.preprocess(v=>v == null || String(v).trim()==='' ? undefined : v,leadSchema.shape.payment_type.optional()),
-}).passthrough();
+/** @deprecated Use leadSchema. */
+export const demoLeadSchema = leadSchema;

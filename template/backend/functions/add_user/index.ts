@@ -1,8 +1,9 @@
 // add_user: the only way the app creates or changes logins.
 //
 // Actions: create | update_password | update_email | delete | set_status.
-// The caller must be an active admin, or a partner office (CPO) managing the
-// manager / dealer logins under itself. The login type is written to
+// The caller must be an active admin, or a partner office (CPO) whose login
+// type is switched on, managing the manager / dealer logins under itself.
+// Activate and deactivate only through set_status. The login type is written to
 // app_metadata, which users cannot edit; the database trigger and the profile
 // row both take it from there.
 //
@@ -23,6 +24,8 @@ type Profile = {
 };
 
 const CPO_CHILD_TYPES = ["office2", "agent2"];
+// Placeholder for accounts nobody set up; never created or activated here.
+const PENDING_TYPE = "pending";
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ALLOWED_ORIGINS = (Deno.env.get("ALLOWED_ORIGIN") || "").split(",").map((o) => o.trim()).filter(Boolean);
@@ -45,6 +48,7 @@ function corsHeaders(req: Request): Record<string, string> {
 }
 
 const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+const likeLiteral = (value: string) => value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
 
 function requireId(value: unknown): string {
   const id = text(value);
@@ -86,12 +90,17 @@ Deno.serve(async (req: Request) => {
     const { data: auth, error: authError } = await authClient.auth.getUser(token);
     if (authError || !auth?.user) throw new HttpError(401, "Unauthorized: invalid or expired session. Sign in again.");
 
+    const loginType = async (userType: string) => {
+      const { data } = await service.from("app_roles").select("user_type, role, enabled").eq("user_type", userType).maybeSingle();
+      return data as { user_type: string; role: string; enabled: boolean } | null;
+    };
+
     const { data: caller } = await service.from("profiles")
       .select("id, name, email, user_type, status, channel_partner, cpo_profile_id")
       .eq("id", auth.user.id).maybeSingle<Profile>();
     const isAdmin = caller?.status === "active" && caller.user_type === "admin";
     const isCpo = caller?.status === "active" && caller.user_type === "channel_partner_office";
-    if (!caller || (!isAdmin && !isCpo)) {
+    if (!caller || (!isAdmin && !isCpo) || !(await loginType(caller.user_type))?.enabled) {
       throw new HttpError(403, "Forbidden: only an active Admin or Channel Partner Office can manage logins.");
     }
 
@@ -104,10 +113,11 @@ Deno.serve(async (req: Request) => {
     const action = text(body.action) || "create";
 
     const enabledRole = async (userType: string) => {
-      const { data } = await service.from("app_roles").select("user_type, role, enabled").eq("user_type", userType).maybeSingle();
+      if (userType === PENDING_TYPE) throw new HttpError(400, "Choose a login type for this user first.");
+      const data = await loginType(userType);
       if (!data) throw new HttpError(400, `Unknown login type "${userType}".`);
       if (!data.enabled) throw new HttpError(400, `${userType} logins are switched off for this company.`);
-      return data as { user_type: string; role: string };
+      return data;
     };
 
     // A CPO may only touch the manager / dealer logins under itself.
@@ -146,15 +156,19 @@ Deno.serve(async (req: Request) => {
         const requested = text(body.parent_profile_id);
         if (UUID.test(requested) || channelPartner) {
           const offices = service.from("profiles").select("id").eq("user_type", "channel_partner_office").eq("status", "active");
-          const { data } = await (UUID.test(requested) ? offices.eq("id", requested) : offices.ilike("channel_partner", channelPartner!)).limit(2);
+          const { data } = await (UUID.test(requested) ? offices.eq("id", requested) : offices.ilike("channel_partner", likeLiteral(channelPartner!))).limit(2);
           if (data?.length === 1) parentId = data[0].id;
         }
+      } else if (userType === "agent") {
+        // A channel partner sees the leads filed under this key; it never follows later renames.
+        channelPartner = channelPartner || name;
       }
 
       const appMetadata = {
         created_via: "add_user",
         user_type: userType,
-        role: text(body.role) || role.role,
+        // A partner office cannot choose the label of the logins it creates.
+        role: (isCpo ? "" : text(body.role)) || role.role,
         channel_partner: channelPartner,
         parent_profile_id: parentId,
         created_by: caller.id,

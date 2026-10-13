@@ -1,5 +1,8 @@
 import { INITIAL_QUOTATION } from './template/data/initialData.js';
 
+// The client's name for the connection / registration charges, e.g. 'GEB / GEDA'.
+export const CHARGES_LABEL = INITIAL_QUOTATION.page2.chargesLabel;
+
 export const QUOTATION_ROLES = ['agent', 'agent2', 'admin', 'sales'];
 export const STEPS = ['Customer', 'System', 'Pricing', 'Notes & review'];
 export const canUseQuotations = user => QUOTATION_ROLES.includes(user?.userType);
@@ -40,7 +43,7 @@ export function validate(form) {
     const errors = [];
     const required = (key, title, step) => { if (!String(form[key] ?? '').trim()) errors.push(`${STEPS[step]}: ${title} is required`); };
     [['customer_name','Customer name'],['quotation_date','Quotation date'],['owner_name_snapshot','Salesperson name']].forEach(([key,title]) => required(key,title,0));
-    // This isolated demo also accepts non-dialable synthetic numbers 0000000000–0000009999.
+    // 0000000000–0000009999 are placeholders for a draft previewed before a phone is known.
     const validPhone = value => /^(?:(?:91)?[6-9]\d{9}|0{6}\d{4})$/.test(String(value || '').replace(/[\s()+-]/g,''));
     if (!validPhone(form.customer_phone)) errors.push('Customer: Enter a valid Indian mobile number');
     // Salesperson phone is profile-derived and optional. Keep it on the document
@@ -53,7 +56,7 @@ export function validate(form) {
     if (!(Number(form.panel_wattage) > 0) || !Number.isFinite(Number(form.panel_wattage))) errors.push('System: Module Wp must be greater than zero');
     [['solar_panel_make','Panel make'],['inverter_brand','Inverter brand / make']].forEach(([key,title]) => required(key,title,1));
     if (!['Residential','Commercial'].includes(form.project_type)) errors.push('System: Select a project type');
-    if (!['Including','Excluding'].includes(form.geb_geda_charge)) errors.push('System: Select GEB/GEDA charges');
+    if (!['Including','Excluding'].includes(form.geb_geda_charge)) errors.push(`System: Choose whether ${CHARGES_LABEL} charges are included`);
     if (form.options?.length !== 3) errors.push('Pricing: Exactly three options are required');
     (form.options || []).forEach((option, i) => {
         const prefix = `Pricing: Option ${i + 1}`;
@@ -92,7 +95,7 @@ export function documentFor(row) {
     data.page2 = { ...data.page2, solarPanelMake: form.solar_panel_make || '', solarPanelQty: form.solar_panel_qty || '',
         inverterOption: form.inverter_option || '', inverterBrand: form.inverter_brand || '', gebGedaCharge: form.geb_geda_charge || 'Including',
         projectType: form.project_type || 'Residential', projectSize: form.capacity_kw ? `${form.capacity_kw} kWp` : '', brandOptions: calculate(form.options || []),
-        notes: [...data.page2.notes, ...(form.custom_notes || []).filter(n => n && n.trim())] };
+        customNotesFrom: data.page2.notes.length, notes: [...data.page2.notes, ...(form.custom_notes || []).filter(n => n && n.trim())] };
     if (form.valid_until) data.page3.termsAndConditions = data.page3.termsAndConditions.map(t => t.sr === 10 ? { ...t, remarks: `Valid until ${form.valid_until.split('-').reverse().join('-')}` } : t);
     return data;
 }

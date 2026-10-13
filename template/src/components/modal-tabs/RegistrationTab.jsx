@@ -1,189 +1,98 @@
-import React, { useState } from 'react';
 import { ClipboardList, Paperclip, Edit3, X } from 'lucide-react';
-import { SectionHeader, EditableDetailItem, CheckboxRemarkItem, ChecklistModeToggle, generateDemoSampleFile } from './shared';
+import { EditableDetailItem, CheckboxRemarkItem } from './shared';
+import { documentMode, dropdownOptions, isOn } from '../../config/index.js';
+import { Badge, SectionCard } from '../../ui/index.js';
+import useStageSave from './useStageSave';
 
-export default function RegistrationTab({
-    customer,
-    editData,
-    handleChange,
-    editingSection,
-    setEditingSection,
-    meta,
-    user,
-    isEditable,
-    documents = [],
-    onFileUpload,
-    onFileDelete,
-    onFilePreview,
-    onUpdateRemark,
-    onUpdate
-}) {
-    const [fillingDemoDocs, setFillingDemoDocs] = useState(false);
-    const canDeleteDocs = user?.userType === "admin" || user?.userType === "sales" || user?.userType === "office";
+const REGISTRATION_DOCUMENTS = [
+    { field: 'application_acknowledgment', label: 'Application Acknowledgment' },
+    { field: 'feasibilty_document', label: 'Feasibility Document' },
+    { field: 'subsidy_token_photo', label: 'Subsidy Token Photo' },
+];
 
-    const handleFillAllDemoDocs = async () => {
-        if (!onFileUpload || fillingDemoDocs) return;
-        setFillingDemoDocs(true);
-        try {
-            const itemsToFill = [
-                { field: 'application_acknowledgment', label: 'Application Acknowledgment' },
-                { field: 'feasibilty_document', label: 'Feasibility Document' },
-                { field: 'subsidy_token_photo', label: 'Subsidy Token Photo' },
-            ];
-            for (const item of itemsToFill) {
-                const hasDoc = documents.some(d => d.doc_type === item.field);
-                if (!hasDoc) {
-                    const file = generateDemoSampleFile(item.field, item.label);
-                    await onFileUpload({ target: { files: [file], value: '' } }, item.field);
-                }
-            }
-        } finally {
-            setFillingDemoDocs(false);
-        }
+// Only the payment routes this client tracks (Loan and Cash stages).
+const PAYMENT_TYPES = [['Loan', 'loanTracking'], ['Cash', 'cashPayments']];
+const enabledPaymentTypes = PAYMENT_TYPES.filter(([, feature]) => isOn(feature)).map(([label]) => label);
+const PAYMENT_TYPE_OPTIONS = enabledPaymentTypes.length ? enabledPaymentTypes : PAYMENT_TYPES.map(([label]) => label);
+
+const titleCase = value => (value ? String(value).charAt(0).toUpperCase() + String(value).slice(1).toLowerCase() : '');
+
+export default function RegistrationTab(props) {
+    const {
+        customer, editData, handleChange, editingSection, setEditingSection, meta, user, isEditable,
+        documents = [], onFileUpload, onFileDelete, onFilePreview, onUpdateRemark,
+    } = props;
+    const save = useStageSave(props);
+    const filesOn = documentMode() !== 'checklist';
+    const canDeleteDocs = user?.userType === 'admin' || user?.userType === 'sales';
+    const isEditingDetails = editingSection === 'reg_details';
+    // With no staff names set up yet the field stays free text.
+    const registrationStaff = dropdownOptions('registration_by', meta);
+
+    // Ticking a checklist item saves straight away; it is not logged.
+    const handleAutoSave = async (field, val) => {
+        if (customer?.id) await save({ [field]: val }, null, { log: false });
     };
 
-    const handleAutoSave = async (field, val) => {
-        if (onUpdate && customer?.id) {
-            await onUpdate(customer.id, { [field]: val });
+    const toggleDetailsEditing = () => {
+        setEditingSection?.(isEditingDetails ? null : 'reg_details');
+        if (!isEditingDetails) {
+            setTimeout(() => document.getElementById('section-reg_details')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 150);
         }
     };
 
     return (
         <div className="space-y-6 animate-in fade-in duration-300">
-            {/* Registration Details */}
-            <section id="section-reg_details">
-                <div className="flex items-center justify-between mb-3 border-b border-stone-100 pb-1.5 mt-2">
-                    <h3 className="text-[9px] font-bold text-stone-400 uppercase tracking-widest flex items-center gap-2">
-                        <ClipboardList size={12} className="text-amber-500" /> Registration Details
-                    </h3>
-                    <div className="flex items-center gap-2.5">
-                        {isEditable && (
-                            <button 
-                                type="button"
-                                onClick={() => {
-                                    const isOpening = editingSection !== 'reg_details';
-                                    if (setEditingSection) {
-                                        setEditingSection(isOpening ? 'reg_details' : null);
-                                    }
-                                    if (isOpening) {
-                                        setTimeout(() => {
-                                            const el = document.getElementById('section-reg_details');
-                                            if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                        }, 150);
-                                    }
-                                }} 
-                                className="text-stone-400 hover:text-amber-600 transition-colors p-1 cursor-pointer"
-                            >
-                                {editingSection === 'reg_details' ? <X size={14} /> : <Edit3 size={13} />}
-                            </button>
-                        )}
-                    </div>
-                </div>
-                
+            <SectionCard
+                id="section-reg_details"
+                title="Registration Details"
+                icon={ClipboardList}
+                actions={isEditable && (
+                    <button
+                        type="button"
+                        onClick={toggleDetailsEditing}
+                        aria-pressed={isEditingDetails}
+                        aria-label={isEditingDetails ? 'Stop editing registration details' : 'Edit registration details'}
+                        className="flex h-11 w-11 items-center justify-center rounded-xl text-stone-400 transition-colors hover:bg-stone-100 hover:text-amber-600"
+                    >
+                        {isEditingDetails ? <X size={16} aria-hidden="true" /> : <Edit3 size={15} aria-hidden="true" />}
+                    </button>
+                )}
+            >
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                    <EditableDetailItem label="Payment Type *" field="payment_type" value={editData.payment_type ? String(editData.payment_type).charAt(0).toUpperCase()+String(editData.payment_type).slice(1).toLowerCase() : ''} onChange={handleChange} options={['Loan','Cash']} isEditing={editingSection === 'reg_details'} />
-                    <EditableDetailItem 
-                        label={<span>Registration date <span className="text-red-500">*</span></span>} 
-                        field="registration_date" 
-                        value={editData.registration_date} 
-                        onChange={handleChange} 
-                        type="date" 
-                        isEditing={editingSection === 'reg_details'} 
-                    />
-                    <EditableDetailItem 
-                        label={<span>Registration By</span>}
-                        field="registration_by" 
-                        value={editData.registration_by} 
-                        onChange={handleChange} 
-                        options={meta['registration_by']} 
-                        category="registration_by" 
-                        isEditing={editingSection === 'reg_details'} 
-                        user={user} 
-                    />
-                    <EditableDetailItem 
-                        label={<span>Feasibility No</span>}
-                        field="registration_no" 
-                        value={editData.registration_no || editData.feasibility_no} 
-                        onChange={handleChange} 
-                        isEditing={editingSection === 'reg_details'} 
-                    />
-                    <EditableDetailItem 
-                        label="File No"
-                        field="folder_no" 
-                        value={editData.folder_no} 
-                        onChange={handleChange} 
-                        type="number" 
-                        isEditing={editingSection === 'reg_details'} 
-                    />
+                    <EditableDetailItem label="Payment Type *" field="payment_type" value={titleCase(editData.payment_type)} onChange={handleChange} options={PAYMENT_TYPE_OPTIONS} isEditing={isEditingDetails} />
+                    <EditableDetailItem label="Registration Date *" field="registration_date" value={editData.registration_date} onChange={handleChange} type="date" isEditing={isEditingDetails} />
+                    <EditableDetailItem label="Registration By" field="registration_by" value={editData.registration_by} onChange={handleChange} options={registrationStaff.length ? registrationStaff : undefined} category="registration_by" isEditing={isEditingDetails} />
+                    <EditableDetailItem label="Feasibility No" field="registration_no" value={editData.registration_no || editData.feasibility_no} onChange={handleChange} isEditing={isEditingDetails} />
+                    <EditableDetailItem label="File No" field="folder_no" value={editData.folder_no} onChange={handleChange} type="number" isEditing={isEditingDetails} />
                 </div>
+            </SectionCard>
 
-                {/* Registration Checklists & Uploads - Interactive outside pencil edit mode */}
-                <div className="mt-5 bg-white p-4 rounded-2xl border border-stone-100 shadow-sm space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-2.5">
-                        <div className="flex items-center gap-2">
-                            <h4 className="text-[10px] font-bold text-stone-700 uppercase tracking-widest flex items-center gap-1.5">
-                                <Paperclip size={12} className="text-amber-500" /> Registration Documents & Checklists
-                            </h4>
-                            <span className="text-[9px] font-semibold text-stone-400 bg-stone-100 px-1.5 py-0.5 rounded">
-                                3 items
-                            </span>
-                        </div>
-
-                        {/* Demo document helper */}
-                        <div className="flex items-center gap-2">
-                            <ChecklistModeToggle
-                                onFillAllDemoDocs={isEditable && onFileUpload ? handleFillAllDemoDocs : null}
-                                isFilling={fillingDemoDocs}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
+            <SectionCard
+                title="Registration Documents & Checklists"
+                icon={Paperclip}
+                actions={<Badge>{REGISTRATION_DOCUMENTS.length} items</Badge>}
+            >
+                <div className="flex flex-col gap-2">
+                    {REGISTRATION_DOCUMENTS.map(doc => (
                         <CheckboxRemarkItem
-                            label="Application Acknowledgment"
-                            field="application_acknowledgment"
-                            value={editData.application_acknowledgment}
+                            key={doc.field}
+                            label={doc.label}
+                            field={doc.field}
+                            value={editData[doc.field]}
                             onChange={handleChange}
                             onAutoSave={handleAutoSave}
                             isEditing={isEditable}
                             documents={documents}
-                            onUpload={onFileUpload}
-                            onDelete={onFileDelete}
+                            onUpload={filesOn ? onFileUpload : undefined}
+                            onDelete={filesOn ? onFileDelete : undefined}
                             onPreview={onFilePreview}
                             onUpdateRemark={onUpdateRemark}
                             canDelete={canDeleteDocs}
                         />
-                        <CheckboxRemarkItem
-                            label="Feasibility Document"
-                            field="feasibilty_document"
-                            value={editData.feasibilty_document}
-                            onChange={handleChange}
-                            onAutoSave={handleAutoSave}
-                            isEditing={isEditable}
-                            documents={documents}
-                            onUpload={onFileUpload}
-                            onDelete={onFileDelete}
-                            onPreview={onFilePreview}
-                            onUpdateRemark={onUpdateRemark}
-                            canDelete={canDeleteDocs}
-                        />
-                        <CheckboxRemarkItem
-                            label="Subsidy Token Photo"
-                            field="subsidy_token_photo"
-                            value={editData.subsidy_token_photo}
-                            onChange={handleChange}
-                            onAutoSave={handleAutoSave}
-                            isEditing={isEditable}
-                            documents={documents}
-                            onUpload={onFileUpload}
-                            onDelete={onFileDelete}
-                            onPreview={onFilePreview}
-                            onUpdateRemark={onUpdateRemark}
-                            canDelete={canDeleteDocs}
-                        />
-                    </div>
+                    ))}
                 </div>
-            </section>
+            </SectionCard>
         </div>
     );
 }
