@@ -6,6 +6,7 @@ import GlobalErrorBoundary from './components/GlobalErrorBoundary'
 import { GlobalPopupProvider } from './components/GlobalPopup'
 import { setupGlobalErrorHandling } from './utils/globalErrors'
 import './index.css'
+import './styles/app-shell.css'
 
 // Setup global error and unhandled promise rejection listeners
 setupGlobalErrorHandling()

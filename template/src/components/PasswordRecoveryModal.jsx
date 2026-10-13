@@ -1,110 +1,93 @@
-import React, { useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { KeyRound, Eye, EyeOff, Check, Loader2 } from 'lucide-react';
 import { supabase } from '../supabase';
-import { KeyRound, Eye, EyeOff, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { containDialogFocus } from '../utils/dialogFocus';
 
-export default function PasswordRecoveryModal({ onClose, onSuccess }) {
+const MIN_LENGTH = 8;
+
+// mode 'recovery': opened by a reset link, which has already signed the user in.
+// mode 'change': a signed-in user changes their password; the current one is checked first.
+export default function PasswordRecoveryModal({ mode = 'recovery', onClose }) {
+    const id = useId();
+    const [current, setCurrent] = useState('');
     const [password, setPassword] = useState('');
-    const [confirmPassword, setConfirmPassword] = useState('');
-    const [showPw, setShowPw] = useState(false);
-    const [loading, setLoading] = useState(false);
+    const [confirm, setConfirm] = useState('');
+    const [show, setShow] = useState(false);
+    const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    const [done, setDone] = useState(false);
+    const changing = mode === 'change';
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!password || password.length < 6) {
-            setError('Password must be at least 6 characters.');
-            return;
-        }
-        if (password !== confirmPassword) {
-            setError('Passwords do not match.');
-            return;
-        }
+    useEffect(() => {
+        const onKey = event => { if (event.key === 'Escape' && !busy) onClose(); };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [busy, onClose]);
 
-        setLoading(true);
+    async function submit(event) {
+        event.preventDefault();
+        if (password.length < MIN_LENGTH) return setError(`Use at least ${MIN_LENGTH} characters.`);
+        if (password !== confirm) return setError('The two new passwords do not match.');
+        if (changing && password === current) return setError('Choose a password different from the current one.');
+        setBusy(true);
         setError('');
         try {
-            const { error: updateErr } = await supabase.auth.updateUser({ password });
-            if (updateErr) throw updateErr;
-            if (onSuccess) onSuccess('Your password has been successfully updated.');
-            onClose();
+            if (changing) {
+                const { data } = await supabase.auth.getSession();
+                const { error: wrong } = await supabase.auth.signInWithPassword({ email: data.session?.user?.email || '', password: current });
+                if (wrong) throw new Error(wrong.code === 'invalid_credentials' ? 'Your current password is not correct.' : wrong.message);
+            }
+            const { error: updateError } = await supabase.auth.updateUser({ password });
+            if (updateError) throw updateError;
+            setDone(true);
         } catch (err) {
-            setError(err.message || 'Failed to update password.');
+            setError(err.message || 'Could not update the password. Please try again.');
         } finally {
-            setLoading(false);
+            setBusy(false);
         }
-    };
+    }
+
+    const field = (name, label, value, setValue, autoComplete, autoFocus) => (
+        <div>
+            <label htmlFor={`${id}-${name}`} className="block text-xs font-bold text-stone-700 mb-1">{label}</label>
+            <input id={`${id}-${name}`} type={show ? 'text' : 'password'} value={value} onChange={e => setValue(e.target.value)}
+                autoComplete={autoComplete} autoFocus={autoFocus} required className="sf-input min-h-11" />
+        </div>
+    );
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-[200] p-4 animate-in fade-in duration-150">
-            <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-stone-200 animate-in zoom-in-95 duration-150">
-                <div className="bg-stone-900 px-5 py-4 flex items-center gap-3 text-white">
-                    <div className="p-2 bg-amber-500 text-stone-950 rounded-xl">
-                        <KeyRound size={18} />
-                    </div>
-                    <div>
-                        <h3 className="text-sm font-bold text-white">Set Your New Password</h3>
-                        <p className="text-[11px] text-stone-400">Arrived via password reset email link</p>
-                    </div>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-stone-900/60 p-4">
+            <div role="dialog" aria-modal="true" aria-labelledby={`${id}-title`} onKeyDown={containDialogFocus}
+                className="w-full max-w-md overflow-hidden rounded-2xl border border-stone-200 bg-white shadow-2xl">
+                <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-4">
+                    <span className="rounded-xl bg-orange-50 p-2 text-orange-600"><KeyRound size={18} aria-hidden="true" /></span>
+                    <h2 id={`${id}-title`} className="text-base font-bold text-stone-900">{changing ? 'Change password' : 'Choose a new password'}</h2>
                 </div>
-
-                <form onSubmit={handleSubmit} className="p-5 space-y-4">
-                    {error && (
-                        <div className="bg-rose-50 border border-rose-200 rounded-xl p-3 flex items-start gap-2 text-rose-700 text-xs font-medium">
-                            <AlertCircle size={15} className="flex-shrink-0 mt-0.5" />
-                            <span>{error}</span>
-                        </div>
-                    )}
-
-                    <div>
-                        <label className="block text-xs font-bold text-stone-700 mb-1">New Password</label>
-                        <div className="relative">
-                            <input
-                                type={showPw ? 'text' : 'password'}
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                placeholder="Enter new password (min. 6 chars)"
-                                className="w-full px-3 py-2.5 pr-10 border border-stone-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                autoFocus
-                            />
-                            <button
-                                type="button"
-                                onClick={() => setShowPw(!showPw)}
-                                className="absolute right-3 top-2.5 text-stone-400 hover:text-stone-600 cursor-pointer"
-                            >
-                                {showPw ? <EyeOff size={14} /> : <Eye size={14} />}
+                {done ? (
+                    <div className="space-y-4 p-5">
+                        <p role="status" className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                            <Check size={16} className="mt-0.5 shrink-0" aria-hidden="true" /> Your password has been changed.
+                        </p>
+                        <button type="button" onClick={onClose} autoFocus className="sf-btn-primary min-h-11 w-full">Continue</button>
+                    </div>
+                ) : (
+                    <form onSubmit={submit} className="space-y-4 p-5">
+                        {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+                        {changing && field('current', 'Current password', current, setCurrent, 'current-password', true)}
+                        {field('new', 'New password', password, setPassword, 'new-password', !changing)}
+                        {field('repeat', 'Repeat new password', confirm, setConfirm, 'new-password', false)}
+                        <button type="button" onClick={() => setShow(!show)} aria-pressed={show}
+                            className="inline-flex min-h-11 items-center gap-1.5 text-xs font-bold text-stone-600 hover:text-stone-900">
+                            {show ? <EyeOff size={14} aria-hidden="true" /> : <Eye size={14} aria-hidden="true" />} {show ? 'Hide passwords' : 'Show passwords'}
+                        </button>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={onClose} disabled={busy} className="sf-btn-secondary min-h-11 flex-1">{changing ? 'Cancel' : 'Not now'}</button>
+                            <button type="submit" disabled={busy} className="sf-btn-primary min-h-11 flex-1">
+                                {busy && <Loader2 size={14} className="animate-spin" aria-hidden="true" />} {busy ? 'Saving…' : 'Save password'}
                             </button>
                         </div>
-                    </div>
-
-                    <div>
-                        <label className="block text-xs font-bold text-stone-700 mb-1">Confirm New Password</label>
-                        <input
-                            type={showPw ? 'text' : 'password'}
-                            value={confirmPassword}
-                            onChange={e => setConfirmPassword(e.target.value)}
-                            placeholder="Repeat new password"
-                            className="w-full px-3 py-2.5 border border-stone-200 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-amber-400"
-                        />
-                    </div>
-
-                    <div className="pt-2 flex gap-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex-1 py-2.5 border border-stone-300 text-stone-700 rounded-xl text-xs font-bold hover:bg-stone-50 transition cursor-pointer"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={loading || !password}
-                            className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-stone-950 font-bold rounded-xl text-xs transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                            {loading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                            <span>{loading ? 'Saving...' : 'Set Password'}</span>
-                        </button>
-                    </div>
-                </form>
+                    </form>
+                )}
             </div>
         </div>
     );

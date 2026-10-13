@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 // ─── DashboardView.jsx ────────────────────────────────────────────────────────
 // Metrics overview: project counts, financial summary, stage pipeline bar chart.
 // • "Total" = all non-deleted records
@@ -10,7 +10,6 @@ import { useMemo, useState } from 'react';
 import { FolderOpen, Activity, CheckCircle2, XCircle, PanelsTopLeft, Zap, Gauge, CircuitBoard, CalendarPlus, BadgeCheck, ListChecks, Truck } from 'lucide-react';
 import { PRIMARY_STAGES } from '../constants';
 import { formatINRCompact } from '../utils';
-import CustomizationEnquiryForm from './CustomizationEnquiryForm';
 
 const fmtLakh = formatINRCompact;
 
@@ -91,7 +90,6 @@ const TodayMetric = ({ label, value, sub, icon: Icon, tone }) => {
 };
 
 export default function DashboardView({ metrics, loading, scoped = false }) {
-    const [showEnquiryModal, setShowEnquiryModal] = useState(false);
     const {
         totalProjects = 0,
         completedCount = 0,
@@ -119,41 +117,6 @@ export default function DashboardView({ metrics, loading, scoped = false }) {
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
-            {/* Customization enquiry modal and banner commented out
-            {showEnquiryModal && (
-                <CustomizationEnquiryForm isModal={true} onClose={() => setShowEnquiryModal(false)} />
-            )}
-
-            <div className="bg-orange-50 border border-orange-200 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-xs">
-                <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-500 text-stone-950 flex items-center justify-center font-black text-base flex-shrink-0 shadow-sm">
-                        ☀️
-                    </div>
-                    <div>
-                        <h4 className="text-xs font-bold text-stone-900 uppercase tracking-wide">Customized per your business workflow</h4>
-                        <p className="text-xs text-stone-600 mt-0.5">
-                            Available with a clean fresh database or full historical data migration. Basic &amp; Advance versions tailored to your needs.
-                        </p>
-                    </div>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <button
-                        type="button"
-                        onClick={() => setShowEnquiryModal(true)}
-                        className="flex-shrink-0 bg-stone-900 hover:bg-stone-800 text-amber-400 hover:text-white text-xs font-bold px-3.5 py-2 rounded-xl transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-                    >
-                        <span>Custom Setup / Enquiry →</span>
-                    </button>
-                    <a
-                        href="mailto:enquiry@deeprootsystems.in"
-                        className="flex-shrink-0 text-stone-500 hover:text-stone-800 text-xs font-semibold px-2 py-1 transition-all"
-                    >
-                        enquiry@deeprootsystems.in
-                    </a>
-                </div>
-            </div>
-            */}
-
             {/* Project counts */}
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
                 <MetricBox label={scoped ? "My Office & Dealers" : "Total projects"} value={totalProjects}  icon={FolderOpen}   color="neutral"    sub={`${liveProjects} projects in progress`} />

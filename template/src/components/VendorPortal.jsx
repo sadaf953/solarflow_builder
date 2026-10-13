@@ -1,4 +1,3 @@
-import { useDemoTourNavigation } from '../demo/tour';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { supabase } from '../supabase';
 import { logActivity, uploadDocument, getCustomerDocuments, getDownloadUrl, getViewUrl, deleteDocument, toIndianCommas, updateDocumentRemark, normalizeInstallationStatus, updateAdminRecord, downloadFileWithSaveAs } from '../utils';
@@ -6,7 +5,7 @@ import {
     User, Phone, Mail, MapPin, Zap, Building2, CheckCircle2, ChevronRight, LogOut, Loader2, AlertCircle, AlertTriangle,
     Hash, Folder, Tag, ChevronLeft, Search, ClipboardList, Banknote, Calendar, ClipboardCheck,
     Camera, Paperclip, Eye, Upload, Image as ImageIcon, X,
-    Printer, ShoppingBag, Layers, Ruler, IndianRupee, Package, FileText, Truck, Check, Wrench, RefreshCw, Save, Terminal
+    Printer, ShoppingBag, Layers, Ruler, IndianRupee, Package, FileText, Truck, Check, Wrench, RefreshCw, Save
 } from 'lucide-react';
 import { FilePreviewModal } from './modal-tabs/shared';
 import { ROOF_BOM_TEMPLATE, SHED_BOM_TEMPLATE, STAGE_IDS, PRIMARY_STAGES, INSTALLATION_TAGS, VENDOR_LIST_COLUMNS, isFinalTagValue } from '../constants';
@@ -34,18 +33,7 @@ const parsePanelSerials = (raw) => {
     return [raw.trim()];
 };
 
-export default function VendorPortal({ user, onLogout, onOpenDevSwitcher, demoControls }) {
-    useDemoTourNavigation(async ({view,action},isCurrent) => {
-        if (!['DELIVERY','INSTALLATION','GEO'].includes(view)) return;
-        setView('list'); setSelectedCust(null); setActiveTab(view);
-        if(action === 'customer'){
-            const {data,error}=await supabase.from('admin').select('*').is('deleted_at',null).eq('stage',TAB_STAGE_MAP[view]).ilike('vendor',user.name).order('created_at').limit(1);
-            if(!isCurrent())return;
-            if(error)showAlert(error.message,{type:'error'});
-            else if(data?.[0])await handleSelectCustomer(data[0],isCurrent);
-        }
-    },user.userType);
-
+export default function VendorPortal({ user, onLogout }) {
     const { showAlert, showConfirm, showImageCropper } = useGlobalPopup();
     const [view, setView] = useState('list'); // 'list', 'details'
     const [customers, setCustomers] = useState([]);
@@ -991,17 +979,6 @@ export default function VendorPortal({ user, onLogout, onOpenDevSwitcher, demoCo
                     >
                         <RefreshCw className={`w-4 h-4 ${refreshingAssignments ? 'animate-spin' : ''}`} />
                     </button>
-                    {import.meta.env.DEV && onOpenDevSwitcher && (
-                        <button
-                            type="button"
-                            onClick={onOpenDevSwitcher}
-                            className="p-2 text-amber-600 hover:text-amber-700 transition-colors rounded-xl hover:bg-amber-50"
-                            title="Open development role switcher"
-                            aria-label="Open development role switcher"
-                        >
-                            <Terminal className="w-4 h-4" />
-                        </button>
-                    )}
                     <button
                         onClick={async () => { if (await saveBeforeVendorExit('Save & Logout')) onLogout(); }}
                         className="p-2 text-stone-400 hover:text-red-500 transition-colors rounded-xl hover:bg-stone-50"
@@ -1010,7 +987,6 @@ export default function VendorPortal({ user, onLogout, onOpenDevSwitcher, demoCo
                         <LogOut className="w-4 h-4" />
                     </button>
                 </div>
-            <div className="demo-portal-controls">{demoControls}</div>
             </header>
 
             {view === 'list' ? (

@@ -1,4 +1,3 @@
-import {useDemoTourNavigation} from '../demo/tour';
 import { useState, useEffect, useCallback } from 'react';
 import { Tag, Search, RefreshCw, ChevronDown } from 'lucide-react';
 import { SUBSIDY_TAGS, SUBSIDY_TAG_COLORS, CUSTOMER_CARD_COLUMNS, getCustomerCardColumns, STAGE_IDS } from '../constants';
@@ -9,7 +8,6 @@ const PAGE_SIZE = 50;
 
 export default function SubsidyView({ onSelectCustomer, isChannelPartnerOffice, partnerName, channelPartnerFilter, dealerFilter }) {
     const [activeFilter, setActiveFilter] = useState(null);
-    useDemoTourNavigation((entry)=>{if(entry.view==='subsidy'){setActiveFilter(entry.tag || null);setSearchTerm('');setPage(0);}});
     const [searchTerm, setSearchTerm] = useState('');
     const [debouncedSearch, setDebouncedSearch] = useState('');
     const [customers, setCustomers] = useState([]);

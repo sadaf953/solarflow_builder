@@ -1,5 +1,4 @@
-import {useDemoTourNavigation} from '../demo/tour';
-import {DATA_EXPORTS_ENABLED} from '../demo/config';
+import {isOn} from '../config/index.js';
 import {useEffect,useRef,useState} from 'react';
 import {Package,History,CalendarDays,RefreshCw,Download,PackageCheck,PackageX,Activity,Archive,RotateCcw,Plus} from 'lucide-react';
 import {supabase} from '../supabase';
@@ -15,7 +14,6 @@ export default function InventoryView({currentUser}){
  const [tab,setTab]=useState('stock'),[visibleCount,setVisibleCount]=useState(50),[loadFailed,setLoadFailed]=useState(false),[stockFilter,setStockFilter]=useState('all');
  const [historyLoading,setHistoryLoading]=useState(false),[historyLoaded,setHistoryLoaded]=useState(false),[todayMovementCount,setTodayMovementCount]=useState(null);
  const [itemDraft,setItemDraft]=useState(null),[categoryFilter,setCategoryFilter]=useState('all');
- useDemoTourNavigation(entry=>{if(entry.view==='inventory' && tabs.some(([id])=>id===entry.tab)){setTab(entry.tab);setVisibleCount(50);setSearch('');}});
  const [reportDay,setReportDay]=useState(()=>stockDay(Date.now()));const request=useRef(null),inventoryPanelRef=useRef(null),historyRequest=useRef(null);
 
  const readAll=async(table,order)=>{const rows=[];for(let offset=0;;offset+=1000){const p=await supabase.from(table).select('*').order(order).range(offset,offset+999);if(p.error)throw p.error;rows.push(...p.data);if(p.data.length<1000)return rows;}};
@@ -228,12 +226,12 @@ export default function InventoryView({currentUser}){
    {tab==='daily'&&(
      <>
        <label>Report date (India time)<input type="date" value={reportDay} max={stockDay(Date.now())} onChange={e=>{if(e.target.value)setReportDay(e.target.value);}}/></label>
-       {DATA_EXPORTS_ENABLED && <button type="button" className="inventory-download-btn" onClick={downloadDailyReport} disabled={loading||loadFailed||historyLoading||!historyLoaded} title="Download daily inventory report as CSV">
+       {isOn('dataExports') && <button type="button" className="inventory-download-btn" onClick={downloadDailyReport} disabled={loading||loadFailed||historyLoading||!historyLoaded} title="Download daily inventory report as CSV">
          <Download size={14}/> Download Daily Report (CSV)
        </button>}
      </>
    )}
-   {DATA_EXPORTS_ENABLED && tab==='stock'&&(
+   {isOn('dataExports') && tab==='stock'&&(
      <button type="button" className="inventory-download-btn" onClick={downloadCurrentStock} disabled={loading||loadFailed} title="Export current stock inventory as CSV">
        <Download size={14}/> Export Stock (CSV)
      </button>

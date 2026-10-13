@@ -1,178 +1,162 @@
-import {ensureGroupedDemoBatches} from './demo/deliveryBatches';
-import {ensureThreeDemoDrivers} from './demo/drivers';
-import { lazy, Suspense, useEffect, useState } from 'react';
-import { supabase } from './supabase';
-import { readPreparedBriefId } from './enquiries/brief';
-import { readSubmittedEnquiryId } from './enquiries/reopen';
-import {ensureThreeDemoVendors,demoVendorTarget} from './demo/vendors';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { supabase, isSupabaseConfigured, supabaseSetupProblem } from './supabase';
+import { BRANDING, isOn, isRoleEnabled } from './config/index.js';
 import LoginScreen from './components/LoginScreen';
-import BrandMark from './components/BrandMark';
-import DemoHeader from './demo/DemoHeader';
-const PasswordRecoveryModal=lazy(()=>import('./components/PasswordRecoveryModal'));
-const TeamChatDrawer=lazy(()=>import('./components/TeamChatDrawer'));
-const Dashboard=lazy(()=>import('./components/Dashboard'));
-const AgentPortal=lazy(()=>import('./components/AgentPortal'));
-const VendorPortal=lazy(()=>import('./components/VendorPortal'));
-const StampPortal=lazy(()=>import('./components/StampPortal'));
-const PricingView=lazy(()=>import('./components/PricingView'));
-const Loader=()=> <div className="p-12 text-center text-stone-500" role="status">Opening your workspace…</div>;
+const PasswordRecoveryModal = lazy(() => import('./components/PasswordRecoveryModal'));
+const TeamChatDrawer = lazy(() => import('./components/TeamChatDrawer'));
+const Dashboard = lazy(() => import('./components/Dashboard'));
+const AgentPortal = lazy(() => import('./components/AgentPortal'));
+const VendorPortal = lazy(() => import('./components/VendorPortal'));
+const StampPortal = isRoleEnabled('stamp') ? lazy(() => import('./components/StampPortal')) : null;
 
-// Landing-page gate.
-//
-// The Supabase client persists the anonymous demo session in localStorage
-// (storageKey solarflow-demo-cloud-auth-v1), so a stored session outlives the
-// browser. Restoring straight into a portal on that basis meant any visitor
-// who had ever opened the demo never saw the landing page again.
-//
-// sessionStorage is per-tab and dies with it, so this flag draws the line in
-// the right place: a new tab or a later visit starts at the landing page,
-// while a refresh in the middle of a session still restores the workspace.
-const ENTERED_KEY = 'solarflow_entered_demo';
-function hasEnteredThisTab(){ try{ return !!sessionStorage.getItem(ENTERED_KEY); }catch{ return false; } }
-function markEnteredThisTab(){ try{ sessionStorage.setItem(ENTERED_KEY,'1'); }catch{ /* private mode */ } }
-function clearEnteredThisTab(){ try{ sessionStorage.removeItem(ENTERED_KEY); }catch{ /* ignore */ } }
+const Loader = () => <div className="p-12 text-center text-stone-500" role="status">Opening your workspace…</div>;
 
-function scheduleBackgroundDemoCleanup(client) {
- if (typeof window === 'undefined') return;
- const cleanupKey = 'solarflow_demo_cleanup_v2';
- if (window.sessionStorage.getItem(cleanupKey)) return;
- const run = () => {
-  Promise.allSettled([
-   ensureThreeDemoVendors(client),
-   ensureThreeDemoDrivers(client),
-   ensureGroupedDemoBatches(client)
-  ]).then(() => {
-   try { window.sessionStorage.setItem(cleanupKey, '1'); } catch { /* storage may be unavailable */ }
-  }).catch(err => console.warn('Background cleanup notice:', err));
- };
- if (typeof window.requestIdleCallback === 'function') {
-  window.requestIdleCallback(run, { timeout: 3000 });
- } else {
-  setTimeout(run, 1500);
- }
+function portalFor(userType) {
+    if (userType === 'agent' || userType === 'agent2') return AgentPortal;
+    if (userType === 'vendor') return VendorPortal;
+    if (userType === 'stamp' && StampPortal) return StampPortal;
+    return Dashboard;
 }
 
-export default function App(){
- const [user,setUser]=useState(null);const [loading,setLoading]=useState(true);const [error,setError]=useState('');
- const [recoveryMode, setRecoveryMode]=useState(false);
- const [publicView,setPublicView]=useState(()=>typeof window!=='undefined'&&(/^#\/(plans|quote)(\?|$)/.test(window.location.hash))?'plans':null);
- const [clientQuoteLink,setClientQuoteLink]=useState(()=>typeof window!=='undefined'&&Boolean(readPreparedBriefId(window.location.hash)||readSubmittedEnquiryId(window.location.hash)));
- useEffect(()=>{
-  const sync=()=>{
-   setClientQuoteLink(Boolean(readPreparedBriefId(window.location.hash)||readSubmittedEnquiryId(window.location.hash)));
-   setPublicView(/^#\/(plans|quote)(\?|$)/.test(window.location.hash)?'plans':null);
-  };
-  window.addEventListener('hashchange',sync);
-  window.addEventListener('popstate',sync);
-  return()=>{window.removeEventListener('hashchange',sync);window.removeEventListener('popstate',sync);};
- },[]);
- useEffect(()=>{
-  let active=true;
-  if(typeof window !== 'undefined' && window.location.hash && window.location.hash.includes('type=recovery')){
-   setRecoveryMode(true);
-  }
-  async function restore(){
-   try{
-    // A shared quotation link always opens its client form, even in a browser
-    // that previously entered the demo.
-    if(readPreparedBriefId(window.location.hash)||readSubmittedEnquiryId(window.location.hash)
-      || (/^#\/plans\?/.test(window.location.hash) && new URLSearchParams(window.location.hash.split('?')[1]).get('admin')==='1'))return;
-    const {data}=await supabase.auth.getSession();
-    if(!data?.session)return;
-    // Fresh visit: show the landing page even though a session is stored.
-    // Returning early also skips the profile round-trip, so the landing
-    // page paints sooner.
-    if(!hasEnteredThisTab())return;
-    let userId = data.session.user?.id;
-    if(!userId){
-     const {data:identity,error:authError}=await supabase.auth.getUser();
-     if(authError || !identity.user)return;
-     userId = identity.user.id;
+function Notice({ title, children, action }) {
+    return (
+        <main className="sf-page flex items-center justify-center px-4 py-10">
+            <section className="sf-card w-full max-w-lg space-y-3 p-6 text-sm text-stone-600">
+                <p className="sf-kicker">{BRANDING.appName}</p>
+                <h1 className="text-xl font-bold text-stone-900">{title}</h1>
+                {children}
+                {action}
+            </section>
+        </main>
+    );
+}
+
+function ConnectSupabase() {
+    return (
+        <Notice title="Connect your Supabase project">
+            <p role="alert" className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900">{supabaseSetupProblem}</p>
+            <p>Create a file named <code>.env</code> next to <code>package.json</code> with your project's address and its public key:</p>
+            <pre className="overflow-x-auto rounded-xl bg-stone-900 p-3 text-xs text-stone-100">{'VITE_SUPABASE_URL=https://your-project.supabase.co\nVITE_SUPABASE_ANON_KEY=your-anon-or-publishable-key'}</pre>
+            <p>Both values are in Supabase under Project Settings → API. Never use the service_role or secret key here. Then restart <code>npm run dev</code>, or run <code>npm run build</code> again.</p>
+        </Notice>
+    );
+}
+
+// Supabase reports a failed email link (expired, or opened in another browser) in the URL.
+function linkProblem() {
+    const url = new URL(window.location.href);
+    const description = url.searchParams.get('error_description') || new URLSearchParams(url.hash.slice(1)).get('error_description');
+    if (description) return `That email link did not work (${description}). Ask for a new one with "Forgot password?".`;
+    return url.searchParams.has('code') ? 'That email link has expired or was opened in a different browser. Ask for a new one with "Forgot password?".' : '';
+}
+
+function clearLinkParams() {
+    const url = new URL(window.location.href);
+    for (const key of ['code', 'sb_flow_id', 'error', 'error_code', 'error_description']) url.searchParams.delete(key);
+    if (new URLSearchParams(url.hash.slice(1)).has('error')) url.hash = '';
+    if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
+}
+
+function clearSessionKeys() {
+    try {
+        for (const key of Object.keys(sessionStorage)) if (key.startsWith('solarflow_')) sessionStorage.removeItem(key);
+    } catch { /* storage may be unavailable */ }
+}
+
+export default function App() {
+    if (!isSupabaseConfigured) return <ConnectSupabase />;
+    return <Workspace />;
+}
+
+function Workspace() {
+    const [user, setUser] = useState(null);
+    const [restoring, setRestoring] = useState(true);
+    const [notice, setNotice] = useState('');
+    const [passwordMode, setPasswordMode] = useState(null);
+    const loading = useRef({ id: null, promise: null });
+
+    // Resolves to an error message, or null once the user is signed in.
+    const loadUser = useCallback(session => {
+        const id = session?.user?.id;
+        if (!id) return Promise.resolve(null);
+        if (loading.current.id === id) return loading.current.promise;
+        const promise = supabase.from('profiles').select('*').eq('id', id).maybeSingle().then(async ({ data: profile, error }) => {
+            if (error) return `Could not load your profile: ${error.message}`;
+            if (profile?.status === 'active') {
+                setUser({ ...profile, userType: profile.user_type });
+                return null;
+            }
+            await supabase.auth.signOut();
+            return profile
+                ? 'This login has been switched off. Ask your administrator to turn it back on.'
+                : 'This email has no account in this workspace yet. Ask your administrator to add you.';
+        }).then(problem => {
+            if (problem) loading.current = { id: null, promise: null };
+            return problem;
+        });
+        loading.current = { id, promise };
+        return promise;
+    }, []);
+
+    useEffect(() => {
+        let active = true;
+        const brokenLink = linkProblem();
+        supabase.auth.getSession()
+            .then(async ({ data }) => {
+                clearLinkParams();
+                const problem = data.session ? await loadUser(data.session) : brokenLink;
+                if (active && problem) setNotice(problem);
+            })
+            .catch(error => { if (active) setNotice(error.message); })
+            .finally(() => { if (active) setRestoring(false); });
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'SIGNED_IN') loadUser(session).then(problem => { if (active && problem) setNotice(problem); });
+            if (event === 'SIGNED_OUT') {
+                loading.current = { id: null, promise: null };
+                setUser(null);
+                setPasswordMode(null);
+            }
+            if (event === 'PASSWORD_RECOVERY') setPasswordMode('recovery');
+        });
+        return () => { active = false; subscription.unsubscribe(); };
+    }, [loadUser]);
+
+    async function logout() {
+        await supabase.auth.signOut();
+        clearSessionKeys();
+        setNotice('');
+        setUser(null);
     }
-    const {data:profile,error:profileError}=await supabase.from('profiles').select('*').eq('id',userId).maybeSingle();
-    if(!profileError && profile?.status==='active' && active){
-     if(profile.user_type==='vendor')profile.name=demoVendorTarget(profile.name)||profile.name;
-     if(active)setUser({...profile,userType:profile.user_type,isDemo:true});
-     if(['admin','sales'].includes(profile.user_type)){
-      scheduleBackgroundDemoCleanup(supabase);
-     }
+
+    if (restoring) return <Loader />;
+
+    const passwordModal = passwordMode && (
+        <Suspense fallback={null}>
+            <PasswordRecoveryModal mode={passwordMode} onClose={() => setPasswordMode(null)} />
+        </Suspense>
+    );
+
+    if (!user) return <>{passwordModal}<LoginScreen notice={notice} onSignedIn={loadUser} /></>;
+
+    if (!isRoleEnabled(user.userType)) {
+        return (
+            <Notice title="Your login type is not enabled"
+                action={<button type="button" onClick={logout} className="sf-btn-primary min-h-11">Sign out</button>}>
+                <p>Logins of type “{user.role || user.userType}” are switched off for {BRANDING.companyName}. Ask your administrator to change your login type.</p>
+            </Notice>
+        );
     }
-   }catch(e){if(active)setError(e.message);}finally{if(active)setLoading(false);}
-  }restore();
-  const {data:{subscription}}=supabase.auth.onAuthStateChange((event)=>{
-   if(event==='SIGNED_OUT' && active){clearEnteredThisTab();setUser(null);}
-   if(event==='PASSWORD_RECOVERY' && active)setRecoveryMode(true);
-  });
-  return()=>{active=false;subscription.unsubscribe();};
- },[]);
- // Entering from the landing page. restore() now returns early on a fresh
- // visit, so the cleanup it used to schedule for admin/sales is scheduled
- // here instead - otherwise it would stop running for those visitors.
- function enterDemo(nextUser){
-  markEnteredThisTab();
-  setPublicView(null);
-  setUser(nextUser);
-  if(nextUser && ['admin','sales'].includes(nextUser.userType)){
-   scheduleBackgroundDemoCleanup(supabase);
-  }
- }
- function openPlans(){setClientQuoteLink(false);setPublicView('plans');window.history.pushState(null,'','#/plans');}
- function closePlans(){setClientQuoteLink(false);setPublicView(null);window.history.pushState(null,'',window.location.pathname);}
- function chooseAgain(){
-  clearEnteredThisTab();
-  try { localStorage.removeItem('solarflow_visitor_name'); } catch { /* storage may be unavailable */ }
-  setUser(null);setError('');window.history.replaceState(null,'',window.location.pathname);
-  for(const key of ['solarflow_current_view','solarflow_selected_stage','solarflow_selected_customer_id'])sessionStorage.removeItem(key);
- }
- async function switchTourRole(role){
-  const {data,error}=await supabase.rpc('start_demo_session',{p_role:role});
-  if(error)throw error;if(!data?.id)throw new Error('Could not open this demo role.');
-  window.history.replaceState(null,'',window.location.pathname);
-  for(const key of ['solarflow_current_view','solarflow_selected_stage','solarflow_selected_customer_id'])sessionStorage.removeItem(key);
-  if(data.user_type==='vendor')data.name=demoVendorTarget(data.name)||data.name;
-  markEnteredThisTab();
-  setUser({...data,userType:data.user_type,isDemo:true});
-  if(['admin','sales'].includes(data.user_type)){
-   scheduleBackgroundDemoCleanup(supabase);
-  }
- }
- if(loading)return <Loader/>;
- const Portal=user?(['agent','agent2'].includes(user.userType)?AgentPortal:user.userType==='vendor'?VendorPortal:user.userType==='stamp'?StampPortal:Dashboard):null;
- return (
-  <>
-   {recoveryMode && (
-    <Suspense fallback={<Loader/>}><PasswordRecoveryModal
-     onClose={() => setRecoveryMode(false)}
-     onSuccess={() => {
-      setRecoveryMode(false);
-      window.history.replaceState(null, '', window.location.pathname);
-     }}
-    /></Suspense>
-   )}
-   {!user ? (publicView === 'plans' ? (
-    <div className="sf-page">
-     <div className="sticky top-0 z-20 bg-white/95 border-b border-stone-200 px-4 py-3 backdrop-blur">
-      <div className="max-w-6xl mx-auto flex items-center justify-between gap-4">
-       <button type="button" onClick={closePlans} className="flex items-center gap-3 rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400" aria-label="Back to SolarFlow home">
-        <BrandMark size="md" />
-        <span className="hidden sm:inline text-xs font-bold text-stone-600">← Back</span>
-       </button>
-       {!clientQuoteLink && <button type="button" onClick={closePlans} className="sf-btn-primary">Open demo</button>}
-      </div>
-     </div>
-     <div className="px-4"><Suspense fallback={<Loader/>}><PricingView /></Suspense></div>
-    </div>
-   ) : (
-    <LoginScreen initialError={error} onLogin={enterDemo} onOpenPlans={openPlans}/>
-   )
-   ) : (
-    <>
-     <DemoHeader user={user} onTourRoleSwitch={switchTourRole}>
-      {(controls,startTour)=><div className="demo-app"><Suspense fallback={<Loader/>}><Portal key={user.userType} user={user} onLogout={chooseAgain} demoControls={controls} onStartDemoTour={startTour}/></Suspense></div>}
-     </DemoHeader>
-     <Suspense fallback={null}><TeamChatDrawer currentUser={user} /></Suspense>
-    </>
-   )}
-  </>
- );
+
+    const Portal = portalFor(user.userType);
+    return (
+        <>
+            {passwordModal}
+            <div className="sf-app">
+                <Suspense fallback={<Loader />}>
+                    <Portal key={user.userType} user={user} onLogout={logout} onChangePassword={() => setPasswordMode('change')} />
+                </Suspense>
+            </div>
+            {isOn('teamChat') && <Suspense fallback={null}><TeamChatDrawer currentUser={user} /></Suspense>}
+        </>
+    );
 }

@@ -571,6 +571,30 @@ textarea:focus {
 }
 .delivery-editor-dialog::backdrop { background: rgb(28 25 23 / 60%); backdrop-filter: blur(4px); }
 
+/* Shared <Modal> (src/ui/Modal.jsx). Modal dialogs render in the top layer, so no z-index is needed. */
+.sf-dialog {
+    margin: auto;
+    width: calc(100% - 2rem);
+    max-height: 92vh;
+    max-height: 92dvh;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 24px;
+    background: var(--sf-surface);
+    color: var(--sf-ink);
+    box-shadow: 0 25px 50px -12px rgb(28 25 23 / 25%);
+}
+.sf-dialog::backdrop { background: rgb(28 25 23 / 60%); backdrop-filter: blur(4px); }
+@media (max-width: 639px) {
+    .sf-dialog-sheet {
+        margin: auto 0 0;
+        width: 100%;
+        max-width: none;
+        border-radius: 24px 24px 0 0;
+    }
+}
+
 /* Solar Toolbox uses one restrained workspace treatment across calculators and documents. */
 .solar-toolbox .toolbox-content > div > div:first-child:not([class*="grid"]) {
     padding-bottom: 16px;

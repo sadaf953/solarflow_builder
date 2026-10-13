@@ -1,5 +1,4 @@
 import {missingStageRequirements} from '../config/index.js';
-import { useDemoTourNavigation } from '../demo/tour';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import { AgreementPreview } from './agreement/AgreementPreview';
@@ -9,7 +8,7 @@ import {
     Users, CreditCard, Hash, Folder, Tag, ChevronLeft, Plus, Search, 
     ChevronDown, ChevronUp, ClipboardList, Banknote, ShieldAlert, Paperclip, Eye, Download, X,
     ShoppingBag, Ruler, IndianRupee, Layers, Save, ClipboardCheck, Upload,
-    Package, PauseCircle, Truck, Wrench, Camera, Send, Printer, FileText, FolderOpen, Terminal, Calculator
+    Package, PauseCircle, Truck, Wrench, Camera, Send, Printer, FileText, FolderOpen, Calculator
 } from 'lucide-react';
 import ToolboxView from './ToolboxView';
 import { logActivity, toIndianCommas, formatInputValue, parseIndianNumber, uploadDocument, getCustomerDocuments, getDownloadUrl, getViewUrl, updateDocumentRemark, sanitizeAdminUpdate, normalizeMeterInstallation, downloadFileWithSaveAs, downloadDocumentsAsPdf } from '../utils';
@@ -71,39 +70,7 @@ function DetailRow({ label, value, children }) {
     );
 }
 
-export default function AgentPortal({ user, onLogout, onOpenDevSwitcher, demoControls }) {
-    useDemoTourNavigation(async ({view,stage,action},isCurrent) => {
-        if (!['menu','workdesk','quotations'].includes(view)) return;
-        setSelectedCust(null); setShowAddLead(false); setView(view); if (stage) setActiveWorkdeskTab(stage);
-        if (view === 'quotations') openQuotations();
-        if (action === 'addLead') setShowAddLead(true);
-        if(action === 'customer'){
-            let query=supabase.from('admin').select('*').is('deleted_at',null).eq('stage',stage);
-            query=user.userType==='agent2' ? query.ilike('sub_channel_partner',user.name).ilike('channel_partner',user.channel_partner || '') : query.ilike('channel_partner',user.name);
-            const {data,error}=await query.order('created_at').limit(1);
-            if(!isCurrent())return;
-            if(error)showAlert(error.message,{type:'error'});
-            else if(data?.[0])handleSelectCustomerForStage(data[0],stage);
-        }
-        if(action === 'printBom'){
-            let query=supabase.from('admin').select('*').is('deleted_at',null).eq('stage',stage || STAGE_IDS.MATERIAL_INTEGRATION);
-            query=user.userType==='agent2' ? query.ilike('sub_channel_partner',user.name).ilike('channel_partner',user.channel_partner || '') : query.ilike('channel_partner',user.name);
-            let {data,error}=await query.order('created_at').limit(1);
-            if (!data?.length) {
-                let fb = supabase.from('admin').select('*').is('deleted_at',null);
-                fb = user.userType==='agent2' ? fb.ilike('sub_channel_partner',user.name).ilike('channel_partner',user.channel_partner || '') : fb.ilike('channel_partner',user.name);
-                const res = await fb.order('created_at').limit(1);
-                data = res.data;
-            }
-            if(!isCurrent())return;
-            if(error)showAlert(error.message,{type:'error'});
-            else if(data?.[0]){
-                handleSelectCustomerForStage(data[0], STAGE_IDS.MATERIAL_INTEGRATION);
-                setShowBomPrint(true);
-            }
-        }
-    },user.userType);
-
+export default function AgentPortal({ user, onLogout }) {
     const { showAlert, showConfirm, showImageCropper } = useGlobalPopup();
     const [view, setView] = useState(() => typeof window !== 'undefined' && window.location.hash.startsWith('#/quotations') ? 'quotations' : 'menu');
     const [activeWorkdeskTab, setActiveWorkdeskTab] = useState(STAGE_IDS.LEADS);
@@ -1023,7 +990,6 @@ export default function AgentPortal({ user, onLogout, onOpenDevSwitcher, demoCon
                         <LogOut className="w-4 h-4" />
                     </button>
                 </div>
-            <div className="demo-portal-controls">{demoControls}</div>
             </header>
                     {/* Menu View (Clean Action Cards) */}
             
@@ -1251,17 +1217,6 @@ export default function AgentPortal({ user, onLogout, onOpenDevSwitcher, demoCon
                             )}
                         </div>
                         <div className="flex items-center gap-1 md:gap-2">
-                            {import.meta.env.DEV && onOpenDevSwitcher && (
-                                <button
-                                    type="button"
-                                    onClick={onOpenDevSwitcher}
-                                    className="p-1.5 md:p-2 text-amber-600 hover:text-amber-700 rounded-xl hover:bg-amber-50 transition-colors"
-                                    title="Open development role switcher"
-                                    aria-label="Open development role switcher"
-                                >
-                                    <Terminal size={16} />
-                                </button>
-                            )}
                             <button onClick={async () => { if (await saveBeforeAgentExit('Save & Logout')) onLogout(); }} className="p-1.5 md:p-2 text-stone-400 hover:text-red-500 rounded-xl hover:bg-stone-100 transition-colors" title="Logout">
                                 <LogOut size={16} />
                             </button>
@@ -1273,7 +1228,6 @@ export default function AgentPortal({ user, onLogout, onOpenDevSwitcher, demoCon
                             </button>
                         </div>
                     </div>
-                <div className="demo-portal-controls">{demoControls}</div>
             </header>
 
                 
@@ -1401,7 +1355,7 @@ export default function AgentPortal({ user, onLogout, onOpenDevSwitcher, demoCon
             </div></div>
             )}
 
-            {view === 'quotations' && <QuotationModule demoControls={demoControls} embedded user={user} meta={meta} onCreateLead={handleSubmitLead} onViewLead={lead => handleSelectCustomerForStage(lead, lead.stage || STAGE_IDS.LEADS)} onClose={() => setView('menu')} />}
+            {view === 'quotations' && <QuotationModule embedded user={user} meta={meta} onCreateLead={handleSubmitLead} onViewLead={lead => handleSelectCustomerForStage(lead, lead.stage || STAGE_IDS.LEADS)} onClose={() => setView('menu')} />}
             {view === 'toolbox' && (
                 <div className="min-h-screen bg-[#FCFBFA]">
                     <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur px-4 py-3">

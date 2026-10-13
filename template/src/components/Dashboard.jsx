@@ -1,5 +1,4 @@
-import { useDemoTourNavigation } from '../demo/tour';
-import { DATA_EXPORTS_ENABLED } from '../demo/config';
+import { isOn } from '../config/index.js';
 // ─── Dashboard.jsx ────────────────────────────────────────────────────────────
 // Main admin layout: sidebar + header + view router.
 // Features:
@@ -136,7 +135,7 @@ const getMonthBounds = (monthValue, timestamp = false) => {
 
 import {
     LayoutDashboard, Activity, UserCog, Menu, X, ChevronDown,
-    Search, Plus, Download, LogOut, Trash2, Users, Tag, IndianRupee, Wrench, CreditCard, Terminal, Truck, Calendar, UserCheck, Calculator, Package
+    Search, Plus, Download, LogOut, Trash2, Users, Tag, IndianRupee, Wrench, CreditCard, Truck, Calendar, UserCheck, Calculator, Package
 } from 'lucide-react';
 
 // ── NavBtn ────────────────────────────────────────────────────────────────────
@@ -205,28 +204,7 @@ function SidebarGroup({ label, activeKey, defaultOpen = false, children }) {
     </div>;
 }
 
-export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoControls, onStartDemoTour }) {
-    const [userMgmtAction, setUserMgmtAction] = useState(null);
-    useDemoTourNavigation(async ({view,stage,action},isCurrent) => {
-        if (!['dashboard','stages','quotations','inventory','delivery_batches','installation_payments','loan_tags','subsidy','activity','users','channel_partner_mgmt'].includes(view)) return;
-        setSelectedCustomer(null); setShowAddLead(false); setSidebarOpen(false); setCurrentView(view);
-        if (stage) setSelectedStage(stage);
-        if (view === 'quotations') openQuotations();
-        if (action === 'addLead') setShowAddLead(true);
-        if (action === 'createUser') setUserMgmtAction('createUser');
-        else setUserMgmtAction(null);
-        if ((action === 'customer' || action === 'printBom') && stage) {
-            let {data,error}=await supabase.from(isChannelPartnerOffice ? 'cpo_leads' : 'admin').select('*').is('deleted_at',null).eq('stage',stage).order('created_at').limit(1);
-            if (!data?.length && action === 'printBom') {
-                const fallback = await supabase.from(isChannelPartnerOffice ? 'cpo_leads' : 'admin').select('*').is('deleted_at',null).order('created_at').limit(1);
-                data = fallback.data;
-            }
-            if(!isCurrent())return;
-            if(error)showAlert(error.message,{type:'error'});
-            else if(data?.[0])setSelectedCustomer(action === 'printBom' ? { ...data[0], _autoPrintBom: true } : data[0]);
-        }
-    },user.userType);
-
+export default function Dashboard({ user, onLogout }) {
     const { showAlert } = useGlobalPopup();
     const [customers, setCustomers] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -1410,7 +1388,7 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
                             </SidebarGroup>
                             <NavBtn view="activity" icon={Activity} label="Activity Log" count={0} currentView={currentView} selectedStage={selectedStage} setCurrentView={setCurrentView} setSelectedStage={setSelectedStage} setSidebarOpen={setSidebarOpen} />
                             <NavBtn view="users" icon={UserCog} label="User Management" count={0} currentView={currentView} selectedStage={selectedStage} setCurrentView={setCurrentView} setSelectedStage={setSelectedStage} setSidebarOpen={setSidebarOpen} />
-                            {DATA_EXPORTS_ENABLED && <NavBtn view="exports" icon={Download} label="Data Exports" count={0} currentView={currentView} selectedStage={selectedStage} setCurrentView={setCurrentView} setSelectedStage={setSelectedStage} setSidebarOpen={setSidebarOpen} />}
+                            {isOn('dataExports') && <NavBtn view="exports" icon={Download} label="Data Exports" count={0} currentView={currentView} selectedStage={selectedStage} setCurrentView={setCurrentView} setSelectedStage={setSelectedStage} setSidebarOpen={setSidebarOpen} />}
                             <NavBtn view="trash" icon={Trash2} label="Trash" count={trashCount} redBadge currentView={currentView} selectedStage={selectedStage} setCurrentView={setCurrentView} setSelectedStage={setSelectedStage} setSidebarOpen={setSidebarOpen} />
                         </div>
                     )}
@@ -1443,12 +1421,6 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
                             <p className="text-[9px] text-stone-400">{user.role}</p>
                         </div>
                     </div>
-                    {import.meta.env.DEV && onOpenDevSwitcher && (
-                        <button onClick={onOpenDevSwitcher}
-                            className="w-full flex items-center gap-2 px-3 py-2 text-stone-800 bg-[#fff8ed] hover:bg-[#fff0d9] rounded-xl text-xs font-bold transition-colors mb-1.5 cursor-pointer border border-[#ffdcad]">
-                            <Terminal className="w-4 h-4 text-[#ff8a00]" /> Backdoor Terminal & Roles
-                        </button>
-                    )}
                     <button onClick={onLogout}
                         className="w-full flex items-center gap-2 px-3 py-2 text-red-500 hover:bg-red-50 rounded-xl text-xs font-semibold transition-colors cursor-pointer">
                         <LogOut className="w-4 h-4" /> Logout
@@ -1457,10 +1429,10 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
             </aside>
 
             {/* ── Main ── */}
-            <main className="demo-dashboard-main flex-1 min-w-0 md:ml-64 flex flex-col min-h-screen">
+            <main className="sf-dashboard-main flex-1 min-w-0 md:ml-64 flex flex-col min-h-screen">
                 {/* Header */}
-                <header className="demo-dashboard-header bg-white/90 backdrop-blur-md border-b border-stone-100 px-4 lg:px-6 sticky top-0 z-30">
-                    <div className="demo-dashboard-title flex items-center gap-3">
+                <header className="sf-dashboard-header bg-white/90 backdrop-blur-md border-b border-stone-100 px-4 lg:px-6 sticky top-0 z-30">
+                    <div className="sf-dashboard-title flex items-center gap-3">
                         <button aria-label="Open navigation" onClick={() => setSidebarOpen(true)} className="md:hidden text-stone-500"><Menu className="w-6 h-6" /></button>
                         <h2 className="font-bold text-stone-800">{headerTitle}</h2>
 
@@ -1478,7 +1450,7 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
                     </div>
 
                     {!isSystemView && (
-                        <div className="demo-dashboard-tools">
+                        <div className="sf-dashboard-tools">
                             {/* ── Global search (always visible) ── */}
                             <div className="relative" ref={globalSearchRef}>
                                 <Search className="absolute left-3 top-2.5 text-stone-400 w-4 h-4" />
@@ -1505,7 +1477,7 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
 
                             {/* Per-stage search (only in stages view) */}
                             {currentView === 'stages' && (
-                                <div className="relative demo-stage-filter">
+                                <div className="relative sf-stage-filter">
                                     <Search className="absolute left-3 top-2.5 text-stone-400 w-4 h-4" />
                                     <input type="text" readOnly onFocus={(e) => e.target.removeAttribute('readonly')}  aria-label="Filter this stage" name="crm_dash_stage_search_unique" autoComplete="off" autoCorrect="off" spellCheck="false" placeholder="Filter this stage..." value={stageSearch} onChange={e => setStageSearch(e.target.value)}
                                         className="pl-9 pr-4 py-2 bg-stone-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-amber-300 w-40" />
@@ -1549,7 +1521,7 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
 
                             {/* Channel Partner filter - applies everywhere for Admin/Office */}
                             {!isChannelPartnerOffice && (
-                                <div className="relative demo-partner-filter flex items-center gap-1.5" ref={channelPartnerFilterRef}>
+                                <div className="relative sf-partner-filter flex items-center gap-1.5" ref={channelPartnerFilterRef}>
                                     <input
                                         type="text"
                                         aria-label="Filter by channel partner" placeholder="Channel Partner..."
@@ -1606,7 +1578,7 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
                                 </select>
                             )}
 
-                            {DATA_EXPORTS_ENABLED && user?.userType === 'admin' && (
+                            {isOn('dataExports') && user?.userType === 'admin' && (
                                 <button 
                                     onClick={() => setCurrentView('exports')}
                                     className="flex items-center gap-1.5 border border-stone-200 text-stone-600 px-3 py-2 rounded-xl text-sm font-medium hover:bg-stone-50 transition-colors disabled:opacity-50 cursor-pointer"
@@ -1625,7 +1597,6 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
                             )}
                         </div>
                     )}
-                <div className="demo-portal-controls">{demoControls}</div>
             </header>
 
                 {/* View router */}
@@ -1636,7 +1607,6 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
                     </section>}
                     <Suspense fallback={<ViewLoader />}>
                     {currentView === 'inventory' && ['admin','sales'].includes(user.userType) && <InventoryView currentUser={user} />}
-                    {currentView === 'dashboard' && user.userType === 'admin' && onStartDemoTour && <section className="demo-start-here" aria-labelledby="demo-start-heading"><div><span className="demo-start-eyebrow">START HERE</span><h2 id="demo-start-heading">See how a solar project comes together</h2><p>Explore quotations, a sample customer, materials, installation and subsidy in six short steps.</p></div><div className="demo-start-buttons"><button type="button" onClick={()=>onStartDemoTour('quick')}>Start the 6-step tour</button><button type="button" onClick={()=>onStartDemoTour('quick',2)}>Open a sample customer</button><button type="button" onClick={()=>onStartDemoTour('full')}>Full walkthrough</button></div></section>}
                     {currentView === 'dashboard' && <DashboardView metrics={metrics} loading={loading} scoped={isChannelPartnerOffice} />}
                     {currentView === 'delivery_batches' && canSeeDeliveryBatches && (
                         <DeliveryBatchesView 
@@ -1667,9 +1637,9 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
                     {currentView === 'installation_payments' && user.userType === 'admin' && <InstallationPaymentsView onSelectCustomer={setSelectedCustomer} currentUser={user} />}
                     {currentView === 'activity' && user.userType === 'admin' && <ActivityLogView />}
                     {currentView === 'users' && (user.userType === 'admin' || user.userType === 'channel_partner_office') && (
-                        <UserManagementView currentUser={user} initialShowCreate={userMgmtAction === 'createUser'} />
+                        <UserManagementView currentUser={user} />
                     )}
-                    {DATA_EXPORTS_ENABLED && currentView === 'exports' && user.userType === 'admin' && (
+                    {isOn('dataExports') && currentView === 'exports' && user.userType === 'admin' && (
                         <DataExportView
                             isChannelPartnerOffice={isChannelPartnerOffice}
                             channelPartnerFilter={channelPartnerFilter}
@@ -1697,7 +1667,7 @@ export default function Dashboard({ user, onLogout, onOpenDevSwitcher, demoContr
                             </div>
                         ) : filtered.length > 0 ? (
                             <div className="space-y-4">
-                                <div className="demo-customer-grid">
+                                <div className="sf-customer-grid">
                                     {filtered.map(c => (
                                         <CustomerCard key={c.id} customer={c} onSelect={setSelectedCustomer} onMoveStage={handleMoveStage} currentUser={user} />
                                     ))}
