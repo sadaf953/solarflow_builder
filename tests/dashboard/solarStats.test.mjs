@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { summarizeSolarEquipment } from '../../src/dashboard/solarStats.js';
+import { summarizeSolarEquipment } from '../../template/src/dashboard/solarStats.js';
 
 test('summarizes panel quantities, inverter choices and completed capacity', () => {
     const result = summarizeSolarEquipment([

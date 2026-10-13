@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {updateDeliveryStatus} from '../../src/delivery/status.js';
+import {updateDeliveryStatus} from '../../template/src/delivery/status.js';
 test('delivery failures never fall back to non-transactional writes', async () => {
  for(const failure of [{code:'P0001',message:'Insufficient stock'},{code:'PGRST202',message:'Missing function'}]) {
   const client={rpc:async()=>({error:failure}),from:()=>{assert.fail('must not write tables separately');}};
@@ -15,7 +15,7 @@ test('delivery needs an acknowledged atomic result', async () => {
 });
 
 test('save and delete never fall back when transaction functions are absent or fail', async () => {
- const {saveDeliveryBatch,deleteDeliveryBatch}=await import('../../src/delivery/status.js');
+ const {saveDeliveryBatch,deleteDeliveryBatch}=await import('../../template/src/delivery/status.js');
  const client={rpc:async()=>({error:{code:'PGRST202'}}),from:()=>assert.fail('separate writes forbidden')};
  await assert.rejects(saveDeliveryBatch(client,{id:'b'},['p'],[]),/SQL 07/);
  await assert.rejects(deleteDeliveryBatch(client,'b',['p']),/SQL 07/);
@@ -24,7 +24,7 @@ test('save and delete never fall back when transaction functions are absent or f
 });
 
 test('project removal uses one transaction and disbands only the last project', async () => {
- const {removeDeliveryProject}=await import('../../src/delivery/status.js');
+ const {removeDeliveryProject}=await import('../../template/src/delivery/status.js');
  const calls=[];
  const client={rpc:async(name,args)=>{calls.push({name,args});return {data:{success:true}};},from:()=>assert.fail('separate writes forbidden')};
  await removeDeliveryProject(client,{id:'b',project_ids:['p','q']},'p');

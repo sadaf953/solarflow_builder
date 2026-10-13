@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { memoryClient } from '../quotations/memoryClient.mjs';
-import { createQuotationRepository } from '../../src/quotations/repository.js';
-import { newForm, freshTemplate } from '../../src/quotations/model.js';
+import { createQuotationRepository } from '../../template/src/quotations/repository.js';
+import { newForm, freshTemplate } from '../../template/src/quotations/model.js';
 
 test('Lead Creation via Add Lead modal (direct admin insertion)', async () => {
     const client = memoryClient();

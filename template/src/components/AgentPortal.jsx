@@ -1,4 +1,4 @@
-import {missingStageRequirements} from '../demo/stageRequirements';
+import {missingStageRequirements} from '../config/index.js';
 import { useDemoTourNavigation } from '../demo/tour';
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {filterDeliveryProjects,projectAssignedElsewhere} from '../../src/delivery/projectPicker.js';
+import {filterDeliveryProjects,projectAssignedElsewhere} from '../../template/src/delivery/projectPicker.js';
 const rows=[{id:'1',stage:'LEADS',customer_name:'Selected'},{id:'2',stage:'MATERIAL DELIVERY',delivery_batch_id:'TRUCK-2',customer_name:'Assigned'},{id:'3',stage:'MATERIAL DELIVERY',customer_name:'Available'},{id:'4',stage:'MATERIAL DELIVERY',deleted_at:'2026-09-16'}];
 test('material delivery includes assigned records and selected records from another stage',()=>{
  assert.deepEqual(filterDeliveryProjects(rows,{selectedIds:['1']}).map(r=>r.id),['1','2','3']);

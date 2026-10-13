@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {normalizeItem,numericQuantity,summarizeBomDemand} from '../../src/inventory/model.js';
-const ref=JSON.parse(readFileSync(new URL('../../src/inventory/reference.json',import.meta.url)));
+import {normalizeItem,numericQuantity,summarizeBomDemand} from '../../template/src/inventory/model.js';
+const ref=JSON.parse(readFileSync(new URL('../../template/src/inventory/reference.json',import.meta.url)));
 test('catalog covers all supplied BOM product aliases and keeps units distinct',()=>{
  assert.equal(ref.catalog.length,53);
  for(const template of Object.values(ref.templates))for(const item of template)assert.ok(ref.catalog.some(c=>normalizeItem(c.product_name)===normalizeItem(item.product_name)));
@@ -15,7 +15,7 @@ test('compound dimensions and kit breakdowns are never silently summed',()=>{
 });
 
 test('daily godown report uses India dates and preserves opening plus in minus out',async()=>{
- const {dailyStock,stockDay}=await import('../../src/inventory/model.js');
+ const {dailyStock,stockDay}=await import('../../template/src/inventory/model.js');
  assert.equal(stockDay('2026-09-15T19:00:00Z'),'2026-09-16');
  const items=[{id:'a'},{id:'b'}];
  const moves=[{item_id:'a',kind:'opening',quantity:100,created_at:'2026-09-14T10:00:00Z'},{item_id:'a',kind:'issue',quantity:10,created_at:'2026-09-15T10:00:00Z'},{item_id:'a',kind:'receipt',quantity:5,created_at:'2026-09-15T19:00:00Z'},{item_id:'a',kind:'issue',quantity:2,created_at:'2026-09-16T10:00:00Z'},{item_id:'a',kind:'receipt',quantity:50,created_at:'2026-09-17T10:00:00Z'}];

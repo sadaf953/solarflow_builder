@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculate,newForm,payload,freshTemplate,validate,fromRow,documentFor,toLead,canUseQuotations } from '../../src/quotations/model.js';
-import { calculateSystemCapacityKwp } from '../../src/utils/capacity.js';
+import { calculate,newForm,payload,freshTemplate,validate,fromRow,documentFor,toLead,canUseQuotations } from '../../template/src/quotations/model.js';
+import { calculateSystemCapacityKwp } from '../../template/src/utils/capacity.js';
 const user = {id:'11111111-1111-4111-8111-111111111111',name:'Test agent',phone:'0000000000',userType:'agent'};
 function complete() {
     return {...newForm(user),customer_name:'Test customer',customer_phone:'0000000001',capacity_kw:3.48,solar_panel_make:'SolarFlow',solar_panel_qty:6,panel_wattage:580,inverter_option:'Option 1',inverter_brand:'DemoVolt',options:['SolarFlow','Tata','Adani'].map(brandName => ({brandName,baseValue:189000,discount:1000,subsidy:78000}))};

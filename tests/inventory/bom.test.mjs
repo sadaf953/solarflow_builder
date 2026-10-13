@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {supabase} from '../../src/supabase.js';
-import {loadBomForCustomer,getBomTemplateForType} from '../../src/utils/bom.js';
+import {supabase} from '../../template/src/supabase.js';
+import {loadBomForCustomer,getBomTemplateForType} from '../../template/src/utils/bom.js';
 import {memoryClient} from '../quotations/memoryClient.mjs';
 test('roof and shed load their own records; saved blanks and zero are preserved',async()=>{
  const original=supabase.from;

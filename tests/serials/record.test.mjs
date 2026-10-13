@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { persistScannedSerial, prepareScannedSerial, readModuleSerials } from '../../src/serials/record.js';
+import { persistScannedSerial, prepareScannedSerial, readModuleSerials } from '../../template/src/serials/record.js';
 
 test('a module scan adds one serial and waits for the CRM save', async () => {
     const writes = [];

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {createQuotationRepository} from '../../src/quotations/repository.js';
-import {newForm,freshTemplate} from '../../src/quotations/model.js';
+import {createQuotationRepository} from '../../template/src/quotations/repository.js';
+import {newForm,freshTemplate} from '../../template/src/quotations/model.js';
 import {memoryClient} from './memoryClient.mjs';
 const user={id:'owner',name:'Agent',phone:'0000000000'};
 async function setup(){const client=memoryClient();const repo=createQuotationRepository(client);const form={...newForm(user),customer_name:'Customer',customer_phone:'0000000001',capacity_kw:3.48,solar_panel_qty:6,panel_wattage:580,solar_panel_make:'SolarFlow',inverter_option:'Option 1',inverter_brand:'DemoVolt',options:['a','b','c'].map(brandName=>({brandName,baseValue:100000,discount:100,subsidy:1000}))};const row=await repo.save('quote',null,form,freshTemplate(),user);return{client,repo,form,row};}

@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {demoLeadSchema} from '../../src/utils/validation.js';
-import {missingStageRequirements,stageRequirements} from '../../src/demo/stageRequirements.js';
-import {workflowTour,tourSteps} from '../../src/demo/tourSteps.js';
+import {demoLeadSchema} from '../../template/src/utils/validation.js';
+import {missingStageRequirements,stageRequirements} from '../../template/src/demo/stageRequirements.js';
+import {workflowTour,tourSteps} from '../../template/src/demo/tourSteps.js';
 test('lead accepts only name and phone, retaining optional details and rejecting invalid supplied data',()=>{
  const base={customer_name:'Fictional Customer',phone_number:'+91 90000 00001'};
  assert.equal(demoLeadSchema.parse(base).phone_number,'9000000001');

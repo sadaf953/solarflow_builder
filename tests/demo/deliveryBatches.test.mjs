@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ensureGroupedDemoBatches} from '../../src/demo/deliveryBatches.js';
+import {ensureGroupedDemoBatches} from '../../template/src/demo/deliveryBatches.js';
 function fixture(){
  const admin=Array.from({length:50},(_,i)=>({id:`p${i+1}`,demo_seed_key:`solarflow-50-v1-${i+1}`,delivery_batch_id:`DEMO-BATCH-${String(i+1).padStart(3,'0')}`,delivery_status:'PENDING',deleted_at:null,stage:i<9?['MATERIAL ORDER','MATERIAL INTEGRATION','MATERIAL DELIVERY'][i%3]:'LEADS'}));
  const tables={admin,delivery_batches:admin.map(p=>({id:`b${p.id}`,batch_no:p.delivery_batch_id,demo_seed_key:p.demo_seed_key,project_ids:[p.id],status:'PENDING',rent_amount:'1500',notes:'Synthetic batch; no shipment scheduled'}))};let fail=false;

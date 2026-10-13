@@ -1,9 +1,11 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-    content: [
-        "./index.html",
-        "./src/**/*.{js,ts,jsx,tsx}",
-    ],
+    // Paths resolve next to this file, so the template builds the same way
+    // inside the builder repo and unzipped on its own.
+    content: {
+        relative: true,
+        files: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
+    },
     theme: {
         extend: {
             colors: {

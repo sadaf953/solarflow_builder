@@ -17,3 +17,7 @@ scratch/
 supabase/.temp/
 .vercel/
 .netlify/
+template/dist/
+builder/dist/
+builder/public/client-template.json
+.claude/

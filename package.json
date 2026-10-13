@@ -1,22 +1,24 @@
 {
-  "name": "solarflow-demo",
+  "name": "solarflow-client-builder",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node scripts/check-isolation.mjs && ROLLDOWN_OPTIONS_VALIDATION=loose vite",
-    "build": "node scripts/check-isolation.mjs && ROLLDOWN_OPTIONS_VALIDATION=loose vite build",
-    "lint": "eslint .",
-    "preview": "node scripts/check-isolation.mjs && ROLLDOWN_OPTIONS_VALIDATION=loose vite preview",
-    "check:isolation": "node scripts/check-isolation.mjs",
-    "test:isolation": "node --test tests/isolation/*.test.mjs",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "dev:template": "vite --config template/vite.config.js",
+    "build:template": "vite build --config template/vite.config.js",
+    "dev:builder": "node scripts/pack-template.mjs && vite --config builder/vite.config.js",
+    "build:builder": "node scripts/pack-template.mjs && vite build --config builder/vite.config.js",
+    "pack:template": "node scripts/pack-template.mjs",
+    "make-client": "node scripts/make-client.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
+    "test": "node --test --test-reporter=dot \"tests/**/*.test.mjs\"",
+    "lint": "eslint template builder scripts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "@zxing/browser": "0.2.1",
     "@zxing/library": "0.23.0",
+    "fflate": "0.8.3",
     "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "lucide-react": "^0.454.0",
@@ -26,6 +28,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
     "@eslint/js": "^9.39.5",
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
@@ -35,7 +38,6 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.5.5",
-    "gh-pages": "^6.3.0",
     "globals": "^17.11.0",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.14",

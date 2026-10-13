@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {percentCropRatio,fitCropRatio,resizeCrop} from '../../src/utils/imageCrop.js';
+import {percentCropRatio,fitCropRatio,resizeCrop} from '../../template/src/utils/imageCrop.js';
 test('presets produce their pixel ratio on portrait, landscape and rotated images',()=>{
  for(const [w,h] of [[640,480],[480,640]])for(const rotation of [0,90,180,270])for(const ratio of [1,4/3,16/9,1/1.414]){
   const r=percentCropRatio(w,h,rotation,ratio);const crop=fitCropRatio({x:10,y:10,width:80,height:80},r);

@@ -1,4 +1,4 @@
-import {missingStageRequirements,stageRequirements} from '../demo/stageRequirements';
+import {missingStageRequirements,getStageRequirements} from '../config/index.js';
 // ─── CustomerDetailModal.jsx ──────────────────────────────────────────────────
 // Full customer detail: 4-tab layout (Overview, Finance & Bank, Checklist,
 // Notes & History). Section-level editing, payments array editor, generic
@@ -1833,8 +1833,8 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
                         </div>
                     )}
 
-                    {stageRequirements[activeTab] && <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 mb-4 text-xs text-teal-900">
-                        <strong>Demo essentials: </strong>{stageRequirements[activeTab].map(([,label])=>label).join(' · ')}. Other fields and all photos are optional.
+                    {getStageRequirements(activeTab).length > 0 && <div className="rounded-xl border border-teal-200 bg-teal-50 p-3 mb-4 text-xs text-teal-900">
+                        <strong>Needed to move on: </strong>{getStageRequirements(activeTab).map(([,label])=>label).join(' · ')}. Other fields and all photos are optional.
                     </div>}
                     <CustomerModalTabsRouter {...tabProps} />
 

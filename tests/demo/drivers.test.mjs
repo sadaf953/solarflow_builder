@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {ensureThreeDemoDrivers} from '../../src/demo/drivers.js';
+import {ensureThreeDemoDrivers} from '../../template/src/demo/drivers.js';
 function fixture(){
  const names=Array.from({length:50},(_,i)=>i===0?'Demo Driver':`Demo Driver ${String(i+1).padStart(2,'0')}`);
  const tables={drivers:names.map((name,i)=>({id:String(i),name})),admin:names.map((driver_name,i)=>({id:String(i),driver_name,vehicle_number:`TRUCK-${i}`})),delivery_batches:names.map((driver_name,i)=>({id:String(i),driver_name,vehicle_number:`TRUCK-${i}`})),profiles:[{id:'p',user_type:'driver_name',name:'Demo Driver'}],demo_profiles:[{id:'d',user_type:'driver_name',name:'Demo Driver'}]};
