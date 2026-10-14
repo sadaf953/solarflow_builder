@@ -13,7 +13,8 @@
     "check:secrets": "node scripts/check-secrets.mjs",
     "test": "node --test --test-reporter=dot \"tests/**/*.test.mjs\"",
     "lint": "eslint builder scripts tests/builder && eslint -c template/eslint.config.js template",
-    "test-data": "node scripts/make-test-data.mjs"
+    "test-data": "node scripts/make-test-data.mjs",
+    "sql-files": "node scripts/collect-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
