@@ -3,7 +3,7 @@ import { History, Paperclip, IndianRupee, CheckCircle2, Lock, Edit3, X, Clipboar
 import { LOAN_TAGS, LOAN_TAG_COLORS, isFinalTagValue } from '../../constants';
 import { CheckboxRemarkItem, EditToggle } from './shared';
 import { formatInputValue, parseIndianNumber } from '../../utils';
-import { documentMode, dropdownOptions, tagLabel } from '../../config/index.js';
+import { STAGE_IDS, documentMode, dropdownOptions, isStageEnabled, tagLabel } from '../../config/index.js';
 import { formatINR, todayIST } from '../../lib/format.js';
 import { downloadBlob } from '../../lib/download.js';
 import { Field, FieldList, Input, Modal, SectionCard, Select, Spinner, SuccessBanner, TagPicker } from '../../ui/index.js';
@@ -28,10 +28,13 @@ const LOAN_DOCUMENTS = [
 ];
 
 const APP_DETAILS_SECTION = 'loan_app_details';
+// Without a Registration stage, the feasibility report's Feasibility No is typed here.
+const ASK_FEASIBILITY_NO = !isStageEnabled(STAGE_IDS.REGISTRATION);
 const APP_DETAIL_FIELDS = [
     { key: 'loan_by', label: 'Loan By' },
     { key: 'quotation_amount', label: 'Total Quotation Amount (₹)', type: 'money' },
     { key: 'jansamarth_application_no', label: 'Jansamarth Application No' },
+    ...(ASK_FEASIBILITY_NO ? [{ key: 'registration_no', label: 'Feasibility No' }] : []),
     { key: 'loan_registration_date', label: 'Loan Date', type: 'date' },
 ];
 
@@ -371,6 +374,21 @@ export default function LoanTab(props) {
                                 }}
                             />
                         </Field>
+                        {ASK_FEASIBILITY_NO && (
+                            <Field label="Feasibility No" htmlFor="loan-feasibility-no">
+                                <Input
+                                    id="loan-feasibility-no"
+                                    placeholder="PM Surya Ghar portal number"
+                                    value={editData.registration_no || ''}
+                                    onChange={(e) => handleLocalChange('registration_no', e.target.value)}
+                                    onBlur={(e) => {
+                                        if ((editData.registration_no || '') !== (customer.registration_no || '')) {
+                                            save({ registration_no: e.target.value.trim() || null }, 'Updated Feasibility No');
+                                        }
+                                    }}
+                                />
+                            </Field>
+                        )}
                         <Field label="Loan Date" htmlFor="loan-date">
                             <Input
                                 id="loan-date"
@@ -389,7 +407,11 @@ export default function LoanTab(props) {
                     <FieldList
                         fields={APP_DETAIL_FIELDS}
                         record={editData}
-                        getValue={(record, field) => (field.key === 'quotation_amount' ? (quotationAmount > 0 ? quotationAmount : null) : record[field.key])}
+                        getValue={(record, field) => {
+                            if (field.key === 'quotation_amount') return quotationAmount > 0 ? quotationAmount : null;
+                            if (field.key === 'registration_no') return record.registration_no || record.feasibility_no;
+                            return record[field.key];
+                        }}
                         className="lg:grid-cols-4"
                     />
                 )}

@@ -175,8 +175,8 @@ export function StageEditor({ workflow, features, onChange }) {
                     <div className="space-y-2">
                         {missingLocked.map(stage => (
                             <p key={stage.id}>
-                                {locks[stage.id]}: add the {stage.label} stage back.{' '}
-                                <button type="button" onClick={() => addBuiltin(stage.id)} className="sf-btn-secondary ml-1 min-h-11">Add it back</button>
+                                {locks[stage.id]}, so the {stage.label} stage is added back at its usual place.{' '}
+                                <button type="button" onClick={() => addBuiltin(stage.id)} className="sf-btn-secondary ml-1 min-h-11">Add it back now</button>
                             </p>
                         ))}
                     </div>

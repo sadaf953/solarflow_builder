@@ -54,9 +54,10 @@ test('a re-run moves untouched old sign-ups to waiting for approval and leaves r
 
     await db.exec(setup);
     assert.deepEqual(await profile(signup), { user_type: 'pending', role: 'Not set up', status: 'inactive' });
-    for (const id of [edited, viaAddUserButInactive, switchedOff]) {
+    for (const id of [edited, viaAddUserButInactive]) {
         assert.deepEqual(await profile(id), { user_type: 'sales', role: 'Office', status: 'inactive' });
     }
+    assert.deepEqual(await profile(switchedOff), { user_type: 'sales', role: 'Office staff', status: 'inactive' });
     assert.deepEqual(await profile(owner), { user_type: 'admin', role: 'Admin', status: 'active' });
 
     await db.exec(setup);

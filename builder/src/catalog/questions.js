@@ -1,8 +1,10 @@
 // The features form: plain questions instead of a feature checklist.
 //
 // Clients answer about how their business works; the features follow from
-// the answers, each with a "because you said..." reason. "Not sure" never
-// switches anything on silently - it goes to the "To discuss" list.
+// the answers, each with a "because you said..." reason. "Not sure" always
+// goes to the "To discuss" list. It switches nothing on, except where the app
+// needs a starting point (payments, documents): those keep the usual setup,
+// with UNSURE_REASON saying so.
 //
 // answer kinds
 //   yesno   'yes' | 'no' | 'unsure'
@@ -10,6 +12,8 @@
 // showIf   (answers) => boolean; hidden questions count as unanswered and off
 
 import { FEATURE_REGISTRY } from '../../../template/src/config/catalog/features.js';
+
+export const UNSURE_REASON = 'Included for now because you answered Not sure — we will confirm with you.';
 
 export const YES_NO = [
     { value: 'yes', label: 'Yes' },
@@ -69,9 +73,9 @@ export const QUESTION_STEPS = [
                 example: 'Most PM Surya Ghar customers take a bank solar loan; some pay cash.',
                 options: [
                     { value: 'both', label: 'Loan and cash', description: 'Some take a loan, some pay directly.', features: ['loanTracking', 'cashPayments'] },
-                    { value: 'loan', label: 'Mostly loan', description: 'Almost every customer takes a solar loan.', features: ['loanTracking'] },
+                    { value: 'loan', label: 'Mostly loan', description: 'Almost every customer takes a solar loan. The odd cash customer can still be recorded.', features: ['loanTracking'] },
                     { value: 'cash', label: 'Only cash / direct payment', description: 'No loans.', features: ['cashPayments'] },
-                    { value: 'unsure', label: 'Not sure', description: 'We’ll discuss it.', features: [] },
+                    { value: 'unsure', label: 'Not sure', description: 'We keep loan and cash for now and confirm with you.', features: ['loanTracking', 'cashPayments'] },
                 ],
                 because: 'of how your customers pay',
             },
@@ -114,7 +118,7 @@ export const QUESTION_STEPS = [
                     { value: 'both', label: 'Upload files and tick them off', description: 'Your team chooses per customer.', features: ['documentUploads', 'checklists'] },
                     { value: 'upload', label: 'Upload the files', description: 'Files are stored in SolarFlow.', features: ['documentUploads'] },
                     { value: 'tick', label: 'Just tick them off', description: 'No files are stored.', features: ['checklists'] },
-                    { value: 'unsure', label: 'Not sure', description: 'We’ll discuss it.', features: ['checklists'] },
+                    { value: 'unsure', label: 'Not sure', description: 'We keep tick-off checklists for now and confirm with you.', features: ['checklists'] },
                 ],
                 because: 'of how you handle customer documents',
             },
@@ -214,7 +218,7 @@ export function answersToFeatures(answers = {}, overrides = {}) {
         for (const id of featuresFor(question, answer)) {
             if (!(id in features)) continue;
             features[id] = true;
-            reasons[id] ||= `Because ${question.because}.`;
+            reasons[id] ||= answer === 'unsure' ? UNSURE_REASON : `Because ${question.because}.`;
         }
     }
     // Manual changes from the review step win over answers.

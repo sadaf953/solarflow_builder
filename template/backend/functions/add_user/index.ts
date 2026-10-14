@@ -152,13 +152,21 @@ Deno.serve(async (req: Request) => {
         channelPartner = caller.channel_partner || caller.name;
         parentId = caller.id;
       } else if (CPO_CHILD_TYPES.includes(userType)) {
-        // Admin creating a manager/dealer: link it to the partner office of that branch.
+        // Admin creating a manager/dealer: it works under one active partner office
+        // (linked as its parent), or a dealer under one channel partner. Either way
+        // it takes that parent's partner key.
         const requested = text(body.parent_profile_id);
-        if (UUID.test(requested) || channelPartner) {
-          const offices = service.from("profiles").select("id").eq("user_type", "channel_partner_office").eq("status", "active");
-          const { data } = await (UUID.test(requested) ? offices.eq("id", requested) : offices.ilike("channel_partner", likeLiteral(channelPartner!))).limit(2);
-          if (data?.length === 1) parentId = data[0].id;
-        }
+        const parentTypes = userType === "agent2" ? ["channel_partner_office", "agent"] : ["channel_partner_office"];
+        const what = userType === "agent2" ? "partner office or channel partner" : "partner office";
+        if (!UUID.test(requested) && !channelPartner) throw new HttpError(400, `Choose the ${what} this login works under.`);
+        const parents = service.from("profiles").select("id, name, user_type, channel_partner")
+          .in("user_type", parentTypes).eq("status", "active");
+        const { data } = await (UUID.test(requested) ? parents.eq("id", requested) : parents.ilike("channel_partner", likeLiteral(channelPartner!))).limit(2);
+        if (!data?.length) throw new HttpError(400, `The ${what} this login works under was not found or is switched off.`);
+        if (data.length > 1) throw new HttpError(400, `More than one ${what} is named "${channelPartner}". Choose it from the list instead.`);
+        const parent = data[0];
+        channelPartner = text(parent.channel_partner) || parent.name;
+        if (parent.user_type === "channel_partner_office") parentId = parent.id;
       } else if (userType === "agent") {
         // A channel partner sees the leads filed under this key; it never follows later renames.
         channelPartner = channelPartner || name;

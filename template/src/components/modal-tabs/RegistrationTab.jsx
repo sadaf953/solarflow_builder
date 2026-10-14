@@ -3,12 +3,7 @@ import { EditableDetailItem, CheckboxRemarkItem, EditToggle } from './shared';
 import { dropdownOptions, paymentTypeOptions } from '../../config/index.js';
 import { Badge, SectionCard } from '../../ui/index.js';
 import useStageSave from './useStageSave';
-
-const REGISTRATION_DOCUMENTS = [
-    { field: 'application_acknowledgment', label: 'Application Acknowledgment' },
-    { field: 'feasibilty_document', label: 'Feasibility Document' },
-    { field: 'subsidy_token_photo', label: 'Subsidy Token Photo' },
-];
+import { REGISTRATION_DOCUMENTS } from './registrationDocuments.js';
 
 const titleCase = value => (value ? String(value).charAt(0).toUpperCase() + String(value).slice(1).toLowerCase() : '');
 

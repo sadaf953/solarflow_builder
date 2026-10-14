@@ -141,6 +141,15 @@ export function restoreView(user) {
     return view && !view.hash ? view.id : 'dashboard';
 }
 
+/**
+ * Stage ids that still hold customers but are no longer in the pipeline (a
+ * stage dropped in an upgrade), from the metrics' stageCounts, sorted.
+ */
+export const otherStageIds = (stageCounts = {}) => Object.entries(stageCounts || {})
+    .filter(([id, count]) => id && !isStageEnabled(id) && Number(count) > 0)
+    .map(([id]) => id)
+    .sort();
+
 /** The saved stage, or Leads when it is missing or no longer in the pipeline. */
 export function restoreStage() {
     const saved = readSession(STAGE_KEY);

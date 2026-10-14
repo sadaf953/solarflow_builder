@@ -2,28 +2,27 @@
 //
 //   node scripts/make-client.mjs <submission.json> [--out dir] [--slug x] [--owner-email y]
 //
-// The file is the submission payload, or an export wrapping it as
-// {payload, adminOverrides?, slug?, ownerEmail?}. The zip is identical to the
-// one the admin page downloads for the same input.
+// The file is the submission payload, or an export wrapping it with the
+// admin settings, as "Download answers (JSON)" on the admin page writes it:
+// {payload | submission, adminOverrides?, slug?, ownerEmail?, branding?, workflow?}.
+// --slug and --owner-email win over the file. The zip is identical to the one
+// the admin page downloads with the same settings.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { collectTemplateFiles, TEMPLATE_DIR } from './pack-template.mjs';
-import { createClientZip, parseSubmissionJson } from '../builder/src/zip/build.js';
+import { buildOptions, createClientZip, parseSubmissionJson } from '../builder/src/zip/build.js';
 
 const USAGE = 'Usage: node scripts/make-client.mjs <submission.json> [--out dir] [--slug x] [--owner-email y]';
 
 export function makeClient({ submissionPath, outDir = './client-zips', slug, ownerEmail, generatedAt }) {
-    const parsed = parseSubmissionJson(readFileSync(submissionPath, 'utf8'));
+    const { submission, ...settings } = parseSubmissionJson(readFileSync(submissionPath, 'utf8'));
     const result = createClientZip({
         templateFiles: collectTemplateFiles(),
         schemaSql: readFileSync(join(TEMPLATE_DIR, 'backend', 'schema.sql'), 'utf8'),
-        submission: parsed.submission,
-        adminOverrides: parsed.adminOverrides,
-        branding: parsed.branding,
-        slug: slug ?? parsed.slug,
-        ownerEmail: ownerEmail ?? parsed.ownerEmail,
+        submission,
+        ...buildOptions({ ...settings, slug: slug ?? settings.slug, ownerEmail: ownerEmail ?? settings.ownerEmail }),
         generatedAt,
     });
     mkdirSync(outDir, { recursive: true });

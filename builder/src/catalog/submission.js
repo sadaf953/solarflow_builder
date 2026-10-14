@@ -77,25 +77,83 @@ export function brandingOverrides(branding) {
         .map(([key, value]) => [key, value.trim()]));
 }
 
-export function submissionToClientConfig(submission, { adminOverrides = {}, slug, ownerEmail, branding } = {}) {
+// A typed country code: +91, 0091, or 91 followed by a space or dash.
+const COUNTRY_CODE = /^(?:\+\s*91|0091|91(?=[\s-]))/;
+
+// A mobile number as typed (+91 98765 43210, 098765 43210, ...) as its 10
+// digits. The country code is removed before the digits are counted, so
+// "+91 98765 432" stays invalid. Anything else is kept as typed, so a
+// half-typed number is never turned into a wrong one.
+export function normalizePhone(value) {
+    const text = String(value ?? '').trim();
+    const withCode = COUNTRY_CODE.test(text);
+    let digits = text.replace(COUNTRY_CODE, '').replace(/\D/g, '');
+    if (!withCode && digits.length === 12 && digits.startsWith('91')) digits = digits.slice(2);
+    if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+    return digits.length === 10 ? digits : text;
+}
+
+const ORDER = Object.fromEntries(BUILTIN_STAGES.map((stage, index) => [stage.id, index]));
+
+// A custom stage list with the built-in stages the features need put back at
+// their usual place (after the last built-in stage that normally comes
+// before them). `added` lists them with the reason, for the client and admin.
+export function restoreLockedStages(stages, features) {
+    const locks = stageLocks(features);
+    const list = [...stages];
+    const added = [];
+    for (const stage of BUILTIN_STAGES) {
+        if (!locks[stage.id] || list.some(item => item.id === stage.id)) continue;
+        let at = 0;
+        list.forEach((item, index) => { if (ORDER[item.id] < ORDER[stage.id]) at = index + 1; });
+        list.splice(at, 0, { id: stage.id, label: stage.label, group: stage.group });
+        added.push({ id: stage.id, label: stage.label, reason: locks[stage.id] });
+    }
+    return { stages: list, added };
+}
+
+const isObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+// The workflow the app is built from: the admin's, when they set one up on
+// the client page (for example from the client's sheet), else the client's.
+export function effectiveWorkflow(submission, adminWorkflow) {
+    return isObject(adminWorkflow) ? { ...adminWorkflow, source: 'form' } : submission?.workflow || {};
+}
+
+// Stages of a workflow before locked stages are put back.
+function workflowStages(workflow, features) {
+    const custom = workflow.source === 'form' && workflow.stagesMode === 'custom' && Array.isArray(workflow.stages) && workflow.stages.length;
+    if (!custom) return null;
+    return workflow.stages.map(stage => (BUILTIN_BY_ID[stage.id]
+        ? { id: stage.id, label: stage.label || BUILTIN_BY_ID[stage.id].label, group: stage.group || BUILTIN_BY_ID[stage.id].group }
+        : { id: stage.id, label: stage.label, group: stage.group || 'materials', custom: true, ...(stage.icon ? { icon: stage.icon } : {}) }));
+}
+
+// Built-in stages put back because the final features need them (an empty
+// list when the standard stages are used).
+export function restoredStages(submission, { adminOverrides = {}, workflow } = {}) {
+    const { features } = submissionFeatures(submission, adminOverrides);
+    const stages = workflowStages(effectiveWorkflow(submission, workflow), features);
+    return stages ? restoreLockedStages(stages, features).added : [];
+}
+
+export function submissionToClientConfig(submission, { adminOverrides = {}, slug, ownerEmail, branding, workflow: adminWorkflow } = {}) {
     const base = defaultClientConfig();
     const contact = submission.contact || {};
     const company = String(contact.company || '').trim() || 'SolarFlow Client';
     const { features } = submissionFeatures(submission, adminOverrides);
-    const workflow = submission.workflow || {};
+    const clientWorkflow = submission.workflow || {};
+    const workflow = effectiveWorkflow(submission, adminWorkflow);
 
-    const custom = workflow.source === 'form' && workflow.stagesMode === 'custom' && Array.isArray(workflow.stages) && workflow.stages.length;
-    const stages = custom
-        ? workflow.stages.map(stage => (BUILTIN_BY_ID[stage.id]
-            ? { id: stage.id, label: stage.label || BUILTIN_BY_ID[stage.id].label, group: stage.group || BUILTIN_BY_ID[stage.id].group }
-            : { id: stage.id, label: stage.label, group: stage.group || 'materials', custom: true, ...(stage.icon ? { icon: stage.icon } : {}) }))
-        : defaultStageList(features);
+    const custom = workflowStages(workflow, features);
+    const stages = custom ? restoreLockedStages(custom, features).stages : defaultStageList(features);
 
     const dropdowns = { ...base.dropdowns };
     for (const [id, list] of Object.entries(workflow.dropdowns || {})) {
         if (DROPDOWN_CATALOG[id] && Array.isArray(list)) dropdowns[id] = list;
     }
 
+    const state = String(contact.state || '').trim() || base.branding.state;
     return {
         schemaVersion: CONFIG_SCHEMA_VERSION,
         client: { name: company, slug: slug || slugify(company), ownerEmail: String(ownerEmail ?? contact.email ?? '').trim() },
@@ -103,9 +161,11 @@ export function submissionToClientConfig(submission, { adminOverrides = {}, slug
             ...base.branding,
             appName: company,
             companyName: company,
-            phone: String(contact.phone || '').trim(),
+            phone: normalizePhone(contact.phone),
             email: String(contact.email || '').trim(),
-            state: String(contact.state || '').trim() || base.branding.state,
+            state,
+            // GEB / GEDA are Gujarat's; elsewhere quotations print "<DISCOM> registration".
+            chargesLabel: /gujarat/i.test(state) ? base.branding.chargesLabel : '',
             ...brandingOverrides(branding),
         },
         features,
@@ -113,9 +173,9 @@ export function submissionToClientConfig(submission, { adminOverrides = {}, slug
         dropdowns,
         customFields: workflow.source === 'form' && Array.isArray(workflow.customFields) ? workflow.customFields : [],
         workflowSource: {
-            type: workflow.source === 'sheet' ? 'sheet' : 'form',
-            sheetUrl: workflow.source === 'sheet' ? String(workflow.sheetUrl || '').trim() : '',
-            note: String(workflow.sheetNote || '').trim(),
+            type: clientWorkflow.source === 'sheet' ? 'sheet' : 'form',
+            sheetUrl: clientWorkflow.source === 'sheet' ? String(clientWorkflow.sheetUrl || '').trim() : '',
+            note: String(clientWorkflow.sheetNote || '').trim(),
         },
     };
 }

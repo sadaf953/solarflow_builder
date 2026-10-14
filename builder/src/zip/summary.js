@@ -4,17 +4,17 @@ import { FEATURE_REGISTRY, FEATURE_GROUPS } from '../../../template/src/config/c
 import { DROPDOWN_CATALOG, CUSTOM_FIELD_TYPES } from '../../../template/src/config/catalog/dropdowns.js';
 import { resolveClientConfig } from '../../../template/src/config/resolve.js';
 import { visibleQuestions, describeAnswer, questionById } from '../catalog/questions.js';
-import { submissionFeatures } from '../catalog/submission.js';
+import { effectiveWorkflow, restoredStages, submissionFeatures } from '../catalog/submission.js';
 
 // Client text on one line, with markdown that could change the layout escaped.
 const inline = value => String(value ?? '').replace(/\s+/g, ' ').trim().replace(/([\\`*_[\]<>|#])/g, '\\$1');
 const list = items => (items.length ? items : ['None.']);
 
-export function setupSummaryMarkdown({ submission, adminOverrides = {}, config, validation, generatedAt }) {
+export function setupSummaryMarkdown({ submission, adminOverrides = {}, adminWorkflow, config, validation, generatedAt }) {
     const resolved = resolveClientConfig(config);
     const fromAnswers = submission ? submissionFeatures(submission, adminOverrides) : { reasons: {}, discuss: [], unanswered: [] };
     const contact = submission?.contact || {};
-    const workflow = submission?.workflow || {};
+    const workflow = effectiveWorkflow(submission, adminWorkflow);
     const lines = [];
     const section = (title, body) => lines.push(`## ${title}`, '', ...body, '');
 
@@ -35,14 +35,16 @@ export function setupSummaryMarkdown({ submission, adminOverrides = {}, config, 
     const reasonFor = id => {
         const on = resolved.features[id];
         const answerReason = fromAnswers.reasons[id];
-        if (on) return answerReason || 'Switched on.';
+        // The resolver gives a reason for a feature it keeps on against the
+        // config (checklists, when document uploads is off).
+        if (on) return resolved.featureReasons[id] || answerReason || 'Switched on.';
         // An answer may ask for a feature that a missing dependency switches off.
         return config.features?.[id] === false && answerReason ? answerReason : resolved.featureReasons[id] || 'Not chosen.';
     };
     const featureLines = wanted => FEATURE_GROUPS.flatMap(group => selectable
         .filter(([id, feature]) => feature.group === group.id && Boolean(resolved.features[id]) === wanted)
         .map(([id, feature]) => `- **${feature.label}** (${group.label}): ${reasonFor(id)}`));
-    const core = Object.values(FEATURE_REGISTRY).filter(feature => feature.status === 'core').map(feature => feature.label);
+    const core = Object.entries(FEATURE_REGISTRY).filter(([id, feature]) => feature.status === 'core' && resolved.features[id]).map(([, feature]) => feature.label);
     section('Features on', [...list(featureLines(true)), '', `Always included: ${core.join(', ')}.`]);
     section('Features off', list(featureLines(false)));
 
@@ -55,12 +57,15 @@ export function setupSummaryMarkdown({ submission, adminOverrides = {}, config, 
     }
 
     const source = config.workflowSource || {};
+    const restored = submission ? restoredStages(submission, { adminOverrides, workflow: adminWorkflow }) : [];
     section('Workflow', [
         source.type === 'sheet'
             ? `The client shared a sheet instead of filling in the form: ${inline(source.sheetUrl)}`
             : 'The client filled in the workflow form.',
         ...(source.note ? ['', `Client note: ${inline(source.note)}`] : []),
-        ...(workflow.stagesMode === 'custom' && source.type !== 'sheet' ? ['', 'The client changed the stages.'] : []),
+        ...(adminWorkflow ? ['', 'The SolarFlow team set up the stages, lists and extra fields on the client page.']
+            : workflow.stagesMode === 'custom' && source.type !== 'sheet' ? ['', 'The client changed the stages.'] : []),
+        ...(restored.length ? ['', ...restored.map(stage => `- ${inline(stage.label)} stage added back: ${inline(stage.reason)}.`)] : []),
     ]);
 
     const groupLabel = Object.fromEntries(resolved.groups.map(group => [group.id, group.label]));
@@ -75,7 +80,7 @@ export function setupSummaryMarkdown({ submission, adminOverrides = {}, config, 
             ? resolved.dropdowns.metadata[id] || []
             : (resolved.dropdowns.tags[id] || []).map(tag => tag.label);
         const shown = values.length ? values.map(inline).join(', ') : 'empty (filled in later on the Operations page)';
-        return `- **${catalog.label}**${changed.has(id) ? ' (changed by the client)' : ''}: ${shown}`;
+        return `- **${catalog.label}**${changed.has(id) ? ` (changed by ${adminWorkflow ? 'the SolarFlow team' : 'the client'})` : ''}: ${shown}`;
     }));
 
     const stageLabel = Object.fromEntries(resolved.stages.map(stage => [stage.id, stage.label]));

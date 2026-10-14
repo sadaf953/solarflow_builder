@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Archive, ArrowLeft, History, Link2, RotateCcw } from 'lucide-react';
 import { formatDate } from '../../../../template/src/lib/format.js';
-import { Badge, EmptyState, ErrorBanner, LoadingState, Modal, Select, Spinner } from '../../../../template/src/ui/index.js';
-import { adminGet, adminMarkDownloaded, adminResetToken, adminSetStatus } from '../../api.js';
+import { Badge, EmptyState, ErrorBanner, LoadingState, Modal, Select, Spinner, useAutosave } from '../../../../template/src/ui/index.js';
+import { adminGet, adminGetSettings, adminMarkDownloaded, adminResetToken, adminSaveSettings, adminSetStatus } from '../../api.js';
 import { InviteLink } from '../../components/InviteLink.jsx';
 import { SubmissionReview } from '../../components/SubmissionReview.jsx';
-import { Expander } from '../../components/common.jsx';
-import { normalizeSubmission } from '../../components/wizardData.js';
+import { Expander, SaveStatus } from '../../components/common.jsx';
+import { normalizeSettings, normalizeSubmission, storage } from '../../components/wizardData.js';
 import { statusInfo } from './inviteStatus.js';
 
 const EVENT_LABELS = {
@@ -14,6 +14,51 @@ const EVENT_LABELS = {
     token_reset: 'New link made', archived: 'Archived', reopened: 'Reopened', downloaded: 'Zip downloaded',
 };
 const when = value => formatDate(value, 'datetime');
+const RETRY_MS = 5000;
+
+// The admin's settings for this client, kept with the invite on the server.
+// Settings that older builder versions kept in this browser are moved to the
+// server the first time the page opens.
+function useInviteSettings(inviteId) {
+    const [settings, setSettings] = useState(null);
+    const [loadError, setLoadError] = useState('');
+    const [attempt, setAttempt] = useState(0);
+    const [saveError, setSaveError] = useState('');
+
+    useEffect(() => {
+        let alive = true;
+        const legacyKey = `sf-builder-invite-${inviteId}`;
+        (async () => {
+            let saved = await adminGetSettings(inviteId);
+            const legacy = storage.get(legacyKey);
+            if (!saved && legacy) {
+                saved = normalizeSettings(legacy);
+                await adminSaveSettings(inviteId, saved);
+            }
+            if (legacy) storage.remove(legacyKey);
+            if (alive) { setSettings(normalizeSettings(saved)); setLoadError(''); }
+        })().catch(err => { if (alive) setLoadError(err.message); });
+        return () => { alive = false; };
+    }, [inviteId, attempt]);
+
+    const save = useCallback(async value => {
+        try {
+            await adminSaveSettings(inviteId, value);
+            setSaveError('');
+        } catch (err) {
+            setSaveError(err.message);
+            throw err;
+        }
+    }, [inviteId]);
+    const { status, flush } = useAutosave({ value: settings, save, enabled: settings !== null });
+    useEffect(() => {
+        if (status !== 'error') return undefined;
+        const timer = setTimeout(flush, RETRY_MS);
+        return () => clearTimeout(timer);
+    }, [status, flush]);
+
+    return { settings, setSettings, loadError, retry: () => setAttempt(n => n + 1), status, saveError };
+}
 
 // Versions the admin can review: each sent version, then the latest autosave.
 function versionsOf(data) {
@@ -34,6 +79,7 @@ export function AdminInvite({ inviteId }) {
     const [actionError, setActionError] = useState('');
     const [linkOpen, setLinkOpen] = useState(false);
     const [newLink, setNewLink] = useState('');
+    const settingsState = useInviteSettings(inviteId);
 
     const load = useCallback(() => adminGet(inviteId)
         .then(result => { setData(result); setError(''); })
@@ -102,12 +148,19 @@ export function AdminInvite({ inviteId }) {
                 </div>
             )}
 
-            {current ? (
-                <SubmissionReview
-                    submission={current.submission}
-                    storageKey={`sf-builder-invite-${inviteId}`}
-                    onDownloaded={markDownloaded}
-                />
+            {current && settingsState.loadError ? (
+                <ErrorBanner title="Could not load your settings for this client" onRetry={settingsState.retry}>{settingsState.loadError}</ErrorBanner>
+            ) : current && !settingsState.settings ? <LoadingState /> : current ? (
+                <>
+                    {settingsState.status === 'error' && <ErrorBanner>{`Your changes are not saved yet: ${settingsState.saveError}`}</ErrorBanner>}
+                    <SubmissionReview
+                        submission={current.submission}
+                        settings={settingsState.settings}
+                        onSettings={settingsState.setSettings}
+                        saveStatus={<SaveStatus status={settingsState.status} />}
+                        onDownloaded={markDownloaded}
+                    />
+                </>
             ) : (
                 <EmptyState title="Nothing filled in yet">
                     {contact.name || 'The client'} has not started the form. Send them the link again with “Copy client link”.

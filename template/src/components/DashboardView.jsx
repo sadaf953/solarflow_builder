@@ -10,6 +10,9 @@ import { PRIMARY_STAGES, STAGE_IDS, isOn } from '../config/index.js';
 import { formatCount, formatDate } from '../lib/format.js';
 import { LoadingState, StatTile } from '../ui/index.js';
 
+// Tailwind needs whole class names; keyed by how many Today tiles show.
+const TODAY_COLUMNS = { 2: 'xl:grid-cols-2', 3: 'xl:grid-cols-3', 4: 'xl:grid-cols-4' };
+
 const MetricBox = ({ label, value, sub, icon: Icon, color }) => {
     const colorMap = {
         neutral: 'bg-stone-100 text-stone-600',
@@ -90,6 +93,9 @@ export default function DashboardView({ metrics, failed = false, scoped = false,
     if (!metrics) return failed ? null : <LoadingState label="Loading project summary…" />;
 
     const showDeliveries = isOn('deliveryBatches');
+    // registeredToday is null when Registration is not in the pipeline.
+    const showRegistered = today?.registeredToday !== null && today?.registeredToday !== undefined;
+    const todayColumns = TODAY_COLUMNS[2 + Number(showDeliveries) + Number(showRegistered)];
 
     return (
         <div className="space-y-8 animate-in fade-in duration-700">
@@ -111,8 +117,10 @@ export default function DashboardView({ metrics, failed = false, scoped = false,
                     {today?.date && <p className="text-xs text-stone-500">{formatDate(today.date, 'long')}</p>}
                 </div>
                 {!today ? <LoadingState label="Loading today’s activity…" /> : (
-                    <div className={`mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 ${showDeliveries ? 'xl:grid-cols-4' : 'xl:grid-cols-3'}`}>
-                        <TodayMetric label="Registered today" value={today.registeredToday} sub="Projects with today’s registration date" icon={CalendarPlus} tone="orange" />
+                    <div className={`mt-5 grid grid-cols-1 sm:grid-cols-2 gap-3 ${todayColumns}`}>
+                        {showRegistered && (
+                            <TodayMetric label="Registered today" value={today.registeredToday} sub="Projects with today’s registration date" icon={CalendarPlus} tone="orange" />
+                        )}
                         <TodayMetric label="Installed today" value={today.installedToday} sub="Installations marked complete today" icon={BadgeCheck} tone="green" />
                         <TodayMetric label="Installed in live projects" value={today.installedLive} sub="Installed projects still moving through approvals" icon={ListChecks} tone="yellow" />
                         {showDeliveries && (

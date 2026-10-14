@@ -3,7 +3,7 @@ import { CalendarDays, ChevronLeft, ChevronRight, Clock, Pencil, Plus, Trash2, U
 import { supabase } from '../supabase';
 import { customerSource } from '../lib/db.js';
 import { MONTH_NAMES, formatDate, todayIST } from '../lib/format.js';
-import { ChoiceCards, EmptyState, ErrorBanner, Field, Input, LoadingState, Modal, SearchInput, Spinner, Textarea } from '../ui/index.js';
+import { ChoiceCards, EmptyState, ErrorBanner, Field, Input, LoadingState, Modal, SearchInput, Select, Spinner, Textarea } from '../ui/index.js';
 import { useGlobalPopup } from './GlobalPopup';
 
 const EVENT_KINDS = [
@@ -51,20 +51,25 @@ function dateRange(event) {
     return event.ends_on && event.ends_on !== event.starts_on ? `${start} – ${formatDate(event.ends_on, 'short')}` : start;
 }
 
+// customer_id is kept apart from the customer shown: a linked customer the
+// editor cannot see loads as customer null, and must stay linked on save.
 const blankForm = (date, isVendor) => ({
     id: null, title: '', kind: isVendor ? 'unavailable' : 'event', starts_on: date, ends_on: '',
-    start_time: '', end_time: '', notes: '', customer: null, vendor_name: null,
+    start_time: '', end_time: '', notes: '', customer: null, customer_id: null, vendor_name: null,
 });
 
 const formFromEvent = event => ({
     id: event.id, title: event.title || '', kind: event.kind || 'event', starts_on: event.starts_on,
     ends_on: event.ends_on && event.ends_on !== event.starts_on ? event.ends_on : '',
     start_time: (event.start_time || '').slice(0, 5), end_time: (event.end_time || '').slice(0, 5),
-    notes: event.notes || '', customer: event.customer?.id ? event.customer : null, vendor_name: event.vendor_name || null,
+    notes: event.notes || '', customer: event.customer?.id ? event.customer : null,
+    customer_id: event.customer_id || event.customer?.id || null, vendor_name: event.vendor_name || null,
 });
 
-function formProblem(form) {
+// Head office names the installer on a "Not available" entry; that name drives the delivery warning.
+function formProblem(form, needsInstaller) {
     if (!form.starts_on) return 'Pick a date.';
+    if (needsInstaller && form.kind === 'unavailable' && !form.vendor_name) return 'Pick the installer who is not available.';
     if (form.ends_on && form.ends_on < form.starts_on) return 'The end date must be on or after the start date.';
     if (form.end_time && !form.start_time) return 'Add a start time, or clear the end time.';
     if (form.start_time && form.end_time && !form.ends_on && form.end_time < form.start_time) return 'The end time must be after the start time.';
@@ -122,7 +127,7 @@ function EventCard({ event, canEdit, onEdit, onDelete }) {
     );
 }
 
-function CustomerPicker({ value, onChange, isCpo }) {
+function CustomerPicker({ value, linkedId, onChange, isCpo }) {
     const [term, setTerm] = useState('');
     const [results, setResults] = useState([]);
     const [searching, setSearching] = useState(false);
@@ -147,10 +152,10 @@ function CustomerPicker({ value, onChange, isCpo }) {
         return () => { cancelled = true; };
     }, [term, isCpo]);
 
-    if (value) {
+    if (value || linkedId) {
         return (
             <div className="flex min-h-11 items-center justify-between gap-2 rounded-xl border border-stone-200 bg-stone-50 pl-3.5">
-                <span className="truncate text-sm font-semibold text-stone-900">{value.customer_name || 'Customer'}</span>
+                <span className="truncate text-sm font-semibold text-stone-900">{value ? value.customer_name || 'Customer' : 'Linked customer (not visible to you)'}</span>
                 <button type="button" onClick={() => onChange(null)} aria-label="Remove linked customer"
                     className="flex h-11 w-11 shrink-0 items-center justify-center text-stone-500 hover:text-stone-900">
                     <X size={16} aria-hidden="true" />
@@ -180,7 +185,7 @@ function CustomerPicker({ value, onChange, isCpo }) {
     );
 }
 
-function EventForm({ form, setForm, isCpo, isVendor, vendorName, error, idPrefix }) {
+function EventForm({ form, setForm, isCpo, isVendor, vendorName, installers, error, idPrefix }) {
     const set = key => event => setForm(prev => ({ ...prev, [key]: event.target.value }));
     const id = name => `${idPrefix}-${name}`;
     return (
@@ -194,6 +199,13 @@ function EventForm({ form, setForm, isCpo, isVendor, vendorName, error, idPrefix
                 <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-800">
                     The office will see that <strong>{vendorName}</strong> cannot take deliveries or installations on these days.
                 </p>
+            )}
+            {installers && form.kind === 'unavailable' && (
+                <Field label="Installer" htmlFor={id('installer')} required
+                    hint="The office is warned when this installer is given a delivery or installation on these days.">
+                    <Select id={id('installer')} options={installers} placeholder="Select…" value={form.vendor_name || ''}
+                        onChange={event => setForm(prev => ({ ...prev, vendor_name: event.target.value || null }))} />
+                </Field>
             )}
             <Field label="Title" htmlFor={id('title')} required={!['unavailable', 'leave'].includes(form.kind)}
                 hint={['unavailable', 'leave'].includes(form.kind) ? `Leave blank to show "${kindOf(form.kind).label}".` : undefined}>
@@ -214,7 +226,8 @@ function EventForm({ form, setForm, isCpo, isVendor, vendorName, error, idPrefix
                 </Field>
             </div>
             <Field label="Customer (optional)">
-                <CustomerPicker value={form.customer} onChange={customer => setForm(prev => ({ ...prev, customer }))} isCpo={isCpo} />
+                <CustomerPicker value={form.customer} linkedId={form.customer_id} isCpo={isCpo}
+                    onChange={customer => setForm(prev => ({ ...prev, customer, customer_id: customer?.id || null }))} />
             </Field>
             <Field label="Notes (optional)" htmlFor={id('notes')}>
                 <Textarea id={id('notes')} value={form.notes} onChange={set('notes')} maxLength={1000} />
@@ -245,6 +258,18 @@ export default function CalendarView({ currentUser }) {
     const [form, setForm] = useState(null);
     const [formError, setFormError] = useState('');
     const [saving, setSaving] = useState(false);
+    const [installers, setInstallers] = useState([]);
+
+    // Head office picks the installer for a "Not available" entry from the vendors directory.
+    useEffect(() => {
+        if (!isHeadOffice) return;
+        let cancelled = false;
+        supabase.from('vendors').select('name').order('name').then(({ data, error }) => {
+            if (error) console.error('Could not load installers:', error);
+            if (!cancelled) setInstallers((data || []).map(vendor => vendor.name));
+        });
+        return () => { cancelled = true; };
+    }, [isHeadOffice]);
 
     // A vendor's calendar name is its vendors-directory name, which deliveries are assigned by.
     useEffect(() => {
@@ -312,7 +337,7 @@ export default function CalendarView({ currentUser }) {
     const openEvent = event => (canEdit(event) ? openEdit(event) : setDayOpen(event.starts_on > grid.start ? event.starts_on : grid.start));
 
     async function save() {
-        const problem = formProblem(form);
+        const problem = formProblem(form, isHeadOffice && installers.length > 0);
         if (problem) { setFormError(problem); return; }
         const title = form.title.trim() || (['unavailable', 'leave'].includes(form.kind) ? kindOf(form.kind).label : '');
         if (!title) { setFormError('Give the entry a title.'); return; }
@@ -320,7 +345,7 @@ export default function CalendarView({ currentUser }) {
             title, kind: form.kind, starts_on: form.starts_on,
             ends_on: form.ends_on && form.ends_on !== form.starts_on ? form.ends_on : null,
             start_time: form.start_time || null, end_time: form.start_time ? form.end_time || null : null,
-            notes: form.notes.trim() || null, customer_id: form.customer?.id || null,
+            notes: form.notes.trim() || null, customer_id: form.customer_id,
             vendor_name: form.kind === 'unavailable' ? form.vendor_name || (isVendor ? vendorName || null : null) : null,
             updated_at: new Date().toISOString(),
         };
@@ -451,7 +476,8 @@ export default function CalendarView({ currentUser }) {
                         </button>
                     </>
                 )}>
-                {form && <EventForm form={form} setForm={setForm} isCpo={isCpo} isVendor={isVendor} vendorName={vendorName} error={formError} idPrefix={idPrefix} />}
+                {form && <EventForm form={form} setForm={setForm} isCpo={isCpo} isVendor={isVendor} vendorName={vendorName}
+                    installers={isHeadOffice && installers.length ? installers : null} error={formError} idPrefix={idPrefix} />}
             </Modal>
         </div>
     );

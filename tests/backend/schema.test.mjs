@@ -398,7 +398,7 @@ test('staff_attendance: new statuses, and staff file only their own requests', a
 
 test('team chat: own messages only; admins may remove any', async () => {
     const msg = await as(db, people.dealer, tx => one(tx, "insert into public.team_chat_messages(sender_name, sender_role, user_type, text) values ('Head Office', 'Admin', 'admin', 'hello') returning *"));
-    assert.deepEqual([msg.sender_name, msg.sender_role, msg.user_type], ['DEALER 1', 'Channel Partner', 'agent2']);
+    assert.deepEqual([msg.sender_name, msg.sender_role, msg.user_type], ['DEALER 1', 'Dealer', 'agent2']);
     await assert.rejects(as(db, people.dealer, tx => tx.query("insert into public.team_chat_messages(sender_id, sender_name, text) values ($1, 'x', 'y')", [people.owner])), /row-level security/);
     assert.equal(await as(db, people.vendor, async tx => (await tx.query('delete from public.team_chat_messages where id = $1', [msg.id])).affectedRows), 0);
     assert.equal(await as(db, people.owner, async tx => (await tx.query('delete from public.team_chat_messages where id = $1', [msg.id])).affectedRows), 1);

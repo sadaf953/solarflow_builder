@@ -45,7 +45,10 @@ export function FeaturesStep({ answers, onAnswer, part, onPart, onBack, onNext }
                     );
                 })}
             </ol>
-            <p className="text-sm text-stone-600">{step.intro}</p>
+            <div className="space-y-1 text-sm text-stone-600">
+                <p>{step.intro}</p>
+                <p>Not sure about a question? Choose “Not sure”. It is a safe answer: we go through it with you before your app is built.</p>
+            </div>
             <div className="space-y-3">
                 {step.questions.filter(question => isVisible(question, answers)).map(question => (
                     <QuestionCard

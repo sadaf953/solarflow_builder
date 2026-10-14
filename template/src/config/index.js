@@ -27,13 +27,10 @@ export const isRoleEnabled = userType => !ROLE_FEATURE[userType] || isOn(ROLE_FE
 // 'both' shows the checklist/upload toggle; otherwise the one mode is forced.
 export const documentMode = () => (isOn('documentUploads') && isOn('checklists') ? 'both' : isOn('documentUploads') ? 'files' : 'checklist');
 
-// Payment types a customer can have. Registration needs one, so both are
-// offered when neither loan nor cash tracking is on.
-const PAYMENT_TYPES = [['Loan', 'loanTracking'], ['Cash', 'cashPayments']];
-export function paymentTypeOptions() {
-    const on = PAYMENT_TYPES.filter(([, feature]) => isOn(feature)).map(([label]) => label);
-    return on.length ? on : PAYMENT_TYPES.map(([label]) => label);
-}
+// Payment types a customer can have. Cash is always offered (without cash
+// tracking a cash customer simply skips the Loan stage). Loan is hidden only
+// for a cash-only business: cash tracked, loans not.
+export const paymentTypeOptions = () => (isOn('loanTracking') || !isOn('cashPayments') ? ['Loan', 'Cash'] : ['Cash']);
 
 // ── Pipeline ─────────────────────────────────────────────────────────────
 export const PRIMARY_STAGES = Object.freeze(resolved.stages.map(stage => Object.freeze({ ...stage, iconName: stage.icon, icon: stageIcon(stage.icon) })));

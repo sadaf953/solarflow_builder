@@ -11,10 +11,12 @@ import { ROLE_FEATURE } from '../src/config/catalog/features.js';
 import { METADATA_CATEGORIES } from '../src/config/catalog/dropdowns.js';
 
 // {{NAME}} placeholders in README.client.md, each with the value the zip
-// generator puts in its place.
+// generator puts in its place. *_SQL values sit inside a '...' SQL literal.
+const ownerEmail = config => String(resolveClientConfig(config).client.ownerEmail || '').trim() || 'your own email address';
 export const README_PLACEHOLDERS = Object.freeze({
     CLIENT_NAME: config => resolveClientConfig(config).client.name,
-    OWNER_EMAIL: config => String(resolveClientConfig(config).client.ownerEmail || '').trim() || 'your own email address',
+    OWNER_EMAIL: ownerEmail,
+    OWNER_EMAIL_SQL: config => clean(ownerEmail(config)).replaceAll("'", "''"),
 });
 
 const ALWAYS_ENABLED_ROLES = ['admin', 'sales'];

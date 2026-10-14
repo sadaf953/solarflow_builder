@@ -9,7 +9,8 @@
     "prebuild": "node scripts/check-env.mjs production",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "setup-sql": "node scripts/setup-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

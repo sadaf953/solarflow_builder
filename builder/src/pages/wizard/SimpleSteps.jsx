@@ -1,8 +1,9 @@
 import { useId, useState } from 'react';
-import { CheckCircle2, Clock, FileJson, ListChecks, Save, Workflow } from 'lucide-react';
-import { cleanPhone, formatDate } from '../../../../template/src/lib/format.js';
+import { CheckCircle2, Clock, FileJson, Info, ListChecks, Save, Workflow } from 'lucide-react';
+import { formatDate } from '../../../../template/src/lib/format.js';
 import { ErrorBanner, Field, Input, SectionCard, SuccessBanner, Textarea } from '../../../../template/src/ui/index.js';
 import { answersToFeatures } from '../../catalog/questions.js';
+import { normalizePhone, restoredStages } from '../../catalog/submission.js';
 import { featureLists, summaryLine } from '../../components/wizardData.js';
 import { StepNav } from '../../components/common.jsx';
 import { businessErrors } from './checks.js';
@@ -11,7 +12,7 @@ export function WelcomeStep({ company, started, onNext }) {
     const points = [
         [Clock, 'About 5 minutes', 'Short questions about how your business works. No technical words.'],
         [ListChecks, 'Features follow your answers', 'You will see what you get and why, before you send anything.'],
-        [Workflow, 'Your stages and lists', 'Then you choose your pipeline stages, dropdown lists and any extra fields, or share your sheet with us.'],
+        [Workflow, 'Your stages and lists', 'Then you choose your pipeline stages, dropdown lists and any extra fields, or share your sheet with us. Keep your Excel or Google Sheet handy for this part.'],
         [Save, 'Saved as you go', 'Everything saves by itself. Close the page any time and open the same link to carry on.'],
     ];
     return (
@@ -38,7 +39,7 @@ export function WelcomeStep({ company, started, onNext }) {
 const BUSINESS_FIELDS = [
     { key: 'company', label: 'Company name', autoComplete: 'organization', required: true },
     { key: 'name', label: 'Your name', autoComplete: 'name', required: true },
-    { key: 'phone', label: 'Mobile number', autoComplete: 'tel', type: 'tel', inputMode: 'numeric', required: true, placeholder: '10-digit mobile number' },
+    { key: 'phone', label: 'Mobile number', autoComplete: 'tel', type: 'tel', inputMode: 'tel', required: true, placeholder: '10-digit mobile number', maxLength: 20 },
     { key: 'email', label: 'Email', autoComplete: 'email', type: 'email', required: true, hint: 'This email becomes the first admin login of your SolarFlow app.' },
     { key: 'city', label: 'City', autoComplete: 'address-level2' },
     { key: 'state', label: 'State', autoComplete: 'address-level1', placeholder: 'For example Gujarat' },
@@ -65,9 +66,10 @@ export function BusinessStep({ contact, onChange, onBack, onNext }) {
                             <Field key={field.key} label={field.label} htmlFor={controlId} required={field.required} hint={field.hint} error={errors[field.key]}>
                                 <Input
                                     id={controlId} type={field.type || 'text'} inputMode={field.inputMode} autoComplete={field.autoComplete}
-                                    placeholder={field.placeholder} value={contact[field.key] || ''} maxLength={120}
+                                    placeholder={field.placeholder} value={contact[field.key] || ''} maxLength={field.maxLength || 120}
                                     aria-invalid={errors[field.key] ? true : undefined} aria-describedby={describedBy}
-                                    onChange={event => onChange(field.key, field.key === 'phone' ? cleanPhone(event.target.value) : event.target.value)}
+                                    onChange={event => onChange(field.key, field.key === 'phone' ? event.target.value.replace(/[^\d+\s()-]/g, '') : event.target.value)}
+                                    onBlur={field.key === 'phone' ? event => onChange('phone', normalizePhone(event.target.value)) : undefined}
                                 />
                             </Field>
                         );
@@ -79,10 +81,12 @@ export function BusinessStep({ contact, onChange, onBack, onNext }) {
     );
 }
 
-export function SendStep({ submission, problems, onGo, notes, onNotes, onBack, onSend, busy, error, resend, preview }) {
+// `blocked` is why the form cannot be sent right now ('' when it can).
+export function SendStep({ submission, problems, onGo, notes, onNotes, onBack, onSend, busy, error, blocked, resend, preview }) {
     const id = useId();
     const lists = featureLists(answersToFeatures(submission.answers, submission.featureOverrides));
     const sheet = submission.workflow?.source === 'sheet';
+    const restored = sheet ? [] : restoredStages(submission);
     return (
         <div className="space-y-6">
             <SectionCard>
@@ -90,6 +94,10 @@ export function SendStep({ submission, problems, onGo, notes, onNotes, onBack, o
                     <li className="flex gap-2"><CheckCircle2 size={18} className="shrink-0 text-emerald-600" aria-hidden="true" />{summaryLine(lists)}</li>
                     <li className="flex gap-2"><CheckCircle2 size={18} className="shrink-0 text-emerald-600" aria-hidden="true" />
                         {sheet ? 'You shared your sheet for your stages and fields.' : 'Your stages, lists and extra fields are set.'}</li>
+                    {restored.map(stage => (
+                        <li key={stage.id} className="flex gap-2"><Info size={18} className="shrink-0 text-blue-600" aria-hidden="true" />
+                            We added the {stage.label} stage back to your stages. {stage.reason}, which you chose.</li>
+                    ))}
                 </ul>
                 <Field label="Anything else we should know? (optional)" htmlFor={`${id}-notes`}>
                     <Textarea id={`${id}-notes`} rows={4} maxLength={2000} value={notes || ''} onChange={event => onNotes(event.target.value)}
@@ -108,9 +116,9 @@ export function SendStep({ submission, problems, onGo, notes, onNotes, onBack, o
                     </ul>
                 </ErrorBanner>
             )}
-            <ErrorBanner>{error}</ErrorBanner>
+            <ErrorBanner>{blocked || error}</ErrorBanner>
             {resend && <p className="text-sm text-stone-600">You sent this form before. Sending again saves a new version for us.</p>}
-            <StepNav onBack={onBack} onNext={onSend} busy={busy} nextDisabled={problems.length > 0}
+            <StepNav onBack={onBack} onNext={onSend} busy={busy} nextDisabled={problems.length > 0 || Boolean(blocked)}
                 nextLabel={preview ? 'Finish' : resend ? 'Send again' : 'Send to SolarFlow'} />
         </div>
     );

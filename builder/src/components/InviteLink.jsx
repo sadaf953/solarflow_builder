@@ -2,21 +2,7 @@ import { useId } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { Field, Textarea } from '../../../template/src/ui/index.js';
 import { CopyButton } from './common.jsx';
-
-const whatsappText = (name, link) => `Hi ${String(name || '').trim() || 'there'}, please fill your SolarFlow setup form (about 5 minutes): ${link}`;
-
-const emailText = (name, link) => [
-    `Hi ${String(name || '').trim() || 'there'},`,
-    '',
-    'Please fill in your SolarFlow setup form. It takes about 5 minutes and saves as you go, so you can stop and come back with the same link:',
-    '',
-    link,
-    '',
-    'Keep your Excel or Google Sheet open next to it for the last part, where you choose your stages and fields.',
-    '',
-    'Thank you,',
-    'The SolarFlow team',
-].join('\n');
+import { emailInviteText, whatsappInviteText } from './wizardData.js';
 
 const waNumber = phone => {
     const digits = String(phone || '').replace(/\D/g, '');
@@ -27,8 +13,8 @@ const waNumber = phone => {
 /** A fresh setup link with the WhatsApp and email messages ready to copy. */
 export function InviteLink({ link, contact = {} }) {
     const id = useId();
-    const whatsapp = whatsappText(contact.name, link);
-    const email = emailText(contact.name, link);
+    const whatsapp = whatsappInviteText(contact.name, link);
+    const email = emailInviteText(contact.name, link);
     const number = waNumber(contact.phone);
     return (
         <div className="space-y-4">

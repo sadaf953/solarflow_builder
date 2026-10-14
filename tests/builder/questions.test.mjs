@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ALL_QUESTIONS, answersToFeatures, visibleQuestions, describeAnswer, questionById } from '../../builder/src/catalog/questions.js';
+import { ALL_QUESTIONS, UNSURE_REASON, answersToFeatures, visibleQuestions, describeAnswer, questionById } from '../../builder/src/catalog/questions.js';
 import { FEATURE_REGISTRY } from '../../template/src/config/catalog/features.js';
 
 test('every question points at selectable features only', () => {
@@ -64,4 +64,16 @@ test('answers read back in plain words', () => {
     assert.equal(describeAnswer(questionById('payments'), 'both'), 'Loan and cash');
     assert.equal(describeAnswer(questionById('calendar'), 'unsure'), 'Not sure');
     assert.equal(describeAnswer(questionById('calendar'), undefined), 'Not answered');
+});
+
+test('"Not sure" on payments and documents keeps the usual setup, says why, and stays to discuss', () => {
+    const { features, reasons, discuss } = answersToFeatures({ payments: 'unsure', documents: 'unsure', calendar: 'unsure' });
+    assert.equal(features.loanTracking, true);
+    assert.equal(features.cashPayments, true);
+    assert.equal(features.checklists, true);
+    assert.equal(features.documentUploads, false);
+    assert.equal(features.calendar, false, 'other questions still switch nothing on');
+    for (const id of ['loanTracking', 'cashPayments', 'checklists']) assert.equal(reasons[id], UNSURE_REASON);
+    assert.match(UNSURE_REASON, /Not sure/);
+    assert.deepEqual(discuss.sort(), ['calendar', 'documents', 'payments']);
 });

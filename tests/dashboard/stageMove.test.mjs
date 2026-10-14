@@ -176,12 +176,13 @@ test('required extra fields, custom stages and renamed stages follow the client 
     assert.deepEqual(missingFrom(survey.stageMoveProblem({ ...LEAD, custom_fields: { referral_code: '  ' } }, 'REGISTRATION')), ['Referral code']);
     assert.equal(survey.stageMoveProblem({ ...LEAD, custom_fields: { referral_code: 'RF-12' } }, 'SITE SURVEY'), null);
 
-    // Yes/No fields must be Yes; a file can never be required; optional fields are not asked for.
-    const atSurvey = { ...LEAD, stage: 'SITE SURVEY', custom_fields: { referral_code: 'RF-12', survey_done: 'No' } };
+    // Yes/No fields must be answered (No counts); a file can never be required; optional fields are not asked for.
+    const atSurvey = { ...LEAD, stage: 'SITE SURVEY', custom_fields: { referral_code: 'RF-12' } };
     assert.deepEqual(survey.stageMoveProblem(atSurvey, 'REGISTRATION'), {
         title: 'Site Survey details incomplete',
         message: 'This customer is not ready to move to Registration. Please complete:\n\n• Survey done\n\nOpen the customer to fill these in.',
     });
+    assert.equal(survey.stageMoveProblem({ ...atSurvey, custom_fields: { survey_done: 'No' } }, 'REGISTRATION'), null);
     assert.equal(survey.stageMoveProblem({ ...atSurvey, custom_fields: { survey_done: 'Yes' } }, 'REGISTRATION'), null);
 
     assert.equal(survey.stageMoveProblem({ stage: 'REGISTRATION' }, 'SITE SURVEY'), null);

@@ -20,7 +20,8 @@ import Sidebar from '../app/Sidebar';
 import GlobalSearch from '../app/GlobalSearch';
 import PartnerFilter from '../app/PartnerFilter';
 import { DASHBOARD_ROLES, VIEWS, canOpenView, restoreStage, restoreView, saveStage, saveView, viewFor } from '../app/views.js';
-import { fetchDealerNames, fetchMetadataLists, fetchSolarEquipmentStats, fetchTodaySummary, scopeCustomers, stageDateFilters } from '../dashboard/queries.js';
+import { addNewListLabels, fetchDealerNames, fetchMetadataLists, fetchSolarEquipmentStats, fetchTodaySummary, scopeCustomers, stageDateFilters } from '../dashboard/queries.js';
+import { removeCustomerFiles } from '../dashboard/customerFiles.js';
 import { stageMoveProblem } from '../dashboard/stageMove.js';
 
 const CustomerDetailModal = lazyWithRetry(() => import('./CustomerDetailModal'));
@@ -56,6 +57,7 @@ export default function Dashboard({ user, onLogout, onChangePassword }) {
     const { showAlert } = useGlobalPopup();
     const isChannelPartnerOffice = user?.userType === 'channel_partner_office' || user?.userType === 'office2';
     const isCpo = isChannelPartnerOffice;
+    const isAdmin = user?.userType === 'admin';
     const source = customerSource(isCpo);
     const partnerName = (user?.channel_partner || user?.name || '').trim();
     const canViewDeliveries = canOpenView('delivery_batches', user);
@@ -295,12 +297,13 @@ export default function Dashboard({ user, onLogout, onChangePassword }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [customers]);
 
+    // Admins also get lists for stages no longer in the pipeline, so they can move those customers on.
     const handleGlobalSelect = useCallback(customer => {
-        setSelectedStage(isStageEnabled(customer.stage) ? customer.stage : STAGE_IDS.LEADS);
+        setSelectedStage(isStageEnabled(customer.stage) || (isAdmin && customer.stage) ? customer.stage : STAGE_IDS.LEADS);
         setCurrentView('stages');
         setStageSearch('');
         setSelectedCustomer(customer);
-    }, []);
+    }, [isAdmin]);
 
     // ── Writes ────────────────────────────────────────────────────────────────
     const applyLocal = (id, patch) => {
@@ -309,19 +312,7 @@ export default function Dashboard({ user, onLogout, onChangePassword }) {
     };
 
     // New channel partner and module brand names join their dropdown lists.
-    const syncMetadata = async data => {
-        let added = false;
-        for (const category of ['channel_partner', 'module_brand']) {
-            const label = String(data[category] || '').trim();
-            if (!label) continue;
-            const { data: rows, error } = await supabase.from('metadata').select('label').eq('category', category);
-            if (error || (rows || []).some(row => sameText(row.label, label))) continue;
-            const { error: insertError } = await supabase.from('metadata').insert({ category, label });
-            if (insertError) console.warn(`Could not add "${label}" to the ${category} list:`, insertError.message);
-            else added = true;
-        }
-        if (added) loadMeta();
-    };
+    const syncMetadata = async data => { if (await addNewListLabels(data, user?.userType)) loadMeta(); };
 
     const reportFailedUpdate = async (id, error) => {
         if (!error) {
@@ -415,12 +406,24 @@ export default function Dashboard({ user, onLogout, onChangePassword }) {
         return true;
     };
 
-    // Permanent delete (admin only; the database refuses anyone else).
+    // Permanent delete (admin only; the database refuses anyone else). The
+    // uploaded files go first: once the row is gone the app cannot reach them.
     const handleHardDelete = async (id, name) => {
+        if (!isAdmin) {
+            showAlert('Only an administrator can permanently delete a customer.', { type: 'error' });
+            return false;
+        }
+        const files = await removeCustomerFiles(id);
         const res = await runWrite(supabase.from('admin').delete().eq('id', id).select('id'), { action: 'permanent deletion' });
         if (!res.ok) {
-            showAlert(`The customer was not permanently deleted: ${res.error.message}`, { type: 'error' });
+            const filesNote = files.removed ? ` ${files.removed} of their uploaded files had already been removed.` : '';
+            showAlert(`The customer was not permanently deleted: ${res.error.message}${filesNote}`, { type: 'error' });
             return false;
+        }
+        if (files.failed) {
+            showAlert(files.failed < 0
+                ? 'The customer was deleted, but their uploaded files could not be checked, so some may still be in file storage.'
+                : `The customer was deleted, but ${files.failed} of their uploaded files could not be removed from file storage.`, { type: 'warning' });
         }
         setTrashCount(count => Math.max(0, count - 1));
         setCustomers(prev => prev.filter(c => c.id !== id));
@@ -627,6 +630,11 @@ export default function Dashboard({ user, onLogout, onChangePassword }) {
 
                     {currentView === 'stages' && (
                         <>
+                            {!isStageEnabled(selectedStage) && (
+                                <section aria-label="Stage not in use" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 leading-relaxed">
+                                    This stage is no longer in your pipeline. Use “Change stage” on each customer card to move them to a current stage.
+                                </section>
+                            )}
                             {STAGE_GUIDANCE[selectedStage] && (
                                 <section aria-label="Stage guidance" className="mb-4 rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm text-stone-600 leading-relaxed">
                                     <p>{STAGE_GUIDANCE[selectedStage]}</p>

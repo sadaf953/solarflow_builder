@@ -96,7 +96,7 @@ test('required extra fields become stage requirements', () => {
     ];
     const resolved = resolveClientConfig(base);
     const survey = resolved.stages.find(stage => stage.id === 'SITE SURVEY');
-    assert.deepEqual(survey.requirements, [['custom_fields.survey_date', 'Survey date', 'present'], ['custom_fields.roof_ok', 'Roof OK', 'yes']]);
+    assert.deepEqual(survey.requirements, [['custom_fields.survey_date', 'Survey date', 'present'], ['custom_fields.roof_ok', 'Roof OK', 'present']]);
     assert.deepEqual(resolved.customFields.map(field => field.key), ['survey_date', 'roof_ok', 'lead_source']);
     assert.deepEqual(resolved.customFields[2].options, ['Referral', 'Walk-in']);
     const { errors, warnings } = validateClientConfig(base);

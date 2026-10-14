@@ -35,14 +35,15 @@ export const LOAN_TAG_COLORS = {
 };
 
 
+// Same wording as the setup wizard; user_type ids are stored data and never change.
 export const APP_ROLES = [
     { id: 'admin', label: 'Admin', user_type: 'admin', role: 'Admin' },
-    { id: 'office', label: 'Office', user_type: 'sales', role: 'Office' },
-    { id: 'channel_partner_office', label: 'Channel Partner Office', user_type: 'channel_partner_office', role: 'Channel Partner Office' },
-    { id: 'office2', label: 'Manager', user_type: 'office2', role: 'Channel Partner Manager' },
-    { id: 'agent2', label: 'Dealer', user_type: 'agent2', role: 'Channel Partner' },
-    { id: 'channel_partner', label: 'Channel Partners', user_type: 'agent', role: 'Channel Partners' },
-    { id: 'vendor', label: 'Vendors', user_type: 'vendor', role: 'Vendors' },
+    { id: 'office', label: 'Office staff', user_type: 'sales', role: 'Office staff' },
+    { id: 'channel_partner_office', label: 'Partner office', user_type: 'channel_partner_office', role: 'Partner office' },
+    { id: 'office2', label: 'Partner office manager', user_type: 'office2', role: 'Partner office manager' },
+    { id: 'agent2', label: 'Dealer', user_type: 'agent2', role: 'Dealer' },
+    { id: 'channel_partner', label: 'Partner / agent', user_type: 'agent', role: 'Partner / agent' },
+    { id: 'vendor', label: 'Installer', user_type: 'vendor', role: 'Installer' },
 ];
 
 // Login types switched on for this client (see config/catalog/features.js).
@@ -168,7 +169,7 @@ export const ACTION_COLORS = {
     login:        { bg: 'bg-stone-50',   text: 'text-stone-700',   border: 'border-stone-200',   dot: 'bg-stone-500',   label: 'Logged In' },
     attendance:   { bg: 'bg-teal-50',    text: 'text-teal-700',    border: 'border-teal-200',    dot: 'bg-teal-500',    label: 'Attendance' },
     operations:   { bg: 'bg-cyan-50',    text: 'text-cyan-700',    border: 'border-cyan-200',    dot: 'bg-cyan-500',    label: 'Operations' },
-    vendor:       { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  dot: 'bg-orange-500',  label: 'Vendor' },
+    vendor:       { bg: 'bg-orange-50',  text: 'text-orange-700',  border: 'border-orange-200',  dot: 'bg-orange-500',  label: 'Installer' },
     payment:      { bg: 'bg-emerald-50', text: 'text-emerald-800', border: 'border-emerald-300', dot: 'bg-emerald-600', label: 'Payment' },
     dispatch:     { bg: 'bg-amber-50',   text: 'text-amber-800',   border: 'border-amber-300',   dot: 'bg-amber-600',   label: 'Dispatch' },
     stage_change: { bg: 'bg-violet-50',  text: 'text-violet-700',  border: 'border-violet-200',  dot: 'bg-violet-500',  label: 'Stage' },

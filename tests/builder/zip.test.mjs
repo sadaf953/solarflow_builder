@@ -10,7 +10,8 @@ import { PGlite } from '@electric-sql/pglite';
 import { SUPABASE_STUB } from '../backend/supabaseStub.mjs';
 import { makeClient } from '../../scripts/make-client.mjs';
 import { collectTemplateFiles } from '../../scripts/pack-template.mjs';
-import { createClientZip, createSetupSql, buildClientFiles, makeZip, parseSubmissionJson } from '../../builder/src/zip/build.js';
+import { buildOptions, createClientZip, createSetupSql, buildClientFiles, makeZip, parseSubmissionJson } from '../../builder/src/zip/build.js';
+import { normalizeSettings } from '../../builder/src/components/wizardData.js';
 import { submissionToClientConfig } from '../../builder/src/catalog/submission.js';
 import { validateClientConfig, defaultClientConfig } from '../../template/src/config/resolve.js';
 
@@ -172,7 +173,64 @@ test('buildClientFiles and makeZip work on their own', () => {
     const entries = unzipSync(makeZip({ templateFiles, files, rootFolder: 'acme-solarflow' }));
     assert.deepEqual(Object.keys(entries).sort(), [
         'acme-solarflow/.env.example', 'acme-solarflow/README.md', 'acme-solarflow/SETUP-SUMMARY.md',
-        'acme-solarflow/backend/setup.sql', 'acme-solarflow/package.json', 'acme-solarflow/src/config/client.config.js',
+        'acme-solarflow/backend/README.md', 'acme-solarflow/backend/setup.sql', 'acme-solarflow/package.json', 'acme-solarflow/src/config/client.config.js',
     ]);
     assert.throws(() => buildClientFiles({ templateFiles: { ...templateFiles, 'README.client.md': '{{NEW_THING}}' }, config, schemaSql: '' }), /NEW_THING/);
+});
+
+test('make-client uses every admin setting in the export, giving the same zip as the admin page', () => {
+    const settings = normalizeSettings({
+        adminOverrides: { attendance: true }, slug: 'surya-admin', ownerEmail: 'boss@surya.example',
+        branding: { discomName: 'DGVCL', address: 'Plot 4, GIDC, Surat' },
+        workflow: {
+            source: 'form', stagesMode: 'custom',
+            stages: [{ id: 'LEADS', label: 'Enquiries' }, { id: 'ROOF CHECK', label: 'Roof check', custom: true, group: 'enquiry' }, { id: 'COMPLETED' }, { id: 'LOST PROJECT' }],
+            dropdowns: { module_brand: ['Adani'] }, customFields: [{ key: 'roof_type', label: 'Roof type', type: 'text', stage: 'ROOF CHECK' }],
+        },
+    });
+    const templateFiles = JSON.parse(JSON.stringify(collectTemplateFiles()));
+    const schemaSql = readFileSync(join(repoRoot, 'template/backend/schema.sql'), 'utf8');
+    const built = [settings, { ...settings, workflow: null, slug: '' }].map(saved => {
+        // "Download answers (JSON)" on the admin page writes {submission, ...settings}.
+        const dir = tmp();
+        const exportPath = join(dir, 'export.json');
+        writeFileSync(exportPath, JSON.stringify({ submission: fixture, ...saved }));
+        const cliZip = makeClient({ submissionPath: exportPath, outDir: dir, generatedAt: GENERATED_AT });
+        const web = createClientZip({ templateFiles, schemaSql, submission: fixture, ...buildOptions(saved), generatedAt: GENERATED_AT });
+        assert.ok(Buffer.from(cliZip.bytes).equals(Buffer.from(web.bytes)), 'the CLI and the website build the same zip');
+        assert.equal(cliZip.config.client.ownerEmail, 'boss@surya.example');
+        assert.equal(cliZip.config.features.attendance, true);
+        assert.equal(cliZip.config.branding.discomName, 'DGVCL');
+        return cliZip;
+    });
+    const [withWorkflow, withoutWorkflow] = built;
+    assert.equal(withWorkflow.fileName, 'surya-admin-solarflow.zip');
+    assert.equal(withoutWorkflow.fileName, `${SLUG}-solarflow.zip`);
+    assert.ok(!withoutWorkflow.config.pipeline.stages.some(stage => stage.id === 'ROOF CHECK'));
+    assert.equal(withWorkflow.config.pipeline.stages[0].label, 'Enquiries');
+    assert.ok(withWorkflow.config.pipeline.stages.some(stage => stage.id === 'ROOF CHECK'));
+    assert.deepEqual(withWorkflow.config.dropdowns.module_brand, ['Adani']);
+    assert.equal(withWorkflow.config.customFields[0].key, 'roof_type');
+});
+
+test('the zip lock file carries the client slug, like package.json', () => {
+    const { bytes } = makeClient({ submissionPath: fixturePath, outDir: tmp(), generatedAt: GENERATED_AT });
+    const entries = unzipSync(bytes);
+    const lock = JSON.parse(strFromU8(entries[`${ROOT}package-lock.json`]));
+    const original = JSON.parse(readFileSync(join(repoRoot, 'template/package-lock.json'), 'utf8'));
+    assert.equal(lock.name, SLUG);
+    assert.equal(lock.packages[''].name, SLUG);
+    assert.equal(JSON.parse(strFromU8(entries[`${ROOT}package.json`])).name, SLUG);
+    assert.deepEqual({ ...lock, name: original.name, packages: { ...lock.packages, '': { ...lock.packages[''], name: original.name } } }, original,
+        'nothing else in the lock file changes');
+    assert.deepEqual(Object.keys(lock), Object.keys(original), 'keys keep their order');
+});
+
+test('the zip says which backend file to run', () => {
+    const { bytes } = makeClient({ submissionPath: fixturePath, outDir: tmp(), generatedAt: GENERATED_AT });
+    const entries = unzipSync(bytes);
+    for (const path of ['backend/schema.sql', 'backend/seed.js', 'backend/setup.sql']) assert.ok(entries[ROOT + path], `${path} ships for npm run setup-sql`);
+    const note = strFromU8(entries[`${ROOT}backend/README.md`]);
+    assert.match(note, /Run \*\*`setup\.sql`\*\*/);
+    assert.match(note, /Do not run `schema\.sql` on its own/);
 });

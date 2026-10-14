@@ -4,7 +4,7 @@ import { CUSTOM_FIELD_TYPES } from '../../../template/src/config/catalog/dropdow
 import { keyFromLabel, LIMITS } from '../../../template/src/config/resolve.js';
 import { Field, FieldRenderer, Input, Select, Toggle } from '../../../template/src/ui/index.js';
 import { ChipListEditor } from './ListEditors.jsx';
-import { stageName } from './wizardData.js';
+import { fieldStages, stageName } from './wizardData.js';
 
 const TYPE_OPTIONS = Object.entries(CUSTOM_FIELD_TYPES).map(([value, label]) => ({ value, label }));
 
@@ -21,8 +21,8 @@ function FieldRow({ field, fields, stages, onChange, onRemove }) {
     const id = useId();
     const [preview, setPreview] = useState(null);
     const set = patch => onChange({ ...field, ...patch });
-    const stageKnown = stages.some(stage => stage.id === field.stage);
-    const stageOptions = stages.filter(stage => stage.id !== 'LOST PROJECT').map(stage => ({ value: stage.id, label: stageName(stage) }));
+    const stageOptions = fieldStages(stages).map(stage => ({ value: stage.id, label: stageName(stage) }));
+    const stageKnown = stageOptions.some(option => option.value === field.stage);
     const setLabel = label => set(label.trim() ? { label, key: uniqueKey(label, fields, field) } : { label });
     const setType = type => {
         setPreview(null);
@@ -39,7 +39,7 @@ function FieldRow({ field, fields, stages, onChange, onRemove }) {
                     <Field label="Type" htmlFor={`${id}-type`}>
                         <Select id={`${id}-type`} value={field.type} options={TYPE_OPTIONS} onChange={event => setType(event.target.value)} />
                     </Field>
-                    <Field label="Stage where it is filled" htmlFor={`${id}-stage`} error={stageKnown ? '' : 'That stage was removed. Pick another one.'}>
+                    <Field label="Stage where it is filled" htmlFor={`${id}-stage`} error={stageKnown ? '' : 'Pick the stage where this is filled.'}>
                         <Select id={`${id}-stage`} value={stageKnown ? field.stage : ''} placeholder={stageKnown ? undefined : 'Pick a stage'}
                             options={stageOptions} onChange={event => setStage(event.target.value)} />
                     </Field>

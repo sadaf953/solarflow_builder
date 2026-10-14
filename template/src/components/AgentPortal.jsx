@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { supabase } from '../supabase';
 import {
-    Phone, MapPin, Zap, Home, ChevronRight, Users, Folder, Plus, X, Save, CheckCircle2,
+    Phone, MapPin, Zap, Home, ChevronLeft, ChevronRight, Users, Folder, Plus, X, Save, CheckCircle2,
     Paperclip, Eye, Download, FileText, FolderOpen, Layers, Printer, ClipboardCheck, Banknote,
-    Package, Gauge, AlertTriangle,
+    Package, Gauge, AlertTriangle, CalendarDays,
 } from 'lucide-react';
 import {
     logActivity, formatInputValue, parseIndianNumber, uploadDocument, getCustomerDocuments, getDownloadUrl,
@@ -27,7 +27,10 @@ import { FilePreviewModal, CheckboxRemarkItem } from './modal-tabs/shared';
 import { useGlobalPopup } from './GlobalPopup';
 import BrandMark from './BrandMark';
 import AgentStageDetails, { StageCustomFields } from './AgentStageDetails';
-import { MobilePortalShell, PortalHeader, PortalHero } from './portal';
+import {
+    MobilePortalShell, PortalCalendar, PortalCustomFields, PortalHeader, PortalHero,
+    customFieldChanges, saveCustomFieldChanges, withCustomFieldChanges,
+} from './portal';
 
 // Switched-off features are never downloaded.
 const QuotationModule = isOn('quotationMaker') ? lazyWithRetry(() => import('../quotations/QuotationModule')) : null;
@@ -38,8 +41,9 @@ const AgreementPreview = lazyWithRetry(() => import('./agreement/AgreementPrevie
 const documentUploadsOn = isOn('documentUploads');
 const documentChecksOn = documentUploadsOn || isOn('checklists');
 
-// The stages a partner or dealer fills in from the portal. Every other stage,
-// custom stages included, is read-only here.
+// The stages a partner or dealer fills in from the portal, with the client's
+// extra fields for them. Every other stage, custom stages included, is
+// read-only here.
 const EDITOR_FIELDS = {
     [STAGE_IDS.MATERIAL_ORDER]: ['roof_shed', 'dc_cable', 'ac_cable', 'structure_front_leg_height', 'structure_rear_leg_height', 'invoice_value', 'material_order_notes'],
     [STAGE_IDS.METER_INSTALLATION]: ['meter_installation', 'installation_date', 'meter_installation_photo'],
@@ -231,28 +235,44 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
         return () => { active = false; };
     }, [selectedCust?.id, selectedCust?.roof_shed, displayedStage]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Extra fields this user edited since opening the customer (see customFieldChanges).
+    const touchedCustom = useRef(new Set());
     const openCustomer = (customer) => {
+        touchedCustom.current = new Set();
         setSelectedCust(customer);
         setEditData({ ...customer });
         setActiveCustomerStage(isStageEnabled(customer.stage) && customer.stage !== STAGE_IDS.COMPLETED ? customer.stage : STAGE_IDS.LEADS);
     };
     const closeCustomer = () => {
+        touchedCustom.current = new Set();
         setSelectedCust(null);
         setEditData({});
         setActiveCustomerStage(null);
     };
 
     const handleChange = (field, value) => setEditData(prev => ({ ...prev, [field]: value }));
+    const handleCustomFieldChange = (key, value) => {
+        touchedCustom.current.add(key);
+        setEditData(prev => ({ ...prev, custom_fields: { ...(prev.custom_fields || {}), [key]: value } }));
+    };
 
-    const handleUpdateCustomer = async (id, updates) => {
+    // Extra-field values (`customChanges`) are merged on the server.
+    const handleUpdateCustomer = async (id, updates, customChanges = {}) => {
         setSaving(true);
         const clean = normalizeAdminValues(sanitizeAdminUpdate(updates));
+        const applyLocal = patch => {
+            setSelectedCust(prev => (prev?.id === id ? { ...prev, ...patch } : prev));
+            setEditData(prev => ({ ...prev, ...patch }));
+            setCustomers(prev => prev.map(customer => (customer.id === id ? { ...customer, ...patch } : customer)));
+        };
         try {
             const { ok, error } = await updateAdminRecord(id, clean);
             if (!ok) throw error || new Error('The change was not saved.');
-            setSelectedCust(prev => (prev?.id === id ? { ...prev, ...clean } : prev));
-            setEditData(prev => ({ ...prev, ...clean }));
-            setCustomers(prev => prev.map(customer => (customer.id === id ? { ...customer, ...clean } : customer)));
+            applyLocal(clean);
+            if (Object.keys(customChanges).length) {
+                applyLocal({ custom_fields: await saveCustomFieldChanges(id, customChanges) });
+                touchedCustom.current = new Set();
+            }
             return true;
         } catch (err) {
             console.error('Update failed:', err);
@@ -405,7 +425,10 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
 
     // ── Stage editors ────────────────────────────────────────────────────
     const fieldValue = field => editData[field] ?? selectedCust?.[field] ?? '';
-    const isEditorDirty = stage => Boolean(selectedCust && EDITOR_FIELDS[stage]?.some(field => String(fieldValue(field)) !== String(selectedCust[field] ?? '')));
+    const customChangesFor = stage => customFieldChanges(stage, editData.custom_fields, selectedCust?.custom_fields, touchedCustom.current);
+    const isEditorDirty = stage => Boolean(selectedCust && EDITOR_FIELDS[stage]
+        && (EDITOR_FIELDS[stage].some(field => String(fieldValue(field)) !== String(selectedCust[field] ?? ''))
+            || Object.keys(customChangesFor(stage)).length > 0));
     const meterPhotoUploaded = custDocs.some(doc => METER_PHOTO_TYPES.includes(doc.doc_type));
 
     const editorUpdates = (stage) => {
@@ -435,10 +458,11 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
     const saveEditor = async (stage, advance = false) => {
         if (!selectedCust || !EDITOR_FIELDS[stage]) return false;
         const updates = editorUpdates(stage);
+        const customChanges = customChangesFor(stage);
         const fromStage = selectedCust.stage;
         let nextStage = null;
         if (advance) {
-            const record = { ...selectedCust, ...updates };
+            const record = { ...selectedCust, ...updates, custom_fields: withCustomFieldChanges(selectedCust.custom_fields, customChanges) };
             nextStage = getNextStageId(record);
             if (!nextStage) return false;
             const issues = stageIssues(fromStage, record);
@@ -447,7 +471,7 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
                 return false;
             }
         }
-        if (!(await handleUpdateCustomer(selectedCust.id, updates))) return false;
+        if (!(await handleUpdateCustomer(selectedCust.id, updates, customChanges))) return false;
         if (!nextStage) return true;
 
         setSaving(true);
@@ -536,21 +560,26 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
     const leadRecord = { ...stageData, sub_channel_partner: stageData.sub_channel_partner || (isAgent2 ? user?.name : '') };
     const leadOmit = isAgent2 ? ['channel_partner'] : [];
 
-    const editorButtons = (stage) => {
+    // The end of a stage editor: the client's extra fields for the stage, then Save (and move).
+    const editorFooter = (stage) => {
         const dirty = isEditorDirty(stage);
         return (
-            <div className={`grid gap-2 border-t border-stone-200 pt-3 ${editingCurrentStage && nextStageId ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                <button type="button" onClick={() => saveEditor(stage, false)} disabled={saving || !dirty}
-                    className={dirty ? 'sf-btn-secondary min-h-11' : 'sf-btn-success min-h-11 disabled:opacity-100'}>
-                    {dirty ? <Save size={14} aria-hidden="true" /> : <CheckCircle2 size={14} aria-hidden="true" />}
-                    {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
-                </button>
-                {editingCurrentStage && nextStageId && (
-                    <button type="button" onClick={() => saveEditor(stage, true)} disabled={saving} className="sf-btn-primary min-h-11">
-                        <ChevronRight size={14} aria-hidden="true" /> {saving ? 'Saving…' : `Save & move to ${stageLabel(nextStageId)}`}
+            <>
+                <StageCustomFields stage={stage} customer={stageData} title="Files" types={['file']} />
+                <PortalCustomFields stage={stage} values={editData.custom_fields} onChange={handleCustomFieldChange} />
+                <div className={`grid gap-2 border-t border-stone-200 pt-3 ${editingCurrentStage && nextStageId ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                    <button type="button" onClick={() => saveEditor(stage, false)} disabled={saving || !dirty}
+                        className={dirty ? 'sf-btn-secondary min-h-11' : 'sf-btn-success min-h-11 disabled:opacity-100'}>
+                        {dirty ? <Save size={14} aria-hidden="true" /> : <CheckCircle2 size={14} aria-hidden="true" />}
+                        {saving ? 'Saving…' : dirty ? 'Save' : 'Saved'}
                     </button>
-                )}
-            </div>
+                    {editingCurrentStage && nextStageId && (
+                        <button type="button" onClick={() => saveEditor(stage, true)} disabled={saving} className="sf-btn-primary min-h-11">
+                            <ChevronRight size={14} aria-hidden="true" /> {saving ? 'Saving…' : `Save & move to ${stageLabel(nextStageId)}`}
+                        </button>
+                    )}
+                </div>
+            </>
         );
     };
 
@@ -582,6 +611,15 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
                     </PortalHero>
 
                     <ErrorBanner title="Customers not loaded" onRetry={fetchCustomers}>{loadError}</ErrorBanner>
+
+                    {PortalCalendar && (
+                        <button type="button" onClick={() => setView('calendar')}
+                            className="flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white p-5 text-left shadow-sm hover:border-stone-300">
+                            <CalendarDays size={24} className="text-amber-600" aria-hidden="true" />
+                            <span className="flex-1"><strong className="block text-base text-stone-900">Calendar</strong><span className="text-xs text-stone-500">Site visits, follow-ups and days off, shared with the office</span></span>
+                            <ChevronRight size={18} className="text-stone-400" aria-hidden="true" />
+                        </button>
+                    )}
 
                     {QuotationModule && (
                         <button type="button" onClick={() => { window.location.hash = '/quotations'; setView('quotations'); }}
@@ -745,6 +783,18 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
                 </div>
             )}
 
+            {view === 'calendar' && PortalCalendar && (
+                <MobilePortalShell label={portalLabel} user={user} onLogout={onLogout} onChangePassword={onChangePassword}
+                    onBeforeLeave={() => confirmLeaveStage('Save & log out')} mainClassName="max-w-4xl">
+                    <button type="button" onClick={() => setView('menu')} className="flex min-h-11 items-center gap-1 text-xs font-bold text-stone-600 hover:text-stone-900">
+                        <ChevronLeft size={18} aria-hidden="true" /> Back to home
+                    </button>
+                    <LazyBoundary fallback={<LoadingState label="Opening calendar…" />}>
+                        <PortalCalendar currentUser={user} />
+                    </LazyBoundary>
+                </MobilePortalShell>
+            )}
+
             {view === 'quotations' && QuotationModule && (
                 <LazyBoundary fallback={<LoadingState label="Opening quotations…" />}>
                     <QuotationModule embedded user={user} meta={meta} onCreateLead={handleSubmitLead}
@@ -883,9 +933,8 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
                                                 <Textarea id="mo-notes" rows={4} value={fieldValue('material_order_notes')} onChange={event => handleChange('material_order_notes', event.target.value)} />
                                             </Field>
                                         </div>
-                                        {editorButtons(STAGE_IDS.MATERIAL_ORDER)}
+                                        {editorFooter(STAGE_IDS.MATERIAL_ORDER)}
                                     </Card>
-                                    <StageCustomFields stage={STAGE_IDS.MATERIAL_ORDER} customer={stageData} />
                                     <AgentStageDetails stage={STAGE_IDS.LEADS} customer={leadRecord} title="Customer and site" omit={leadOmit} />
                                 </>
                             )}
@@ -951,9 +1000,8 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
                                                 {docItem('Meter installation photo', 'meter_installation_photo')}
                                             </div>
                                         )}
-                                        {editorButtons(STAGE_IDS.METER_INSTALLATION)}
+                                        {editorFooter(STAGE_IDS.METER_INSTALLATION)}
                                     </Card>
-                                    <StageCustomFields stage={STAGE_IDS.METER_INSTALLATION} customer={stageData} />
                                 </>
                             )}
 
@@ -964,9 +1012,8 @@ export default function AgentPortal({ user, onLogout, onChangePassword }) {
                                             <TagPicker label="Inspection passed" options={YES_NO} columns={2} value={fieldValue('discom_inspection')}
                                                 onChange={value => handleChange('discom_inspection', value)} />
                                         </Field>
-                                        {editorButtons(STAGE_IDS.DISCOM_INSPECTION)}
+                                        {editorFooter(STAGE_IDS.DISCOM_INSPECTION)}
                                     </Card>
-                                    <StageCustomFields stage={STAGE_IDS.DISCOM_INSPECTION} customer={stageData} />
                                 </>
                             )}
 

@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshCw } from 'lucide-react';
-import { supabase } from '../supabase';
 import { STAGE_IDS, getCustomerCardColumns } from '../constants';
 import { stageLabel, tagLabel } from '../config/index.js';
-import { customerSource } from '../lib/db.js';
 import { EMPTY, formatCount, formatDate, formatKwp } from '../lib/format.js';
 import { EmptyState, ErrorBanner, LoadMoreButton, LoadingState, SearchInput, StatTile } from '../ui/index.js';
+import { liveCustomers } from '../dashboard/queries.js';
 import { TAG_VIEWS } from './tagViews.js';
 
 const PAGE_SIZE = 50;
@@ -106,15 +105,12 @@ export default function TagTrackingView({ kind, onSelectCustomer, isChannelPartn
     const listRequest = useRef(0);
     const countRequest = useRef(0);
 
-    const partner = isChannelPartnerOffice ? '' : String(channelPartnerFilter || '').trim();
+    const partner = isChannelPartnerOffice ? '' : channelPartnerFilter;
 
-    // Every query starts here: live rows in the caller's partner / dealer scope.
-    const scoped = useCallback((select, options) => {
-        let query = supabase.from(customerSource(isChannelPartnerOffice)).select(select, options).is('deleted_at', null);
-        if (partner) query = query.ilike('channel_partner', `%${partner}%`);
-        if (dealerFilter) query = query.ilike('sub_channel_partner', dealerFilter);
-        return query;
-    }, [isChannelPartnerOffice, partner, dealerFilter]);
+    // Every query starts here: live rows in the caller's partner / dealer
+    // scope, matched on the whole name as the sidebar counts are.
+    const scoped = useCallback((select, options) => liveCustomers(isChannelPartnerOffice, { channelPartner: partner, dealer: dealerFilter }, select, options),
+        [isChannelPartnerOffice, partner, dealerFilter]);
 
     const fetchCounts = useCallback(async () => {
         if (!view) return;

@@ -1,15 +1,15 @@
 import { useId, useState } from 'react';
 import { ArrowLeft } from 'lucide-react';
-import { cleanPhone } from '../../../../template/src/lib/format.js';
 import { ErrorBanner, Field, Input, SectionCard, Spinner, SuccessBanner } from '../../../../template/src/ui/index.js';
 import { adminCreateInvite } from '../../api.js';
+import { normalizePhone } from '../../catalog/submission.js';
 import { InviteLink } from '../../components/InviteLink.jsx';
 import { isEmail } from '../../components/wizardData.js';
 
 const FIELDS = [
     { key: 'company', label: 'Company', required: true, autoComplete: 'organization' },
     { key: 'name', label: 'Contact name', autoComplete: 'name' },
-    { key: 'phone', label: 'Mobile number', type: 'tel', inputMode: 'numeric', autoComplete: 'tel', placeholder: '10-digit mobile number' },
+    { key: 'phone', label: 'Mobile number', type: 'tel', inputMode: 'tel', autoComplete: 'tel', placeholder: '10-digit mobile number' },
     { key: 'email', label: 'Email', type: 'email', autoComplete: 'email' },
 ];
 
@@ -21,7 +21,7 @@ export function AdminNewInvite() {
     const [created, setCreated] = useState(null);
 
     const problem = !form.company.trim() ? 'Enter the company name.'
-        : form.phone && cleanPhone(form.phone).length !== 10 ? 'The mobile number needs 10 digits.'
+        : form.phone.trim() && !/^\d{10}$/.test(normalizePhone(form.phone)) ? 'The mobile number needs 10 digits.'
             : form.email.trim() && !isEmail(form.email) ? 'The email address does not look right.' : '';
 
     const submit = async event => {
@@ -29,7 +29,7 @@ export function AdminNewInvite() {
         if (problem) { setError(problem); return; }
         setBusy(true);
         setError('');
-        const contact = { company: form.company.trim(), name: form.name.trim(), phone: cleanPhone(form.phone), email: form.email.trim() };
+        const contact = { company: form.company.trim(), name: form.name.trim(), phone: normalizePhone(form.phone), email: form.email.trim() };
         try {
             const result = await adminCreateInvite({ company: contact.company, contact });
             setCreated({ ...result, contact });

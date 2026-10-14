@@ -1,6 +1,6 @@
 // Every call the builder makes to its backend (builder/backend/builder.sql).
 // Each function throws an Error with a friendly message and a `code`;
-// saveDraft throws code 'conflict' when another tab saved first.
+// saveDraft and submitSetup throw code 'conflict' when another tab saved first.
 
 import { supabase, isBackendConfigured, backendProblem } from './supabase.js';
 
@@ -10,6 +10,7 @@ const MESSAGES = {
     conflict: 'These answers were changed in another tab or on another device. Reload the page to see the latest version.',
     locked: 'This link is locked for 15 minutes after too many wrong attempts. Try again later.',
     rate_limited: 'Too many requests in a short time. Wait a minute and try again.',
+    submit_limited: 'This form was sent many times in the last hour. Wait a while, then send it again.',
     too_large: 'This setup is too large to save. Remove some list items or fields and try again.',
     invalid_payload: 'The answers could not be saved. Reload the page and try again.',
     invalid_link: 'This setup link does not work any more. Ask the SolarFlow team for a new link.',
@@ -71,10 +72,11 @@ export async function saveDraft(inviteId, token, payload, baseVersion) {
     return version;
 }
 
-// Returns the submitted_at timestamp (ISO string).
-export async function submitSetup(inviteId, token) {
+// Sends the saved draft, which must still be `version` (the one this page
+// last saved or loaded). Returns the submitted_at timestamp (ISO string).
+export async function submitSetup(inviteId, token, version) {
     if (!validLink(inviteId, token)) throw apiError('invalid_link');
-    const submittedAt = await rpc('setup_submit', { p_invite: inviteId, p_token: token });
+    const submittedAt = await rpc('setup_submit', { p_invite: inviteId, p_token: token, p_version: version });
     if (submittedAt == null) throw apiError('invalid_link');
     return submittedAt;
 }
@@ -114,6 +116,15 @@ export async function adminSetStatus(inviteId, status) {
 
 export async function adminMarkDownloaded(inviteId) {
     await rpc('setup_admin_mark_downloaded', { p_invite: inviteId });
+}
+
+// {adminOverrides, slug, ownerEmail, branding, workflow}, or null before the first save.
+export async function adminGetSettings(inviteId) {
+    return rpc('setup_admin_get_settings', { p_invite: inviteId });
+}
+
+export async function adminSaveSettings(inviteId, settings) {
+    await rpc('setup_admin_save_settings', { p_invite: inviteId, p_settings: settings });
 }
 
 // ── Auth (admins only) ──────────────────────────────────────────────────

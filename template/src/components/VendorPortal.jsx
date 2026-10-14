@@ -23,10 +23,12 @@ import { lazyWithRetry, LazyBoundary } from '../lib/lazy.js';
 import { formatDate, formatINR, formatKwp, todayIST } from '../lib/format.js';
 import { readModuleSerials } from '../serials/record.js';
 import { useGlobalPopup } from './GlobalPopup';
-import { MobilePortalShell, PortalHero } from './portal';
+import {
+    MobilePortalShell, PortalCalendar as CalendarView, PortalCustomFields, PortalHero,
+    customFieldChangeLines, customFieldChanges, saveCustomFieldChanges, withCustomFieldChanges,
+} from './portal';
 
 // Switched-off features are never downloaded.
-const CalendarView = isOn('calendar') ? lazyWithRetry(() => import('./CalendarView')) : null;
 const BomPrintModal = isOn('bomMaker') ? lazyWithRetry(() => import('./BomPrintModal')) : null;
 const payoutsOn = isOn('vendorCommission');
 
@@ -106,6 +108,9 @@ export default function VendorPortal({ user, onLogout, onChangePassword }) {
     const [installationStatus, setInstallationStatus] = useState('Pending');
     const [installationDate, setInstallationDate] = useState('');
     const [vendorNote, setVendorNote] = useState('');
+    const [customValues, setCustomValues] = useState({});
+    // Extra fields this installer edited since opening the job (see customFieldChanges).
+    const touchedCustom = useRef(new Set());
 
     const [saving, setSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState('');
@@ -178,6 +183,8 @@ export default function VendorPortal({ user, onLogout, onChangePassword }) {
         setInstallationStatus(cust.installation_status || 'Pending');
         setInstallationDate(cust.installation_date || '');
         setVendorNote(cust.vendor_note || '');
+        setCustomValues(cust.custom_fields || {});
+        touchedCustom.current = new Set();
     };
 
     // Lists load a few columns; the full record is read when a job is opened.
@@ -286,13 +293,22 @@ export default function VendorPortal({ user, onLogout, onChangePassword }) {
     const vendorIsPastTab = currentStageIdx !== -1 && tabStageIdx !== -1 && tabStageIdx < currentStageIdx;
     const nextStageId = selectedCust && currentTab?.stage === selectedStage ? getNextStageId(selectedCust) : null;
 
+    // The client's extra fields for the stage on screen, changed but not saved.
+    const customChanges = selectedCust && currentTab ? customFieldChanges(currentTab.stage, customValues, selectedCust.custom_fields, touchedCustom.current) : {};
+    const customDirty = Object.keys(customChanges).length > 0;
     const isInstallationDirty = Boolean(selectedCust) && (
         !sameText(installationStatus, selectedCust.installation_status, 'Pending')
         || !sameText(installationDate, selectedCust.installation_date)
-        || !sameText(vendorNote, selectedCust.vendor_note));
-    const isGeoTagDirty = Boolean(selectedCust) && !sameText(geoTagStatus, selectedCust.geo_tag_status, 'Pending');
+        || !sameText(vendorNote, selectedCust.vendor_note)
+        || (activeTab === 'INSTALLATION' && customDirty));
+    const isGeoTagDirty = Boolean(selectedCust) && (!sameText(geoTagStatus, selectedCust.geo_tag_status, 'Pending') || (activeTab === 'GEO' && customDirty));
     const hasUnsavedChanges = (activeTab === 'INSTALLATION' && canEditInstallation && isInstallationDirty)
         || (activeTab === 'GEO' && canEditGeoTag && isGeoTagDirty);
+
+    const setCustomValue = (key, value) => {
+        touchedCustom.current.add(key);
+        setCustomValues(prev => ({ ...prev, [key]: value }));
+    };
 
     const failMove = (message, title) => {
         setStageMoveError(message);
@@ -321,10 +337,12 @@ export default function VendorPortal({ user, onLogout, onChangePassword }) {
         } else {
             addAuditChange('Geo-tag status', selectedCust.geo_tag_status, geoTagStatus);
         }
+        const baseChanged = auditChanges.length > 0;
+        auditChanges.push(...customFieldChangeLines(currentTab.stage, customChanges, selectedCust.custom_fields));
 
         let nextStage = null;
         if (advance) {
-            const record = { ...selectedCust, ...updatePayload };
+            const record = { ...selectedCust, ...updatePayload, custom_fields: withCustomFieldChanges(selectedCust.custom_fields, customChanges) };
             nextStage = getNextStageId(record);
             if (!nextStage) return failMove('This customer has no next stage to move to.', 'Nothing to move');
             const issues = missingStageRequirements(selectedStage, record);
@@ -341,8 +359,16 @@ export default function VendorPortal({ user, onLogout, onChangePassword }) {
         setSaving(true);
         try {
             if (auditChanges.length) {
-                const { ok, error } = await updateAdminRecord(selectedCust.id, updatePayload);
-                if (!ok) throw error;
+                if (baseChanged) {
+                    const { ok, error } = await updateAdminRecord(selectedCust.id, updatePayload);
+                    if (!ok) throw error;
+                }
+                if (customDirty) {
+                    const stored = await saveCustomFieldChanges(selectedCust.id, customChanges);
+                    setSelectedCust(prev => ({ ...prev, custom_fields: stored }));
+                    setCustomValues(stored);
+                    touchedCustom.current = new Set();
+                }
                 void logActivity(user.id, 'update', `${selectedCust.customer_name}: ${currentTab.label} updated by ${user.name}`, auditChanges.join(' · '), selectedCust.id);
             }
             let moved = {};
@@ -634,6 +660,7 @@ export default function VendorPortal({ user, onLogout, onChangePassword }) {
                                             onChange={event => setInstallationDate(event.target.value)} />
                                     </Field>
                                 )}
+                                <PortalCustomFields stage={STAGE_IDS.INSTALLATION_STATUS} values={customValues} onChange={setCustomValue} disabled={!canEditInstallation} />
                                 {installationStatus === 'Giveup' && (
                                     <div className="space-y-2 rounded-2xl border border-rose-200 bg-rose-50/80 p-4 text-xs text-rose-800">
                                         <p className="flex items-center gap-2 font-bold"><AlertTriangle size={15} aria-hidden="true" /> You asked to give up this job.</p>
@@ -697,6 +724,7 @@ export default function VendorPortal({ user, onLogout, onChangePassword }) {
                                         </div>
                                     )) : <p className="py-2 text-center text-[11px] italic text-stone-500">No photo uploaded yet.</p>}
                                 </div>
+                                <PortalCustomFields stage={STAGE_IDS.GEO_TAG_PHOTO} values={customValues} onChange={setCustomValue} disabled={!canEditGeoTag} />
                                 <div className="space-y-2 pt-2">
                                     {moveLabel && (
                                         <>

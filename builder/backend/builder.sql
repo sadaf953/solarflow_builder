@@ -1,7 +1,8 @@
 -- SolarFlow Client Builder backend.
 --
--- Run once in the builder Supabase project: SQL Editor -> New query -> paste
+-- Run in the builder Supabase project: SQL Editor -> New query -> paste
 -- this file -> Run. Safe to run again; it never deletes data.
+-- Re-run this whole file after every update of the builder website.
 --
 -- Everything lives in schema setup_private. Browsers reach it only through
 -- the public.setup_* wrappers below (security invoker), which call the
@@ -20,6 +21,10 @@
 --   insert into setup_private.admins(email, user_id)
 --   select lower(btrim(email)), id from auth.users where lower(btrim(email)) = 'someone@example.com'
 --   on conflict (email) do update set user_id = coalesce(setup_private.admins.user_id, excluded.user_id);
+
+-- One transaction: a failed run changes nothing, and no RPC is ever missing
+-- between the drop of an old version and its replacement.
+begin;
 
 create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
@@ -53,6 +58,10 @@ create table if not exists setup_private.invites (
   rate_window_start timestamptz,
   rate_calls int not null default 0
 );
+
+-- What the admin set on the client page: {adminOverrides, slug, ownerEmail,
+-- branding, workflow}. Never shown to the client.
+alter table setup_private.invites add column if not exists admin_settings jsonb;
 
 create table if not exists setup_private.drafts (
   invite_id uuid primary key references setup_private.invites(id) on delete cascade,
@@ -220,7 +229,12 @@ begin
   v := setup_private.client_invite(p_invite, p_token);
   if v.id is null then return null; end if;
   select * into d from setup_private.drafts where invite_id = v.id;
-  perform setup_private.log_event(v.id, 'opened', 'client');
+  -- One 'opened' entry an hour is enough for the history, and a link holder
+  -- cannot grow the log by opening the page over and over.
+  if not exists (select 1 from setup_private.events e
+                  where e.invite_id = v.id and e.kind = 'opened' and e.at > now() - interval '1 hour') then
+    perform setup_private.log_event(v.id, 'opened', 'client');
+  end if;
   return jsonb_build_object(
     'company', v.company,
     'contact', v.contact,
@@ -268,7 +282,16 @@ begin
 end;
 $$;
 
-create or replace function setup_private.setup_submit(p_invite uuid, p_token text)
+-- p_version is the draft version the client's page last saved or loaded:
+-- 'conflict' when another tab saved since, so a page never sends answers it
+-- has not seen. At most 10 sends an hour per invite; only the latest 20
+-- snapshots are kept.
+-- Older versions of this file had setup_submit(uuid, text). It is dropped
+-- (the public wrapper first, which calls it), so the browser can only reach
+-- the version check below.
+drop function if exists public.setup_submit(uuid, text);
+drop function if exists setup_private.setup_submit(uuid, text);
+create or replace function setup_private.setup_submit(p_invite uuid, p_token text, p_version int)
 returns timestamptz
 language plpgsql security definer
 set search_path = ''
@@ -277,6 +300,8 @@ declare
   v setup_private.invites;
   d setup_private.drafts;
   at_time timestamptz := now();
+  max_sends constant int := 10;           -- per invite per hour
+  keep_snapshots constant int := 20;
 begin
   v := setup_private.client_invite(p_invite, p_token);
   if v.id is null then return null; end if;
@@ -284,10 +309,21 @@ begin
   if d.payload is null then
     raise exception 'nothing_to_submit' using errcode = 'P0001';
   end if;
+  if p_version is distinct from d.version then
+    raise exception 'conflict' using errcode = 'P0001';
+  end if;
+  if (select count(*) from setup_private.events e
+       where e.invite_id = v.id and e.kind = 'submitted' and e.at > at_time - interval '1 hour') >= max_sends then
+    raise exception 'submit_limited' using errcode = 'P0001';
+  end if;
   -- Submitting the same version twice keeps one snapshot.
   insert into setup_private.submissions(invite_id, version, payload, submitted_at)
   values (v.id, d.version, d.payload, at_time)
   on conflict (invite_id, version) do update set submitted_at = excluded.submitted_at;
+  delete from setup_private.submissions s
+   where s.invite_id = v.id
+     and s.id not in (select k.id from setup_private.submissions k where k.invite_id = v.id
+                       order by k.submitted_at desc, k.version desc limit keep_snapshots);
   update setup_private.invites set status = 'submitted', updated_at = at_time where id = v.id;
   perform setup_private.log_event(v.id, 'submitted', 'client');
   return at_time;
@@ -437,18 +473,67 @@ begin
 end;
 $$;
 
+-- The admin's settings for one client, or null before the first save.
+create or replace function setup_private.setup_admin_get_settings(p_invite uuid)
+returns jsonb
+language plpgsql stable security definer
+set search_path = ''
+as $$
+declare
+  v setup_private.invites;
+begin
+  perform setup_private.require_admin();
+  select * into v from setup_private.invites where id = p_invite;
+  if not found then
+    raise exception 'not_found' using errcode = 'P0001';
+  end if;
+  return v.admin_settings;
+end;
+$$;
+
+-- Replaces the admin's settings: {adminOverrides, slug, ownerEmail, branding,
+-- workflow}, at most 256 KB.
+create or replace function setup_private.setup_admin_save_settings(p_invite uuid, p_settings jsonb)
+returns void
+language plpgsql security definer
+set search_path = ''
+as $$
+begin
+  perform setup_private.require_admin();
+  if octet_length(p_settings::text) > 262144 then
+    raise exception 'too_large' using errcode = 'P0001';
+  end if;
+  if jsonb_typeof(p_settings) is distinct from 'object'
+     or exists (select 1 from jsonb_object_keys(p_settings) k
+                 where k not in ('adminOverrides', 'slug', 'ownerEmail', 'branding', 'workflow'))
+     or coalesce(jsonb_typeof(p_settings -> 'adminOverrides'), 'object') <> 'object'
+     or coalesce(jsonb_typeof(p_settings -> 'branding'), 'object') <> 'object'
+     or coalesce(jsonb_typeof(p_settings -> 'workflow'), 'null') not in ('object', 'null')
+     or coalesce(jsonb_typeof(p_settings -> 'slug'), 'string') <> 'string'
+     or coalesce(jsonb_typeof(p_settings -> 'ownerEmail'), 'string') <> 'string' then
+    raise exception 'invalid_input' using errcode = 'P0001', detail = 'These settings could not be saved. Reload the page and try again.';
+  end if;
+  update setup_private.invites set admin_settings = p_settings where id = p_invite;
+  if not found then
+    raise exception 'not_found' using errcode = 'P0001';
+  end if;
+end;
+$$;
+
 -- ── Grants on setup_private functions ────────────────────────────────────
 
 revoke all on all functions in schema setup_private from public, anon, authenticated;
 grant execute on function setup_private.setup_open(uuid, text) to anon, authenticated;
 grant execute on function setup_private.setup_save(uuid, text, jsonb, int) to anon, authenticated;
-grant execute on function setup_private.setup_submit(uuid, text) to anon, authenticated;
+grant execute on function setup_private.setup_submit(uuid, text, int) to anon, authenticated;
 grant execute on function setup_private.setup_admin_create_invite(text, jsonb) to authenticated;
 grant execute on function setup_private.setup_admin_list() to authenticated;
 grant execute on function setup_private.setup_admin_get(uuid) to authenticated;
 grant execute on function setup_private.setup_admin_reset_token(uuid) to authenticated;
 grant execute on function setup_private.setup_admin_set_status(uuid, text) to authenticated;
 grant execute on function setup_private.setup_admin_mark_downloaded(uuid) to authenticated;
+grant execute on function setup_private.setup_admin_get_settings(uuid) to authenticated;
+grant execute on function setup_private.setup_admin_save_settings(uuid, jsonb) to authenticated;
 
 -- ── Public wrappers (what supabase.rpc() calls) ──────────────────────────
 
@@ -460,9 +545,9 @@ create or replace function public.setup_save(p_invite uuid, p_token text, p_payl
 returns int language sql security invoker set search_path = ''
 as $$ select setup_private.setup_save(p_invite, p_token, p_payload, p_base_version) $$;
 
-create or replace function public.setup_submit(p_invite uuid, p_token text)
+create or replace function public.setup_submit(p_invite uuid, p_token text, p_version int)
 returns timestamptz language sql security invoker set search_path = ''
-as $$ select setup_private.setup_submit(p_invite, p_token) $$;
+as $$ select setup_private.setup_submit(p_invite, p_token, p_version) $$;
 
 create or replace function public.setup_admin_create_invite(p_company text, p_contact jsonb)
 returns jsonb language sql security invoker set search_path = ''
@@ -492,23 +577,37 @@ create or replace function public.setup_admin_mark_downloaded(p_invite uuid)
 returns void language sql security invoker set search_path = ''
 as $$ select setup_private.setup_admin_mark_downloaded(p_invite) $$;
 
+create or replace function public.setup_admin_get_settings(p_invite uuid)
+returns jsonb language sql security invoker set search_path = ''
+as $$ select setup_private.setup_admin_get_settings(p_invite) $$;
+
+create or replace function public.setup_admin_save_settings(p_invite uuid, p_settings jsonb)
+returns void language sql security invoker set search_path = ''
+as $$ select setup_private.setup_admin_save_settings(p_invite, p_settings) $$;
+
 revoke all on function public.setup_open(uuid, text) from public;
 revoke all on function public.setup_save(uuid, text, jsonb, int) from public;
-revoke all on function public.setup_submit(uuid, text) from public;
+revoke all on function public.setup_submit(uuid, text, int) from public;
 revoke all on function public.setup_admin_create_invite(text, jsonb) from public, anon;
 revoke all on function public.setup_admin_list() from public, anon;
 revoke all on function public.setup_admin_get(uuid) from public, anon;
 revoke all on function public.setup_admin_reset_token(uuid) from public, anon;
 revoke all on function public.setup_admin_set_status(uuid, text) from public, anon;
 revoke all on function public.setup_admin_mark_downloaded(uuid) from public, anon;
+revoke all on function public.setup_admin_get_settings(uuid) from public, anon;
+revoke all on function public.setup_admin_save_settings(uuid, jsonb) from public, anon;
 grant execute on function public.setup_open(uuid, text) to anon, authenticated;
 grant execute on function public.setup_save(uuid, text, jsonb, int) to anon, authenticated;
-grant execute on function public.setup_submit(uuid, text) to anon, authenticated;
+grant execute on function public.setup_submit(uuid, text, int) to anon, authenticated;
 grant execute on function public.setup_admin_create_invite(text, jsonb) to authenticated;
 grant execute on function public.setup_admin_list() to authenticated;
 grant execute on function public.setup_admin_get(uuid) to authenticated;
 grant execute on function public.setup_admin_reset_token(uuid) to authenticated;
 grant execute on function public.setup_admin_set_status(uuid, text) to authenticated;
 grant execute on function public.setup_admin_mark_downloaded(uuid) to authenticated;
+grant execute on function public.setup_admin_get_settings(uuid) to authenticated;
+grant execute on function public.setup_admin_save_settings(uuid, jsonb) to authenticated;
 
 notify pgrst, 'reload schema';
+
+commit;

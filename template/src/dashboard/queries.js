@@ -5,11 +5,16 @@
 import { supabase } from '../supabase';
 import { customerSource, fetchAllPages } from '../lib/db.js';
 import { todayIST } from '../lib/format.js';
-import { STAGE_IDS } from '../config/index.js';
+import { STAGE_IDS, isStageEnabled } from '../config/index.js';
 import { summarizeSolarEquipment } from './solarStats';
 import { exactLike, scopeCustomers } from './filters.js';
 
 export { scopeCustomers, stageDateFilters } from './filters.js';
+
+/** Live (not trashed) customers this login can see, narrowed by the header's partner and dealer filters. */
+export const liveCustomers = (isCpo, scope, columns, options) => scopeCustomers(
+    supabase.from(customerSource(isCpo)).select(columns, options).is('deleted_at', null), scope,
+);
 
 /** Names of active dealers under a channel partner (head office) or under the signed-in partner office. */
 export async function fetchDealerNames({ user, isCpo, channelPartner }) {
@@ -50,8 +55,9 @@ export async function fetchTodaySummary(isCpo, scope, includeDeliveries) {
     };
     const head = () => supabase.from(table).select('id', { count: 'exact', head: true }).is('deleted_at', null);
 
+    // Without a Registration stage nothing records a registration date, so there is nothing to count.
     const [registeredToday, installedToday, installedLive] = await Promise.all([
-        count(head().eq('registration_date', today)),
+        isStageEnabled(STAGE_IDS.REGISTRATION) ? count(head().eq('registration_date', today)) : null,
         count(head().eq('installation_date', today).in('installation_status', INSTALLED)),
         count(head().not('stage', 'in', CLOSED_STAGES).in('installation_status', INSTALLED)),
     ]);
@@ -83,6 +89,29 @@ export async function fetchTodaySummary(isCpo, scope, includeDeliveries) {
     }
 
     return { date: today, registeredToday, installedToday, installedLive, deliveriesDueToday, deliveryProjectsToday, canViewDeliveries: includeDeliveries };
+}
+
+const HEAD_OFFICE = ['admin', 'sales'];
+
+/**
+ * Adds a channel partner or module brand typed on a customer to its dropdown
+ * list when the list does not have it yet. Only head office curates the
+ * lists (the database refuses anyone else), so other logins add nothing.
+ * Resolves true when a name was added.
+ */
+export async function addNewListLabels(record, userType) {
+    if (!HEAD_OFFICE.includes(userType)) return false;
+    let added = false;
+    for (const category of ['channel_partner', 'module_brand']) {
+        const label = String(record?.[category] || '').trim();
+        if (!label) continue;
+        const { data: rows, error } = await supabase.from('metadata').select('label').eq('category', category);
+        if (error || (rows || []).some(row => String(row.label || '').trim().toLowerCase() === label.toLowerCase())) continue;
+        const { error: insertError } = await supabase.from('metadata').insert({ category, label });
+        if (insertError) console.warn(`Could not add "${label}" to the ${category} list:`, insertError.message);
+        else added = true;
+    }
+    return added;
 }
 
 /** Dropdown lists from the metadata table, grouped by category. */

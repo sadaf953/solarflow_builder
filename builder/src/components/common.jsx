@@ -50,14 +50,17 @@ const SAVE_TEXT = {
     saving: 'Saving…',
     error: 'Not saved — retrying',
     local: 'Saved on this device',
+    conflict: 'Not saved — reload the page',
+    closed: 'Not saved — link closed',
 };
+const PROBLEM = new Set(['error', 'conflict', 'closed']);
 
 /** Autosave status line. */
 export function SaveStatus({ status }) {
     return (
-        <p role="status" className={`flex items-center gap-1.5 text-xs font-semibold ${status === 'error' ? 'text-red-700' : 'text-stone-500'}`}>
+        <p role="status" className={`flex items-center gap-1.5 text-xs font-semibold ${PROBLEM.has(status) ? 'text-red-700' : 'text-stone-500'}`}>
             {status === 'saving' ? <Spinner size={12} />
-                : status === 'error' ? <AlertCircle size={12} aria-hidden="true" />
+                : PROBLEM.has(status) ? <AlertCircle size={12} aria-hidden="true" />
                     : <Check size={12} aria-hidden="true" />}
             {SAVE_TEXT[status] || SAVE_TEXT.saved}
         </p>

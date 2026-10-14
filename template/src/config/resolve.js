@@ -19,6 +19,11 @@ const BUILTIN_BY_ID = Object.fromEntries(BUILTIN_STAGES.map(stage => [stage.id, 
 const text = value => (typeof value === 'string' ? value.trim() : '');
 const lower = value => String(value ?? '').trim().toLowerCase();
 
+// Line breaks (including U+2028 / U+2029) and other control characters. Names,
+// labels and list items are one line of text; the validator rejects these.
+const CONTROL_CHARS = /[\p{Cc}\u2028\u2029]/u;
+export const hasControlChars = value => CONTROL_CHARS.test(text(value));
+
 // ── Stage requirement rules ───────────────────────────────────────────────
 // Requirements are data ([column, label, ruleName]) so the builder can show
 // them; these are the rules they name.
@@ -112,7 +117,8 @@ export function defaultClientConfig() {
 // Features and stages depend on each other: a stage can need a feature
 // (LOAN needs loanTracking) and a feature can need stages (vendorLogin needs
 // the three installer stages). Both are settled in one loop until nothing
-// changes. `reasons` explains every feature that ended up off.
+// changes. `reasons` explains every feature that ended up off, and the one
+// that is kept on against the config (checklists, see below).
 export function resolveFeaturesAndPipeline(config = {}) {
     const requested = config.features || {};
     const on = {};
@@ -146,6 +152,11 @@ export function resolveFeaturesAndPipeline(config = {}) {
         if (!changed) break;
     }
     for (const id of Object.keys(on)) if (on[id]) delete reasons[id];
+    // Projects always need one way to track customer documents.
+    if (!on.documentUploads && !on.checklists) {
+        on.checklists = true;
+        reasons.checklists = 'Document uploads is off, and every project needs one way to track customer documents.';
+    }
     return { features: Object.freeze(on), reasons: Object.freeze(reasons), stages: Object.freeze(stages) };
 }
 
@@ -211,8 +222,9 @@ export function resolveStageGroups(config, stages) {
 }
 
 // ── Custom fields ────────────────────────────────────────────────────────
+// Completed and Lost projects have no form, so fields there are dropped.
 export function resolveCustomFields(config, stages) {
-    const stageIds = new Set(stages.map(stage => stage.id));
+    const stageIds = new Set(stages.filter(stage => !stage.terminal).map(stage => stage.id));
     const seen = new Set();
     const fields = [];
     for (const raw of Array.isArray(config.customFields) ? config.customFields : []) {
@@ -235,12 +247,27 @@ export function resolveCustomFields(config, stages) {
 }
 
 // Required custom fields join their stage's requirements as dotted paths.
+// Required means answered: a Yes/No field answered No is filled in.
 export function withCustomRequirements(stages, customFields) {
     return stages.map(stage => {
         const extra = customFields.filter(field => field.stage === stage.id && field.required)
-            .map(field => [`custom_fields.${field.key}`, field.label, field.type === 'yesno' ? 'yes' : 'present']);
+            .map(field => [`custom_fields.${field.key}`, field.label, 'present']);
         return extra.length ? { ...stage, requirements: [...stage.requirements, ...extra] } : stage;
     });
+}
+
+// A customer with no payment type is routed into LOAN. Registration normally
+// asks for it; when no stage before the first LOAN / CASH stage does, the
+// stage just before it asks instead.
+export function withPaymentTypeRequirement(stages) {
+    const first = stages.findIndex(stage => stage.hideWhenPaymentType?.length);
+    if (first < 1) return stages;
+    const asked = stages.slice(0, first)
+        .some(stage => stage.requirements.some(([path, , rule]) => path === 'payment_type' && rule === 'paymentType'));
+    if (asked) return stages;
+    return stages.map((stage, index) => (index === first - 1
+        ? { ...stage, requirements: [...stage.requirements, ['payment_type', 'Payment Type', 'paymentType']] }
+        : stage));
 }
 
 // ── Dropdowns ────────────────────────────────────────────────────────────
@@ -289,7 +316,7 @@ export function resolveDropdowns(config) {
 export function resolveClientConfig(config = defaultClientConfig()) {
     const { features, reasons, stages: baseStages } = resolveFeaturesAndPipeline(config);
     const customFields = resolveCustomFields(config, baseStages);
-    const stages = withCustomRequirements(baseStages, customFields);
+    const stages = withCustomRequirements(withPaymentTypeRequirement(baseStages), customFields);
     return {
         features,
         featureReasons: reasons,
@@ -309,13 +336,23 @@ export function validateClientConfig(config) {
     const warnings = [];
     if (!config || typeof config !== 'object') return { errors: ['Config is missing.'], warnings };
     if (config.schemaVersion !== CONFIG_SCHEMA_VERSION) errors.push(`schemaVersion must be ${CONFIG_SCHEMA_VERSION}.`);
+    // Client text ends up in generated files, so one-line text must stay one line.
+    const oneLine = (value, what) => {
+        if (hasControlChars(value)) errors.push(`${what} has a line break or hidden character; remove it.`);
+    };
     if (!text(config.client?.name)) errors.push('Client name is required.');
+    oneLine(config.client?.name, 'The client name');
     if (!/^[a-z0-9][a-z0-9-]{1,60}$/.test(text(config.client?.slug))) errors.push('Client slug must be lowercase letters, numbers and dashes.');
     const ownerEmail = text(config.client?.ownerEmail);
-    if (ownerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail)) errors.push('Owner email is not a valid email address.');
+    if (ownerEmail && (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(ownerEmail) || /[\p{Cc};\\"`<>()[\],:]/u.test(ownerEmail))) {
+        errors.push('Owner email is not a valid email address.');
+    }
 
     const branding = config.branding && typeof config.branding === 'object' ? config.branding : {};
     errors.push(...Object.values(brandingErrors(branding)));
+    for (const [key, value] of Object.entries(branding)) {
+        if (key !== 'address') oneLine(value, `Company detail "${BRANDING_FIELDS[key]?.label || key}"`);
+    }
     if (!text(branding.bankAccountNumber) && ['bankAccountName', 'bankName', 'bankBranch', 'bankIfsc'].some(key => text(branding[key]))) {
         warnings.push('Bank details are left off quotations until the account number is filled in.');
     }
@@ -342,6 +379,10 @@ export function validateClientConfig(config) {
         } else if (!BUILTIN_BY_ID[id]) {
             errors.push(`Unknown built-in stage "${id}". Mark it custom: true to add it.`);
         }
+        oneLine(entry.label, `The name of stage "${id}"`);
+    }
+    for (const group of Array.isArray(config.pipeline?.groups) ? config.pipeline.groups : []) {
+        oneLine(group?.label, `The name of stage group "${text(group?.id)}"`);
     }
     if (customStages > LIMITS.customStages) errors.push(`At most ${LIMITS.customStages} custom stages.`);
     for (const id of BUILTIN_STAGE_IDS) {
@@ -351,13 +392,15 @@ export function validateClientConfig(config) {
 
     const resolved = resolveClientConfig(config);
     for (const [id, reason] of Object.entries(resolved.featureReasons)) {
-        if (config.features?.[id] === true && FEATURE_REGISTRY[id]?.status === 'available') warnings.push(`${FEATURE_REGISTRY[id].label} will be off: ${reason}`);
+        if (resolved.features[id] && config.features?.[id] === false) warnings.push(`${FEATURE_REGISTRY[id].label} will stay on: ${reason}`);
+        else if (config.features?.[id] === true && FEATURE_REGISTRY[id]?.status === 'available') warnings.push(`${FEATURE_REGISTRY[id].label} will be off: ${reason}`);
     }
 
     const fields = Array.isArray(config.customFields) ? config.customFields : [];
     if (fields.length > LIMITS.customFields) errors.push(`At most ${LIMITS.customFields} extra fields.`);
     const keys = new Set();
     const resolvedStageIds = new Set(resolved.stages.map(stage => stage.id));
+    const terminalStages = Object.fromEntries(BUILTIN_STAGES.filter(stage => stage.terminal).map(stage => [stage.id, stage.label]));
     for (const field of fields) {
         const key = text(field?.key);
         if (!CUSTOM_FIELD_KEY.test(key)) errors.push(`Extra field key "${key}" must start with a letter and use only lowercase letters, numbers and _.`);
@@ -366,13 +409,22 @@ export function validateClientConfig(config) {
         if (!text(field?.label)) errors.push(`Extra field "${key}" needs a label.`);
         if (!CUSTOM_FIELD_TYPES[field?.type]) errors.push(`Extra field "${key}" has an unknown type.`);
         if (field?.type === 'select' && !uniqueStrings(field.options).length) errors.push(`Dropdown field "${field.label || key}" needs at least one option.`);
-        if (!resolvedStageIds.has(text(field?.stage).toUpperCase())) warnings.push(`Extra field "${field?.label || key}" is on a stage that is not in the pipeline; it will be hidden.`);
+        oneLine(field?.label, `The label of extra field "${key}"`);
+        if (Array.isArray(field?.options) && field.options.some(hasControlChars)) {
+            errors.push(`An option of dropdown field "${key}" has a line break or hidden character; remove it.`);
+        }
+        const stage = text(field?.stage).toUpperCase();
+        if (terminalStages[stage]) errors.push(`Extra field "${field?.label || key}" cannot be on the ${terminalStages[stage]} stage: finished projects have no form to fill in.`);
+        else if (!resolvedStageIds.has(stage)) warnings.push(`Extra field "${field?.label || key}" is on a stage that is not in the pipeline; it will be hidden.`);
     }
 
     for (const id of Object.keys(config.dropdowns || {})) {
         if (!DROPDOWN_CATALOG[id]) errors.push(`Unknown dropdown list "${id}".`);
         else if (!Array.isArray(config.dropdowns[id])) errors.push(`Dropdown list "${id}" must be a list.`);
         else if (config.dropdowns[id].length > LIMITS.listItems) errors.push(`Dropdown list "${DROPDOWN_CATALOG[id].label}" has more than ${LIMITS.listItems} items.`);
+        else if (config.dropdowns[id].some(item => [item, item?.id, item?.label].some(hasControlChars))) {
+            errors.push(`An item in the list "${DROPDOWN_CATALOG[id].label}" has a line break or hidden character; remove it.`);
+        }
     }
     const sheetUrl = text(config.workflowSource?.sheetUrl);
     if (sheetUrl && !isAllowedSheetUrl(sheetUrl)) errors.push('The sheet link must be a Google Sheets, OneDrive or SharePoint link.');

@@ -12,15 +12,12 @@ import { logActivity, runWrite } from '../utils';
 import { APP_ROLES, enabledRoles } from '../constants';
 import { isOn } from '../config/index.js';
 import { useGlobalPopup } from './GlobalPopup';
+import { CPO, CPO_CHILD_TYPES, currentParentId, loginChanges, needsParentChoice, officeOptions, partnerKey } from './staffLogins.js';
 import {
     Field, Input, Select, Modal, Badge, SearchInput, FilterBar, ErrorBanner, SuccessBanner, LoadingState, EmptyState, Spinner,
 } from '../ui/index.js';
 
 const PENDING = 'pending';
-const CPO = 'channel_partner_office';
-const CPO_CHILD_TYPES = ['office2', 'agent2'];
-// Login types that work under a partner office or partner.
-const NEEDS_OFFICE = ['office2', 'agent2'];
 const PROFILE_COLUMNS = 'id, name, email, phone_number, user_type, role, channel_partner, status, parent_profile_id, cpo_profile_id, created_by, created_at';
 const SERVICE_MISSING = 'Could not reach the account-creation service: the add_user function is not deployed or cannot be reached. '
     + 'Follow step 4 of the setup guide ("Deploy the staff-login function"), then try again.';
@@ -77,20 +74,6 @@ function PasswordInput({ id, value, onChange, placeholder, autoFocus }) {
             </button>
         </div>
     );
-}
-
-// Where a manager or dealer works: partner offices, plus partners when dealers can work under them.
-function officeOptions(userType, profiles) {
-    const names = new Set();
-    profiles.forEach(p => {
-        const isOffice = p.user_type === CPO;
-        const isPartner = userType === 'agent2' && p.user_type === 'agent' && isOn('channelPartners');
-        if ((isOffice || isPartner) && p.status === 'active') {
-            const name = String((isOffice ? p.channel_partner : '') || p.name || '').trim();
-            if (name) names.add(name);
-        }
-    });
-    return [...names].sort((a, b) => a.localeCompare(b));
 }
 
 // ─── Reset password ───────────────────────────────────────────────────────────
@@ -173,38 +156,40 @@ function ResetPasswordModal({ user, currentUser, onClose, onDone }) {
 function CreateUserModal({ currentUser, roles, profiles, onClose, onCreated }) {
     const isCpo = currentUser?.userType === CPO;
     const officeName = (currentUser?.channel_partner || currentUser?.name || '').trim();
-    const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', user_type: roles[0]?.user_type || '', channel_partner: '' });
+    const [form, setForm] = useState({ name: '', email: '', phone: '', password: '', user_type: roles[0]?.user_type || '', channel_partner: '', parent_id: '' });
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const set = (key, value) => setForm(prev => ({ ...prev, [key]: value }));
 
     const needsOfficeName = !isCpo && form.user_type === CPO;
-    const needsOffice = !isCpo && NEEDS_OFFICE.includes(form.user_type);
+    const needsOffice = !isCpo && CPO_CHILD_TYPES.includes(form.user_type);
     const offices = needsOffice ? officeOptions(form.user_type, profiles) : [];
 
     const create = async event => {
         event.preventDefault();
         const name = form.name.trim().toUpperCase();
         const email = form.email.trim().toLowerCase();
-        const partner = isCpo ? officeName : (needsOfficeName || needsOffice ? form.channel_partner.trim() : '');
+        const partner = needsOfficeName ? form.channel_partner.trim() : '';
+        const parent = needsOffice ? profiles.find(p => p.id === form.parent_id) : null;
         if (!name || !email || !form.password) { setError('Name, email and password are required.'); return; }
         if (!isEmail(email)) { setError('Enter a valid email address.'); return; }
         if (form.password.length < 6) { setError('Password must be at least 6 characters.'); return; }
         if (!form.user_type) { setError('Choose a login type.'); return; }
-        if ((needsOfficeName || needsOffice) && !partner) { setError(needsOfficeName ? 'Enter the office name.' : 'Choose who this login works under.'); return; }
+        if (needsOfficeName && !partner) { setError('Enter the office name.'); return; }
+        if (needsOffice && !parent) { setError('Choose who this login works under.'); return; }
 
         setBusy(true); setError('');
         try {
             const role = roles.find(r => r.user_type === form.user_type);
             const result = await callAddUser({
                 action: 'create', name, email, password: form.password, phone: form.phone.trim(),
-                user_type: form.user_type, role: role?.role, channel_partner: partner || null,
+                user_type: form.user_type, role: role?.role, channel_partner: partner || null, parent_profile_id: parent?.id || null,
             });
             const warnings = [];
             // Partner offices and channel partners file leads under their partner name.
-            const partnerKey = form.user_type === CPO ? partner || name : form.user_type === 'agent' ? name : '';
-            if (partnerKey && !(await ensurePartnerInDirectory(partnerKey))) {
-                warnings.push(`"${partnerKey}" could not be added to Operations > Channel partner directory. Add it there by hand.`);
+            const directoryName = form.user_type === CPO ? partner || name : form.user_type === 'agent' ? name : '';
+            if (directoryName && !(await ensurePartnerInDirectory(directoryName))) {
+                warnings.push(`"${directoryName}" could not be added to Operations > Channel partner directory. Add it there by hand.`);
             }
             if (form.user_type === 'vendor') {
                 // add_user links an existing vendor row; add one when there is none yet.
@@ -248,7 +233,7 @@ function CreateUserModal({ currentUser, roles, profiles, onClose, onCreated }) {
                 </Field>
                 <Field label="Login type" htmlFor="new-user-type" required>
                     <Select id="new-user-type" value={form.user_type} options={roles.map(r => ({ value: r.user_type, label: r.label }))}
-                        onChange={e => setForm(prev => ({ ...prev, user_type: e.target.value, channel_partner: '' }))} />
+                        onChange={e => setForm(prev => ({ ...prev, user_type: e.target.value, channel_partner: '', parent_id: '' }))} />
                 </Field>
                 {isCpo && <p className="text-xs text-stone-500">Works under your office: <b className="text-stone-700">{officeName}</b></p>}
                 {needsOfficeName && (
@@ -259,8 +244,8 @@ function CreateUserModal({ currentUser, roles, profiles, onClose, onCreated }) {
                 {needsOffice && (
                     <Field label="Works under" htmlFor="new-user-under" required
                         hint={offices.length ? undefined : 'Create a partner office (or partner) login first.'}>
-                        <Select id="new-user-under" placeholder="Choose…" options={offices} value={form.channel_partner}
-                            onChange={e => set('channel_partner', e.target.value)} />
+                        <Select id="new-user-under" placeholder="Choose…" options={offices} value={form.parent_id}
+                            onChange={e => set('parent_id', e.target.value)} />
                     </Field>
                 )}
             </form>
@@ -274,7 +259,13 @@ function EditUserModal({ user, currentUser, roles, profiles, onClose, onSaved })
     const pending = user.user_type === PENDING;
     const [email, setEmail] = useState(user.email || '');
     const [userType, setUserType] = useState(pending ? '' : user.user_type);
-    const [office, setOffice] = useState(user.channel_partner || '');
+    const [office, setOffice] = useState(user.user_type === CPO ? user.channel_partner || '' : '');
+    // The parent shown at the start; it is only asked for again when the type or parent changes.
+    const [startParentId] = useState(() => {
+        const current = officeOptions(user.user_type, profiles, { keepId: user.parent_profile_id, excludeId: user.id });
+        return currentParentId(user, current, profiles);
+    });
+    const [parentId, setParentId] = useState(startParentId);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
 
@@ -284,15 +275,21 @@ function EditUserModal({ user, currentUser, roles, profiles, onClose, onSaved })
         return list;
     }, [roles, pending, user.user_type]);
     const needsOfficeName = userType === CPO;
-    const needsOffice = NEEDS_OFFICE.includes(userType);
-    const offices = needsOffice ? officeOptions(userType, profiles) : [];
+    const needsOffice = CPO_CHILD_TYPES.includes(userType);
+    const offices = needsOffice ? officeOptions(userType, profiles, { keepId: user.parent_profile_id, excludeId: user.id }) : [];
+    // A login whose parent is not listed keeps it until another is chosen.
+    const keepsUnlistedParent = needsOffice && userType === user.user_type && !startParentId && Boolean(user.channel_partner);
+    // A channel partner keeps its key; a login that becomes one gets its name.
+    const agentKey = (user.user_type === 'agent' && partnerKey({ channel_partner: user.channel_partner })) || String(user.name || '').trim().toUpperCase();
 
     const save = async event => {
         event.preventDefault();
         const cleanEmail = email.trim().toLowerCase();
         if (!isEmail(cleanEmail)) { setError('Enter a valid email address.'); return; }
         if (isAdmin && !userType) { setError('Choose a login type.'); return; }
-        if (isAdmin && (needsOfficeName || needsOffice) && !office.trim()) { setError(needsOfficeName ? 'Enter the office name.' : 'Choose who this login works under.'); return; }
+        const parent = needsOffice ? profiles.find(p => p.id === parentId) : null;
+        if (isAdmin && needsOfficeName && !office.trim()) { setError('Enter the office name.'); return; }
+        if (isAdmin && needsParentChoice(user, { userType, parentId, startParentId })) { setError('Choose who this login works under.'); return; }
 
         setBusy(true); setError('');
         try {
@@ -306,20 +303,11 @@ function EditUserModal({ user, currentUser, roles, profiles, onClose, onSaved })
             }
             if (isAdmin) {
                 const role = APP_ROLES.find(r => r.user_type === userType);
-                const partner = needsOfficeName || needsOffice ? office.trim().toUpperCase() : null;
-                const changes = {};
-                if (userType !== user.user_type) Object.assign(changes, { user_type: userType, role: role?.role || userType });
-                if ((partner || null) !== (user.channel_partner || null)) changes.channel_partner = partner;
-                if (needsOffice && ('user_type' in changes || 'channel_partner' in changes)) {
-                    const parent = profiles.find(p => p.user_type === CPO && sameText(p.channel_partner || p.name, partner));
-                    changes.parent_profile_id = parent?.id || null;
-                } else if ('user_type' in changes && !needsOffice) {
-                    changes.parent_profile_id = null;
-                }
+                const changes = loginChanges(user, { userType, role: role?.role, officeName: office, parent });
                 if (Object.keys(changes).length) {
                     const res = await runWrite(supabase.from('profiles').update(changes).eq('id', user.id).select('id'), { action: 'login change' });
                     if (!res.ok) throw res.error;
-                    if (needsOfficeName && partner) await ensurePartnerInDirectory(partner);
+                    if (changes.channel_partner && [CPO, 'agent'].includes(userType)) await ensurePartnerInDirectory(changes.channel_partner);
                     notes.push('login type and office');
                 }
                 // Approving a sign-up: the login type is set first, then the login is switched on.
@@ -354,7 +342,7 @@ function EditUserModal({ user, currentUser, roles, profiles, onClose, onSaved })
                 {isAdmin && (
                     <Field label="Login type" htmlFor="edit-user-type" required>
                         <Select id="edit-user-type" value={userType} options={roleChoices} placeholder={pending ? 'Choose…' : undefined}
-                            onChange={e => { setUserType(e.target.value); setOffice(''); }} />
+                            onChange={e => { setUserType(e.target.value); setOffice(''); setParentId(''); }} />
                     </Field>
                 )}
                 {isAdmin && needsOfficeName && (
@@ -363,10 +351,14 @@ function EditUserModal({ user, currentUser, roles, profiles, onClose, onSaved })
                     </Field>
                 )}
                 {isAdmin && needsOffice && (
-                    <Field label="Works under" htmlFor="edit-user-under" required
-                        hint={offices.length ? undefined : 'Create a partner office (or partner) login first.'}>
-                        <Select id="edit-user-under" placeholder="Choose…" options={offices} value={office} onChange={e => setOffice(e.target.value)} />
+                    <Field label="Works under" htmlFor="edit-user-under" required={!keepsUnlistedParent}
+                        hint={keepsUnlistedParent ? `Now under ${user.channel_partner}. Leave this empty to keep it.`
+                            : offices.length ? undefined : 'Create a partner office (or partner) login first.'}>
+                        <Select id="edit-user-under" placeholder="Choose…" options={offices} value={parentId} onChange={e => setParentId(e.target.value)} />
                     </Field>
+                )}
+                {isAdmin && userType === 'agent' && (
+                    <p className="text-xs text-stone-500">Leads filed under <b className="text-stone-700">{agentKey}</b> show for this partner. Rename it in Operations.</p>
                 )}
             </form>
         </Modal>

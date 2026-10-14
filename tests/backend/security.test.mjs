@@ -185,7 +185,7 @@ test('add_user: a CPO only creates dealers and managers under itself', async () 
 test('add_user: a CPO cannot pick the role label of the logins it creates', async () => {
     const res = await addUser.call(p.cpo, { email: 'labelled@x.test', password: 'pw123456', user_type: 'agent2', role: 'Admin Office' });
     assert.equal(res.status, 200, JSON.stringify(res.body));
-    assert.equal((await profileOf('labelled@x.test')).role, 'Channel Partner');
+    assert.equal((await profileOf('labelled@x.test')).role, 'Dealer');
 });
 
 test('add_user: a CPO whose login type is switched off can no longer manage logins', async () => {

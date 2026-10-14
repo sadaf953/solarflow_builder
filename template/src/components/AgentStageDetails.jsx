@@ -13,11 +13,12 @@ const dealersOn = () => isOn('dealers');
 const installerLoginsOn = () => isOn('vendorLogin');
 const stampLoginOn = () => isOn('stampLogin');
 const warrantyOn = () => isOn('warrantyTracking');
+const subsidyOn = () => isOn('subsidyTracking');
 
 const LEAD_ROWS = [
     row('Customer Name', 'customer_name'), row('Phone Number', 'phone_number', { type: 'phone' }), row('Email', 'email_address'),
     row('Consumer No', 'consumer_no'), row('Village / Address', 'villages'), row('Sub Division', 'sub_divisions'),
-    row('Channel Partner', 'channel_partner', { when: partnersOn }), row('Dealer', 'sub_channel_partner', { when: dealersOn }),
+    row('Partner', 'channel_partner', { when: partnersOn }), row('Dealer', 'sub_channel_partner', { when: dealersOn }),
     row('Module Brand', 'module_brand'), row('Module WP', 'module_wp'), row('No. of Modules', 'no_of_modules'),
     row('System Capacity', 'system_capacity_kwp', { type: 'kwp' }), row('Payment Type', 'payment_type'),
 ];
@@ -28,7 +29,7 @@ const STAGE_FIELDS = {
         row('Registration Date', 'registration_date'), row('Registration By', 'registration_by'),
         row('Registration / Feasibility No.', ['registration_no', 'feasibility_no']), row('File No.', 'folder_no'),
         row('Application Acknowledgment', 'application_acknowledgment'), row('Feasibility Document', 'feasibilty_document'),
-        row('Subsidy Token Photo', 'subsidy_token_photo'),
+        row('Subsidy Token Photo', 'subsidy_token_photo', { when: subsidyOn }),
     ],
     [STAGE_IDS.LOAN]: [
         row('Jansamarth Application No.', 'jansamarth_application_no'), row('Loan Status', 'loan_tag'),
@@ -138,8 +139,8 @@ const parseMaybeJson = (value) => {
 };
 
 /** The client's extra fields for a stage, read-only. Renders nothing when the stage has none. */
-export function StageCustomFields({ stage, customer, title = 'More details' }) {
-    const fields = customFieldsForStage(stage);
+export function StageCustomFields({ stage, customer, title = 'More details', types }) {
+    const fields = customFieldsForStage(stage).filter(field => !types || types.includes(field.type));
     if (!fields.length) return null;
     return (
         <section className="rounded-2xl border border-stone-200 bg-white p-4 shadow-sm">

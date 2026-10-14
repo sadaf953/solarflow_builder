@@ -3,7 +3,7 @@ import { FileJson, RotateCcw } from 'lucide-react';
 import { ErrorBanner, LoadingState, Stepper, useAutosave } from '../../../template/src/ui/index.js';
 import { openInvite, saveDraft, submitSetup } from '../api.js';
 import { QUESTION_STEPS, answersToFeatures } from '../catalog/questions.js';
-import { emptySubmission } from '../catalog/submission.js';
+import { emptySubmission, normalizePhone } from '../catalog/submission.js';
 import { LiveSummary } from '../components/FeatureViews.jsx';
 import { PageShell, SaveStatus } from '../components/common.jsx';
 import { downloadJson, normalizeSubmission, storage } from '../components/wizardData.js';
@@ -72,6 +72,7 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
     const versionRef = useRef(0);
     const headingRef = useRef(null);
     const firstStep = useRef(true);
+    const reloadingRef = useRef(false);
 
     useEffect(() => {
         if (preview) return undefined;
@@ -91,7 +92,8 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
 
     const ready = load.state === 'ready';
     const submission = load.submission;
-    const save = useCallback(async payload => {
+    const save = useCallback(async value => {
+        const payload = { ...value, contact: { ...value.contact, phone: normalizePhone(value.contact?.phone) } };
         if (preview) { storage.set(PREVIEW_KEY, payload); return; }
         try {
             versionRef.current = await saveDraft(inviteId, token, payload, versionRef.current);
@@ -111,6 +113,19 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
         const timer = setTimeout(flush, RETRY_MS);
         return () => clearTimeout(timer);
     }, [status, conflict, linkGone, flush]);
+
+    // After a conflict this page holds changes the server never got: warn
+    // before leaving, except through the Reload button.
+    useEffect(() => {
+        if (!conflict) return undefined;
+        const warn = event => {
+            if (reloadingRef.current) return;
+            event.preventDefault();
+            event.returnValue = '';
+        };
+        window.addEventListener('beforeunload', warn);
+        return () => window.removeEventListener('beforeunload', warn);
+    }, [conflict]);
 
     // A new screen starts at the top, with its heading focused for screen readers.
     useEffect(() => {
@@ -158,18 +173,25 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
         const first = problems[0];
         goTo(first ? first.step : 'send', first?.part);
     };
+    const reload = () => { reloadingRef.current = true; window.location.reload(); };
+    // Sending is off once this page and the server disagree: the server would
+    // send another tab's answers.
+    const sendBlocked = conflict ? 'This form was changed in another tab. Reload the page to see the latest answers before you send.'
+        : linkGone ? 'This setup link was closed, so the form cannot be sent.' : '';
     const send = async () => {
         if (preview) { goTo('done'); return; }
+        if (sendBlocked) return;
         setSending(true);
         setSendError('');
         try {
             if (!(await flush())) throw new Error('Your latest changes are not saved yet. Check your internet connection and try again.');
-            const submittedAt = await submitSetup(inviteId, token);
+            const submittedAt = await submitSetup(inviteId, token, versionRef.current);
             setLoad(current => ({ ...current, meta: { ...current.meta, status: 'submitted', submittedAt } }));
             goTo('done');
         } catch (error) {
             if (error.code === 'invalid_link') setLinkGone(true);
-            setSendError(error.message);
+            if (error.code === 'conflict') setConflict(true);
+            else setSendError(error.message);
         } finally {
             setSending(false);
         }
@@ -199,7 +221,7 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
         case 'send':
             body = <SendStep submission={submission} problems={problems} onGo={(id, toPart) => goTo(id, toPart)}
                 notes={submission.notes} onNotes={notes => update(s => ({ ...s, notes }))}
-                onBack={() => goTo('workflow')} onSend={send} busy={sending} error={sendError} resend={resend} preview={preview} />;
+                onBack={() => goTo('workflow')} onSend={send} busy={sending} error={sendError} blocked={sendBlocked} resend={resend} preview={preview} />;
             break;
         case 'done':
             body = <DoneStep submittedAt={load.meta.submittedAt} preview={preview} onEdit={() => goTo('review')} onDownload={preview ? downloadAnswers : undefined} />;
@@ -220,7 +242,7 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
                     </button>
                 </>
             )}
-            <SaveStatus status={preview && status === 'saved' ? 'local' : status} />
+            <SaveStatus status={conflict ? 'conflict' : linkGone ? 'closed' : preview && status === 'saved' ? 'local' : status} />
         </>
     );
 
@@ -233,8 +255,8 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
                     </p>
                 )}
                 {conflict && (
-                    <ErrorBanner title="This form was changed in another tab — reload" onRetry={() => window.location.reload()} retryLabel="Reload">
-                        Your last change here was not saved. Reload to see the latest answers, then make the change again.
+                    <ErrorBanner title="This form was changed in another tab — reload" onRetry={reload} retryLabel="Reload">
+                        Changes made on this page are no longer saved, and it cannot be sent. Reload to see the latest answers, then make your change again.
                     </ErrorBanner>
                 )}
                 {linkGone && (

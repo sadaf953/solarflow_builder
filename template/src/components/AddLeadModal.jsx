@@ -298,8 +298,7 @@ export default function AddLeadModal({ isOpen, onClose, onSave, meta = {}, chann
         const checked = new Set(issues.map(issue => issue.path[0]));
         const missing = new Set(missingStageRequirements(STAGE_IDS.LEADS, finalData));
         getStageRequirements(STAGE_IDS.LEADS)
-            .filter(([path, label]) => missing.has(label) && !checked.has(path)
-                && (!path.startsWith('custom_fields.') || shownPaths.has(path)))
+            .filter(([path, label]) => missing.has(label) && !checked.has(path) && shownPaths.has(path))
             .forEach(([path, label]) => issues.push({ path: [path], message: `${label} is required` }));
 
         if (issues.length) {

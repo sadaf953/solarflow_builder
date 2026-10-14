@@ -15,6 +15,7 @@ import { DROPDOWN_CATALOG } from '../config/catalog/dropdowns.js';
 import { STAGE_IDS, isOn, isStageEnabled } from '../config/index.js';
 import { APP_ROLES } from '../constants';
 import { useGlobalPopup } from './GlobalPopup';
+import { listStore } from './operationsLists.js';
 import {
     Badge, EmptyState, ErrorBanner, Field, Input, LoadingState, Modal, SearchInput, SectionCard, Select, StatTile,
 } from '../ui/index.js';
@@ -24,7 +25,6 @@ const TEAM_TYPES = ['office2', 'agent2'];
 const partnersOn = isOn('channelPartners') || isOn('cpos');
 const teamsOn = isOn('cpos') || isOn('dealers');
 const PROFILE_COLUMNS = 'id, name, email, user_type, role, channel_partner, status, parent_profile_id, cpo_profile_id, created_at';
-const NOUNS = { admin: 'customer records', profiles: 'logins', bom_items: 'BOM lines' };
 
 const sameText = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 const byOrder = (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.label).localeCompare(String(b.label));
@@ -52,63 +52,11 @@ const LISTS = [
     isStageEnabled(STAGE_IDS.CASH) && { id: 'payment_method_modes', icon: Wallet, alwaysInUse: true },
 ].filter(Boolean).map(list => ({ ...DROPDOWN_CATALOG[list.id], ...list }));
 const LIST_IDS = LISTS.map(list => list.id);
+const { countRows, usageOf, renameEverywhere } = listStore(supabase, runWrite);
 
 const ICON_BUTTON = 'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-stone-500 transition-colors disabled:opacity-30 disabled:hover:bg-transparent';
 const iconButton = `${ICON_BUTTON} hover:bg-stone-100 hover:text-stone-900`;
 const dangerButton = `${ICON_BUTTON} hover:bg-red-50 hover:text-red-600`;
-
-async function countRows(table, column, value) {
-    const { count, error } = await supabase.from(table).select('id', { count: 'exact', head: true }).eq(column, value);
-    if (error) throw error;
-    return count || 0;
-}
-
-// How many records still hold `label`; null when that cannot be counted.
-async function usageOf(list, label) {
-    if (list.alwaysInUse) return null;
-    let total = 0;
-    for (const [table, column] of list.inUse || list.renames || []) total += await countRows(table, column, label);
-    for (const [table, column, key] of list.jsonRenames || []) total += await countRows(table, `${column}->>${key}`, label);
-    return total;
-}
-
-// Renames the label wherever it is stored. Writes that already landed are put
-// back if a later one fails; the error then says what could not be restored.
-async function renameEverywhere(list, from, to) {
-    const done = [];
-    try {
-        for (const [table, column] of list.renames || []) {
-            const expected = await countRows(table, column, from);
-            if (!expected) continue;
-            const res = await runWrite(supabase.from(table).update({ [column]: to }).eq(column, from).select('id'), { action: 'rename' });
-            if (!res.ok) throw res.error;
-            done.push({
-                what: `${res.rows.length} ${NOUNS[table]}`,
-                undo: () => runWrite(supabase.from(table).update({ [column]: from }).eq(column, to).select('id'), { action: 'undo' }),
-            });
-            if (res.rows.length !== expected) throw new Error(`Only ${res.rows.length} of ${expected} ${NOUNS[table]} could be renamed.`);
-        }
-        for (const [table, column, key] of list.jsonRenames || []) {
-            const rows = await fetchAllPages(() => supabase.from(table).select(`id, ${column}`).eq(`${column}->>${key}`, from).order('id'));
-            for (const row of rows) {
-                const res = await runWrite(supabase.from(table).update({ [column]: { ...row[column], [key]: to } }).eq('id', row.id).select('id'), { action: 'rename' });
-                if (!res.ok) throw res.error;
-                done.push({
-                    what: `1 ${NOUNS[table].replace(/s$/, '')}`,
-                    undo: () => runWrite(supabase.from(table).update({ [column]: row[column] }).eq('id', row.id).select('id'), { action: 'undo' }),
-                });
-            }
-        }
-    } catch (error) {
-        const stuck = [];
-        for (const step of done.reverse()) {
-            const res = await step.undo();
-            if (!res.ok) stuck.push(step.what);
-        }
-        error.stuck = stuck;
-        throw error;
-    }
-}
 
 // ─── One dropdown list ───────────────────────────────────────────────────────
 function ListModal({ list, rows, currentUser, onClose, onChanged }) {

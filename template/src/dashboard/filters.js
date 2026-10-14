@@ -2,7 +2,7 @@
 // without a database.
 
 import { getMonthBounds, monthKey } from '../lib/format.js';
-import { STAGE_IDS } from '../config/index.js';
+import { STAGE_IDS, isStageEnabled } from '../config/index.js';
 
 // ilike without wildcards: an exact match that ignores case.
 export const exactLike = value => String(value).trim().replace(/[\\%_]/g, ch => `\\${ch}`);
@@ -29,23 +29,26 @@ export function monthFilterValue(month, year, now = new Date()) {
 
 /**
  * Date filters for a stage list. Leads are dated by when they were added
- * (a timestamp, read in IST); every other stage by its registration date.
- * The month filter is offered on Leads and Registration only.
+ * (a timestamp, read in IST); every other stage by its registration date,
+ * or also by when it was added when the pipeline has no Registration stage
+ * (nothing else writes registration_date). The month filter is offered on
+ * Leads and Registration only.
  */
 export function stageDateFilters(stageId, { year = '', month = '' } = {}, now = new Date()) {
     const isLeads = stageId === STAGE_IDS.LEADS;
-    const field = isLeads ? 'created_at' : 'registration_date';
+    const byAdded = isLeads || !isStageEnabled(STAGE_IDS.REGISTRATION);
+    const field = byAdded ? 'created_at' : 'registration_date';
     const ranges = [];
     const monthApplies = Boolean(month) && (isLeads || stageId === STAGE_IDS.REGISTRATION);
     // 'This month' / 'Last month' already name a year, so the year filter steps aside.
     if (/^\d{4}$/.test(year) && !(monthApplies && ['this-month', 'last-month'].includes(month))) {
         const next = Number(year) + 1;
-        ranges.push(isLeads
+        ranges.push(byAdded
             ? { start: `${year}-01-01T00:00:00+05:30`, end: `${next}-01-01T00:00:00+05:30` }
             : { start: `${year}-01-01`, end: `${next}-01-01` });
     }
     if (monthApplies) {
-        const bounds = getMonthBounds(monthFilterValue(month, year, now), isLeads);
+        const bounds = getMonthBounds(monthFilterValue(month, year, now), byAdded);
         if (bounds) ranges.push(bounds);
     }
     return ranges.map(range => ({ field, ...range }));

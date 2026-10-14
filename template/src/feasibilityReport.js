@@ -1,4 +1,4 @@
-import { BRANDING, STAGE_IDS, stageLabel } from './config/index.js';
+import { BRANDING, STAGE_IDS, isStageEnabled, stageLabel } from './config/index.js';
 import { formatDate } from './lib/format.js';
 
 const A4 = [595.28, 841.89];
@@ -52,6 +52,9 @@ export function mapFeasibilityReport(customer) {
     };
 }
 
+// The Feasibility No is typed in Registration, or in the Loan tab when the pipeline has no Registration stage.
+export const feasibilityNoStage = () => (isStageEnabled(STAGE_IDS.REGISTRATION) ? STAGE_IDS.REGISTRATION : STAGE_IDS.LOAN);
+
 // `tab` is the stage tab where the value is entered, using the client's stage names.
 export function getMissingFeasibilityFields(data) {
     const checks = [
@@ -61,7 +64,7 @@ export function getMissingFeasibilityFields(data) {
         ['District', STAGE_IDS.LEADS, data.district],
         ['Pincode', STAGE_IDS.LEADS, data.pincode],
         ['System Capacity', STAGE_IDS.LEADS, data.capacity],
-        ['PM Surya Ghar Portal / Feasibility No', STAGE_IDS.REGISTRATION, data.feasibilityNo],
+        ['PM Surya Ghar Portal / Feasibility No', feasibilityNoStage(), data.feasibilityNo],
         ['Jan Samarth Application No', STAGE_IDS.LOAN, data.janSamarthNo],
         ['Total Quotation Amount', STAGE_IDS.LOAN, data.projectCost]
     ];

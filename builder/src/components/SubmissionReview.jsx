@@ -1,14 +1,17 @@
-import { useEffect, useId, useMemo, useState } from 'react';
-import { Download, ExternalLink, FileCode2, FileJson, ListChecks, Settings2, User, Workflow } from 'lucide-react';
+import { useId, useMemo, useState } from 'react';
+import { Columns3, Download, ExternalLink, FileCode2, FileJson, ListChecks, ListPlus, ListTree, Settings2, User, Workflow } from 'lucide-react';
 import { DROPDOWN_CATALOG, CUSTOM_FIELD_TYPES } from '../../../template/src/config/catalog/dropdowns.js';
 import { BRANDING_FIELDS, brandingErrors, isAllowedSheetUrl, resolveClientConfig, slugify } from '../../../template/src/config/resolve.js';
 import { Badge, ErrorBanner, Field, Input, SectionCard, Spinner, SuccessBanner, Textarea, describedBy } from '../../../template/src/ui/index.js';
 import { QUESTION_STEPS, describeAnswer, isVisible } from '../catalog/questions.js';
-import { brandingOverrides, submissionFeatures, submissionToClientConfig } from '../catalog/submission.js';
-import { checkClientConfig, downloadBytes, generateClientZip, generateSetupSql } from '../zip/index.js';
+import { brandingOverrides, effectiveWorkflow, restoredStages, submissionFeatures, submissionToClientConfig } from '../catalog/submission.js';
+import { buildOptions, checkClientConfig, downloadBytes, generateClientZip, generateSetupSql } from '../zip/index.js';
 import { FeatureColumns, FeatureToggles } from './FeatureViews.jsx';
+import { FieldEditor } from './FieldEditor.jsx';
+import { ListsEditor } from './ListEditors.jsx';
+import { StageEditor } from './StageEditor.jsx';
 import { Expander, MessageList } from './common.jsx';
-import { BUILTIN_BY_ID, downloadJson, storage } from './wizardData.js';
+import { BUILTIN_BY_ID, adminWorkflowFrom, currentStages, downloadJson } from './wizardData.js';
 
 const CONTACT_ROWS = [['company', 'Company'], ['name', 'Name'], ['phone', 'Phone'], ['email', 'Email (first admin login)'], ['city', 'City'], ['state', 'State']];
 
@@ -52,28 +55,37 @@ function Answers({ answers }) {
     );
 }
 
-function WorkflowSummary({ submission, config }) {
-    const workflow = submission.workflow || {};
+function SheetLink({ workflow }) {
+    const url = String(workflow.sheetUrl || '').trim();
+    return (
+        <div className="space-y-2 text-sm">
+            <p className="font-bold text-stone-900">The client shared a sheet instead of filling in the workflow.</p>
+            {isAllowedSheetUrl(url)
+                ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1.5 break-all font-semibold text-blue-700 underline">
+                    Open the sheet <ExternalLink size={14} aria-hidden="true" /></a>
+                : <p className="text-red-700">The sheet link is missing or not a Google Sheets / OneDrive link{url ? `: ${url}` : '.'}</p>}
+            {workflow.sheetNote && <p className="whitespace-pre-line text-stone-600">{workflow.sheetNote}</p>}
+        </div>
+    );
+}
+
+// The workflow the zip is built from: the admin's when set, else the client's.
+function WorkflowSummary({ submission, config, settings }) {
+    const workflow = effectiveWorkflow(submission, settings.workflow);
     const resolved = useMemo(() => resolveClientConfig(config), [config]);
+    const restored = useMemo(() => restoredStages(submission, settings), [submission, settings]);
     const stageLabel = Object.fromEntries(resolved.stages.map(stage => [stage.id, stage.label]));
-    if (workflow.source === 'sheet') {
-        const url = String(workflow.sheetUrl || '').trim();
-        return (
-            <div className="space-y-2 text-sm">
-                <p className="font-bold text-stone-900">The client shared a sheet instead of filling in the workflow.</p>
-                {isAllowedSheetUrl(url)
-                    ? <a href={url} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-1.5 break-all font-semibold text-blue-700 underline">
-                        Open the sheet <ExternalLink size={14} aria-hidden="true" /></a>
-                    : <p className="text-red-700">The sheet link is missing or not a Google Sheets / OneDrive link{url ? `: ${url}` : '.'}</p>}
-                {workflow.sheetNote && <p className="whitespace-pre-line text-stone-600">{workflow.sheetNote}</p>}
-            </div>
-        );
-    }
     const changedLists = Object.keys(workflow.dropdowns || {}).filter(id => DROPDOWN_CATALOG[id] && Array.isArray(workflow.dropdowns[id]));
+    const stagesFrom = settings.workflow ? 'set up by you' : workflow.stagesMode === 'custom' ? 'changed by the client' : 'standard';
     return (
         <div className="space-y-5 text-sm">
+            {restored.length > 0 && (
+                <p role="status" className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-blue-900">
+                    Added back because the features need them: {restored.map(stage => `${stage.label} (${stage.reason})`).join(', ')}.
+                </p>
+            )}
             <div>
-                <p className="sf-kicker">Stages · {workflow.stagesMode === 'custom' ? 'changed by the client' : 'standard'}</p>
+                <p className="sf-kicker">Stages · {stagesFrom}</p>
                 <ol className="mt-2 flex flex-wrap gap-1.5">
                     {resolved.stages.map((stage, index) => {
                         const builtin = BUILTIN_BY_ID[stage.id];
@@ -123,6 +135,8 @@ function WorkflowSummary({ submission, config }) {
 // Company details the admin adds for the client's documents. Labels and
 // length limits come from BRANDING_FIELDS.
 const COMPANY_FIELDS = [
+    { key: 'discomName', label: 'DISCOM name', max: 60, placeholder: 'For example MSEDCL', hint: 'The electricity company the client files with. Used on DISCOM stages and quotations.' },
+    { key: 'chargesLabel', label: 'Registration charges label', max: 60, hint: 'Printed on quotations as “… Charge”. Leave empty for the usual label shown here.' },
     { key: 'address', multiline: true, hint: 'Printed in the quotation footer and as the EPC contractor address on feasibility reports.' },
     { key: 'gstin', upper: true, hint: 'Printed at the top of quotations.' },
     { key: 'website', placeholder: 'www.example.com', hint: 'Printed in the quotation footer.' },
@@ -137,17 +151,22 @@ const BANK_FIELDS = [
     { key: 'bankIfsc', upper: true, placeholder: 'SBIN0001234' },
 ];
 
-function CompanyDetails({ value, errors, onChange }) {
+// `fallback` is the branding without the admin's details (placeholders).
+function CompanyDetails({ value, fallback, errors, onChange }) {
     const id = useId();
     const [touched, setTouched] = useState({});
     const filled = Object.keys(brandingOverrides(value)).length;
-    const renderField = ({ key, multiline, upper, hint, ...props }) => {
+    const placeholders = {
+        discomName: fallback.discomName,
+        chargesLabel: fallback.chargesLabel || `${String(value.discomName || '').trim() || fallback.discomName} registration`,
+    };
+    const renderField = ({ key, multiline, upper, hint, label, max, ...props }) => {
         const fieldId = `${id}-${key}`;
         const error = touched[key] ? errors[key] : '';
         const Control = multiline ? Textarea : Input;
         return (
-            <Field key={key} label={BRANDING_FIELDS[key].label} htmlFor={fieldId} hint={hint} error={error} className={multiline ? 'sm:col-span-2' : ''}>
-                <Control id={fieldId} value={value[key] || ''} maxLength={BRANDING_FIELDS[key].max} {...props}
+            <Field key={key} label={label || BRANDING_FIELDS[key].label} htmlFor={fieldId} hint={hint} error={error} className={multiline ? 'sm:col-span-2' : ''}>
+                <Control id={fieldId} value={value[key] || ''} maxLength={max || BRANDING_FIELDS[key].max} placeholder={placeholders[key]} {...props}
                     aria-invalid={error ? true : undefined} aria-describedby={describedBy(fieldId, { hint, error })}
                     onBlur={() => setTouched(current => ({ ...current, [key]: true }))}
                     onChange={event => onChange({ ...value, [key]: upper ? event.target.value.toUpperCase() : event.target.value })} />
@@ -175,41 +194,66 @@ function CompanyDetails({ value, errors, onChange }) {
     );
 }
 
+// The admin's own stages, lists and fields for this client (for example
+// from the client's sheet). They replace the client's in the zip.
+function AdminWorkflowEditor({ submission, features, workflow, onChange }) {
+    const sheet = submission.workflow?.source === 'sheet';
+    if (!workflow) {
+        return (
+            <div className="space-y-3 text-sm text-stone-600">
+                <p>
+                    {sheet
+                        ? 'Enter the stages, lists and extra fields from the client’s sheet here. The zip uses them instead of the standard ones.'
+                        : 'Correct the client’s stages, lists or extra fields here if needed. The zip uses your version instead of theirs.'}
+                </p>
+                <button type="button" onClick={() => onChange(adminWorkflowFrom(submission))} className="sf-btn-primary min-h-11">
+                    <Columns3 size={14} aria-hidden="true" /> Set up the workflow here
+                </button>
+            </div>
+        );
+    }
+    const set = patch => onChange({ ...workflow, ...patch });
+    const undo = () => {
+        if (window.confirm('Remove your stages, lists and fields and use the client’s again?')) onChange(null);
+    };
+    return (
+        <div className="space-y-4">
+            <SectionCard title="Stages" icon={Columns3}>
+                <StageEditor workflow={workflow} features={features} onChange={set} />
+            </SectionCard>
+            <SectionCard title="Dropdown lists" icon={ListTree}>
+                <ListsEditor dropdowns={workflow.dropdowns} features={features} onChange={dropdowns => set({ dropdowns })} />
+            </SectionCard>
+            <SectionCard title="Extra fields" icon={ListPlus}>
+                <FieldEditor fields={workflow.customFields} stages={currentStages(workflow, features)} onChange={customFields => set({ customFields })} />
+            </SectionCard>
+            <button type="button" onClick={undo} className="sf-btn-secondary min-h-11">Use the client’s workflow again</button>
+        </div>
+    );
+}
+
 /**
  * Everything the agency needs about one submission, plus the downloads.
- * Admin feature switches, slug, owner email and company details are kept
- * per `storageKey` in this browser (seeded from `initial`).
+ * `settings` ({adminOverrides, slug, ownerEmail, branding, workflow}, see
+ * normalizeSettings) belong to the page, which decides where they are kept;
+ * every change goes to `onSettings`. `saveStatus` is shown next to them.
  */
-export function SubmissionReview({ submission, storageKey, initial = {}, onDownloaded }) {
+export function SubmissionReview({ submission, settings, onSettings, saveStatus, onDownloaded }) {
     const id = useId();
-    const [settings, setSettings] = useState(() => {
-        const saved = storageKey ? storage.get(storageKey) : null;
-        return {
-            adminOverrides: saved?.adminOverrides || initial.adminOverrides || {},
-            slug: saved?.slug ?? initial.slug ?? '',
-            ownerEmail: saved?.ownerEmail ?? initial.ownerEmail ?? '',
-            branding: saved?.branding || initial.branding || {},
-        };
-    });
     const [busy, setBusy] = useState('');
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
-    useEffect(() => { if (storageKey) storage.set(storageKey, settings); }, [storageKey, settings]);
 
-    const options = useMemo(() => ({
-        adminOverrides: settings.adminOverrides,
-        slug: settings.slug.trim() || undefined,
-        ownerEmail: settings.ownerEmail.trim() || undefined,
-        branding: settings.branding,
-    }), [settings]);
+    const options = useMemo(() => buildOptions(settings), [settings]);
     const config = useMemo(() => submissionToClientConfig(submission, options), [submission, options]);
-    const validation = useMemo(() => checkClientConfig(config), [config]);
+    const fallbackBranding = useMemo(() => submissionToClientConfig(submission).branding, [submission]);
+    const validation = useMemo(() => checkClientConfig(config, { adminWorkflow: options.workflow }), [config, options]);
     const companyErrors = useMemo(() => brandingErrors(config.branding), [config]);
     const featureResult = submissionFeatures(submission, settings.adminOverrides);
     const baseline = submissionFeatures(submission).features;
     const contact = submission.contact || {};
     const defaultSlug = slugify(contact.company);
-    const update = patch => { setSettings(current => ({ ...current, ...patch })); setNotice(''); };
+    const update = patch => { onSettings({ ...settings, ...patch }); setNotice(''); };
 
     const run = async (kind, task) => {
         setBusy(kind);
@@ -237,16 +281,18 @@ export function SubmissionReview({ submission, storageKey, initial = {}, onDownl
     const downloadAnswers = () => {
         downloadJson({ submission, ...settings }, `${config.client.slug}-setup.json`);
     };
+    const overrideCount = Object.keys(settings.adminOverrides).length;
 
     return (
         <div className="space-y-4">
+            {saveStatus && <div className="flex justify-end">{saveStatus}</div>}
             <SectionCard title="Contact" icon={User}>
                 <Rows rows={CONTACT_ROWS.map(([key, label]) => [label, contact[key]])} />
             </SectionCard>
 
             <SectionCard title="Features" icon={ListChecks} subtitle="From the client's answers, their own switches and yours.">
                 <FeatureColumns result={featureResult} />
-                <Expander title="Change features (admin)" subtitle={Object.keys(settings.adminOverrides).length ? `${Object.keys(settings.adminOverrides).length} changed by you` : 'Saved in this browser'}>
+                <Expander title="Change features (admin)" subtitle={overrideCount ? `${overrideCount} changed by you` : 'Only where the answers need correcting'}>
                     <FeatureToggles current={featureResult.features} baseline={baseline} overrides={settings.adminOverrides}
                         onChange={adminOverrides => update({ adminOverrides })} />
                 </Expander>
@@ -262,9 +308,14 @@ export function SubmissionReview({ submission, storageKey, initial = {}, onDownl
             </SectionCard>
 
             <SectionCard title="Workflow" icon={Workflow}>
-                <WorkflowSummary submission={submission} config={config} />
+                {submission.workflow?.source === 'sheet' && <SheetLink workflow={submission.workflow} />}
+                {(submission.workflow?.source !== 'sheet' || settings.workflow) && <WorkflowSummary submission={submission} config={config} settings={settings} />}
+                <Expander title="Set up the workflow (admin)" defaultOpen={Boolean(settings.workflow)}
+                    subtitle={settings.workflow ? 'Your stages, lists and fields are used for the zip' : 'Optional · for example from the client’s sheet'}>
+                    <AdminWorkflowEditor submission={submission} features={featureResult.features} workflow={settings.workflow}
+                        onChange={workflow => update({ workflow })} />
+                </Expander>
             </SectionCard>
-
             <SectionCard title="Build the client app" icon={Settings2}>
                 <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Owner email (first admin login)" htmlFor={`${id}-owner`} hint={`Leave empty to use ${contact.email || 'the client email'}.`}>
@@ -276,7 +327,7 @@ export function SubmissionReview({ submission, storageKey, initial = {}, onDownl
                             onChange={event => update({ slug: event.target.value.toLowerCase() })} />
                     </Field>
                 </div>
-                <CompanyDetails value={settings.branding} errors={companyErrors} onChange={branding => update({ branding })} />
+                <CompanyDetails value={settings.branding} fallback={fallbackBranding} errors={companyErrors} onChange={branding => update({ branding })} />
                 {validation.errors.length > 0 && <ErrorBanner title="Fix these before downloading"><MessageList items={validation.errors} /></ErrorBanner>}
                 {validation.warnings.length > 0 && (
                     <div role="status" className="rounded-xl border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">

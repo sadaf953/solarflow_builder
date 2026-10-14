@@ -28,6 +28,9 @@ import { canSwitchChecklistMode, setChecklistMode, useChecklistMode } from '../u
 import CustomerModalTabsRouter from './CustomerModalTabsRouter';
 import { FilePreviewModal, getStageRemarkFromData } from './modal-tabs/shared';
 import { useGlobalPopup } from './GlobalPopup';
+import {
+    IGNORED_KEYS, applyServerCopy, draftAfterSave, getChangedFields, isBlank, sameValue, stableStringify,
+} from './modal-tabs/customerDraft.js';
 import ConflictResolutionModal from './ConflictResolutionModal';
 
 const CustomerDocumentsTab = lazyWithRetry(() => import('./modal-tabs/CustomerDocumentsTab'));
@@ -42,7 +45,6 @@ const OPERATIONAL_CHECKLIST = [{ field: 'insurance_status', label: 'Insurance St
 const STAFF_EDITORS = new Set(['admin', 'sales', 'channel_partner_office', 'office2', 'agent2']);
 // Text columns that hold numbers typed with Indian commas.
 const NUMERIC_TEXT_FIELDS = ['system_capacity_kwp', 'module_wp', 'no_of_modules', 'invoice_value', 'dc_cable', 'ac_cable', 'vendor_quote'];
-const IGNORED_KEYS = new Set(['id', 'created_at', 'updated_at', 'crn']);
 
 const getDocTypeLabel = (type) => {
     if (!type) return 'Client Attachment';
@@ -64,39 +66,6 @@ const formatDateTime = (date) => {
 const formatStamp = (value) => new Date(value).toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
 });
-
-const isBlank = value => value === undefined || value === null || value === ''
-    || (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0);
-
-// Postgres stores jsonb with its own key order, so objects compare key-sorted.
-const stableStringify = value => JSON.stringify(value ?? null, (key, val) => (
-    val && typeof val === 'object' && !Array.isArray(val)
-        ? Object.fromEntries(Object.keys(val).sort().map(k => [k, val[k]]))
-        : val
-));
-
-const getChangedFields = (draft = {}, saved = {}) => {
-    const changed = new Set();
-    const keys = new Set([...Object.keys(saved || {}), ...Object.keys(draft || {})]);
-    keys.forEach(key => {
-        if (IGNORED_KEYS.has(key)) return;
-        const draftValue = draft?.[key];
-        const savedValue = saved?.[key];
-        if (typeof draftValue === 'boolean' || typeof savedValue === 'boolean') {
-            if (Boolean(draftValue) !== Boolean(savedValue)) changed.add(key);
-            return;
-        }
-        if (isBlank(draftValue) && isBlank(savedValue)) return;
-        if (typeof draftValue === 'object' || typeof savedValue === 'object') {
-            if (stableStringify(draftValue) !== stableStringify(savedValue)) changed.add(key);
-            return;
-        }
-        if (String(draftValue ?? '').trim() !== String(savedValue ?? '').trim()) changed.add(key);
-    });
-    return changed;
-};
-
-const sameValue = (a, b) => getChangedFields({ value: a }, { value: b }).size === 0;
 
 // Extra-field keys whose value differs; null means "remove the key".
 const customFieldPatch = (draft, saved) => {
@@ -181,8 +150,8 @@ const parseRemarks = (value) => {
 function isTabAvailable(id, record) {
     if (id === HISTORY_TAB) return true;
     if (id === DOCUMENTS_TAB) return isOn('documentUploads');
-    // Lost Project has no tab of its own; Pause opens it.
-    if (id === STAGE_IDS.LOST_PROJECT) return true;
+    // Lost Project has a tab only while the customer is parked there.
+    if (id === STAGE_IDS.LOST_PROJECT) return record?.stage === STAGE_IDS.LOST_PROJECT;
     const stage = STAGE_BY_ID[id];
     return Boolean(stage && !stage.terminal && isStageApplicable(stage, record));
 }
@@ -209,8 +178,9 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
     const [activeTab, setActiveTab] = useState(() => {
         if (customer?._autoPrintBom) return resolveTab(STAGE_IDS.MATERIAL_INTEGRATION, customer);
         if (defaultTab) return resolveTab(defaultTab, customer);
-        // Completed customers open on Leads.
+        // Completed customers open on Leads; parked ones on their Resume controls.
         if ((customer?.stage || '').trim().toUpperCase() === STAGE_IDS.COMPLETED) return STAGE_IDS.LEADS;
+        if (customer?.stage === STAGE_IDS.LOST_PROJECT) return STAGE_IDS.LOST_PROJECT;
         return resolveTab(readSavedTab() || customer?.stage, customer);
     });
     useEffect(() => {
@@ -220,6 +190,8 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
     const [editingSection, setEditingSection] = useState(null);
     const [isFormDirty, setIsFormDirty] = useState(false);
     const [editData, setEditData] = useState({ ...customer });
+    // The draft as last set, for handlers that run before the next render.
+    const editDataRef = useRef(editData);
     const savedDataRef = useRef({ ...customer });
     const loadedUpdatedAtRef = useRef(customer?.updated_at || null);
     const [concurrentConflict, setConcurrentConflict] = useState(null);
@@ -245,40 +217,59 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
         return () => { cancelled = true; };
     }, [editData.channel_partner, customer.channel_partner, user?.userType, user?.channel_partner]);
 
+    // Every draft change goes through here, so the dirty flag always matches
+    // the draft against the current baseline.
+    const commitDraft = useCallback((next) => {
+        editDataRef.current = next;
+        setEditData(next);
+        setIsFormDirty(getChangedFields(next, savedDataRef.current).size > 0);
+    }, []);
+
     const handleEditDataChange = (updater) => {
-        setEditData(previous => {
-            const next = typeof updater === 'function' ? updater(previous) : updater;
-            setIsFormDirty(getChangedFields(next, savedDataRef.current).size > 0);
-            return next;
-        });
+        commitDraft(typeof updater === 'function' ? updater(editDataRef.current) : updater);
     };
 
-    // A colleague's save to this customer reloads the card while nothing is being edited.
+    // Takes a server copy of this customer into the card; fields being edited
+    // keep what was typed (see applyServerCopy). A copy older than the row we
+    // last read is ignored: the parent never hears about extra fields saved
+    // through merge_custom_fields.
+    const takeServerCopy = useCallback((server, { full = false } = {}) => {
+        const next = applyServerCopy(
+            { draft: editDataRef.current, baseline: savedDataRef.current, loadedAt: loadedUpdatedAtRef.current },
+            server, { full },
+        );
+        if (!next) return;
+        savedDataRef.current = next.baseline;
+        loadedUpdatedAtRef.current = next.loadedAt;
+        commitDraft(next.draft);
+    }, [commitDraft]);
+
+    const customerId = customer?.id;
+    const reloadFromServer = useCallback(async () => {
+        const { data } = await supabase.from('admin').select('*').eq('id', customerId).maybeSingle();
+        if (data) takeServerCopy(data, { full: true });
+    }, [customerId, takeServerCopy]);
+
+    // The full record, read once: the card may have been opened from a list that loads only some columns.
     useEffect(() => {
-        if (!customer?.id) return;
-        const channel = supabase.channel(`customer_modal_concurrency_${customer.id}`)
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'admin', filter: `id=eq.${customer.id}` }, (payload) => {
-                if (!payload.new || isFormDirty) return;
-                loadedUpdatedAtRef.current = payload.new.updated_at || loadedUpdatedAtRef.current;
-                savedDataRef.current = { ...payload.new };
-                setEditData({ ...payload.new });
+        if (customerId) reloadFromServer();
+    }, [customerId, reloadFromServer]);
+
+    // A colleague's save to this customer.
+    useEffect(() => {
+        if (!customerId) return;
+        const channel = supabase.channel(`customer_modal_concurrency_${customerId}`)
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'admin', filter: `id=eq.${customerId}` }, (payload) => {
+                if (payload.new) takeServerCopy(payload.new, { full: true });
             })
             .subscribe();
         return () => { supabase.removeChannel(channel); };
-    }, [customer?.id, isFormDirty]);
+    }, [customerId, takeServerCopy]);
 
-    // Follow the parent's copy while not editing. The parent never hears about
-    // extra fields saved through merge_custom_fields, so a copy older than the
-    // row we last read is ignored in favour of that row.
+    // Follow the parent's copy, which may be a list row with only some columns.
     useEffect(() => {
-        if (isFormDirty || !customer) return;
-        const loaded = loadedUpdatedAtRef.current;
-        const isOlder = loaded && customer.updated_at && new Date(customer.updated_at).getTime() < new Date(loaded).getTime();
-        const record = isOlder ? savedDataRef.current : customer;
-        if (!isOlder) loadedUpdatedAtRef.current = customer.updated_at || loadedUpdatedAtRef.current;
-        savedDataRef.current = { ...record };
-        setEditData({ ...record });
-    }, [customer, isFormDirty]);
+        if (customer) takeServerCopy(customer);
+    }, [customer, takeServerCopy]);
 
     // Protect against accidental browser refresh or tab close when form has unsaved edits
     useEffect(() => {
@@ -332,19 +323,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
     const isInstallationDetailsEditable = isEditable && !isChannelPartnerManager;
     const canDownloadAllDocuments = userType !== 'vendor';
 
-    // Fetch the full record: the card may have been opened from a list that loads only some columns.
-    useEffect(() => {
-        if (!customer?.id) return;
-        supabase.from('admin').select('*').eq('id', customer.id).single().then(({ data }) => {
-            if (!data) return;
-            loadedUpdatedAtRef.current = data.updated_at || loadedUpdatedAtRef.current;
-            savedDataRef.current = { ...data };
-            setEditData(prev => (isFormDirty ? { ...data, ...prev } : { ...data }));
-        });
-    }, [customer?.id, isFormDirty]);
-
     const saveBomRef = useRef(null);
-    const prevCustomerRef = useRef(customer);
     const urlCacheRef = useRef({});
     const [agreement, setAgreement] = useState(null);
 
@@ -545,27 +524,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
         fetchLogs();
     };
 
-    useEffect(() => {
-        setEditData(prev => {
-            // On first mount or customer ID change, do a full reset
-            if (!prev || prev.id !== customer.id) {
-                prevCustomerRef.current = customer;
-                return { ...customer };
-            }
-            // Accept a new server value only for fields the user has not changed locally.
-            const merged = { ...prev };
-            const prevCust = prevCustomerRef.current;
-            for (const key of Object.keys(customer)) {
-                const untouched = typeof prev[key] === 'object' && prev[key] !== null
-                    ? stableStringify(prev[key]) === stableStringify(prevCust?.[key])
-                    : prev[key] === prevCust?.[key];
-                if (untouched || !(key in merged)) merged[key] = customer[key];
-            }
-            prevCustomerRef.current = customer;
-            return merged;
-        });
-        fetchLogs();
-    }, [customer, fetchLogs]);
+    useEffect(() => { fetchLogs(); }, [customer, fetchLogs]);
 
     const handleSaveStageRemark = async (stageId) => {
         const targetStage = stageId || editData.stage;
@@ -577,7 +536,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
         const appendText = `${stageLabel(targetStage)} (${formatDateTime(new Date())}): ${currentRemark.trim() || 'Remark cleared'}`;
         const updatedInternalRemarks = editData.internal_remarks ? `${editData.internal_remarks}\n${appendText}` : appendText;
 
-        setEditData(prev => ({ ...prev, stages_remarks: updatedRemarks, internal_remarks: updatedInternalRemarks }));
+        handleEditDataChange(prev => ({ ...prev, stages_remarks: updatedRemarks, internal_remarks: updatedInternalRemarks }));
         if (await handleSectionUpdate(customer.id, { stages_remarks: updatedRemarks, internal_remarks: updatedInternalRemarks }) === false) return;
 
         await logActivity(user.id, 'update', `${customer.customer_name}: Stage remark update for ${stageLabel(targetStage)} - "${currentRemark}"`, '', customer.id);
@@ -625,10 +584,16 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
     // After a write, re-read what the server stored and use ITS updated_at as
     // the baseline: the client clock can drift, stored values are coerced
     // (numbers, jsonb key order), and the parent's copy lacks extra fields.
-    const rebaseFromServer = async (sentPatch) => {
+    // The draft takes the stored row but keeps anything typed while the save
+    // was in flight (`sent` is the draft that was saved, `sentBaseline` the
+    // baseline it was compared with).
+    const rebaseFromServer = async (sentPatch, sent, sentBaseline) => {
         const { data: savedRow } = await supabase.from('admin').select('*').eq('id', customer.id).maybeSingle();
-        savedDataRef.current = savedRow ? { ...savedRow } : { ...savedDataRef.current, ...sentPatch };
+        const latestBaseline = savedDataRef.current;
+        const stored = savedRow ? { ...savedRow } : { ...latestBaseline, ...sentPatch };
+        savedDataRef.current = stored;
         loadedUpdatedAtRef.current = savedRow?.updated_at || new Date().toISOString();
+        commitDraft(draftAfterSave({ current: editDataRef.current, sent, sentBaseline, latestBaseline, stored }));
     };
 
     const nextStageId = getNextStageId(editData);
@@ -659,6 +624,8 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
             return;
         }
 
+        const sent = editData;
+        const sentBaseline = savedDataRef.current;
         const oldStage = editData.stage;
         const updatedRemarks = { ...parseRemarks(editData.stages_remarks), [oldStage]: '' };
         const updates = withPlainNumbers({ ...editData, stage: destStageId, stages_remarks: updatedRemarks });
@@ -698,9 +665,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
             const ok = await onUpdate(customer.id, narrowed);
             if (ok === false) throw new Error('The database did not accept the stage change.');
 
-            await rebaseFromServer({ ...narrowed, custom_fields: updates.custom_fields });
-            setEditData({ ...savedDataRef.current });
-            setIsFormDirty(false);
+            await rebaseFromServer({ ...narrowed, custom_fields: updates.custom_fields }, sent, sentBaseline);
             setActiveTab(destStageId);
 
             void logActivity(user.id, 'stage_change', `${customer.customer_name}: Stage changed`, `Stage: ${oldStage || 'Empty'} → ${destStageId}`, customer.id);
@@ -743,10 +708,10 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
         // onUpdate resolves false on failure and has already shown the error.
         if (ok === false) return;
 
-        setEditData(prev => ({ ...prev, stage: STAGE_IDS.LOST_PROJECT, hold_procurement: payload }));
         // Re-base the conflict baseline so the next save does not see this write as a colleague's.
         savedDataRef.current = { ...savedDataRef.current, stage: STAGE_IDS.LOST_PROJECT, hold_procurement: payload };
-        loadedUpdatedAtRef.current = new Date().toISOString();
+        handleEditDataChange(prev => ({ ...prev, stage: STAGE_IDS.LOST_PROJECT, hold_procurement: payload }));
+        void reloadFromServer();
         setActiveTab(STAGE_IDS.LOST_PROJECT);
 
         await logActivity(user.id, 'stage_change', `${customer.customer_name}: Stage changed`, `Stage: ${originStage || 'Empty'} → ${STAGE_IDS.LOST_PROJECT}`, customer.id);
@@ -816,7 +781,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
 
             if (Object.keys(narrowedUpdates).length === 0 && Object.keys(cfPatch).length === 0) {
                 setEditingSection(null);
-                setIsFormDirty(false);
+                setIsFormDirty(getChangedFields(editDataRef.current, savedDataRef.current).size > 0);
                 return true;
             }
 
@@ -834,10 +799,9 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
                     `Stage: ${customer.stage || 'Empty'} → ${draft.stage || 'Empty'}`, customer.id);
             }
 
-            await rebaseFromServer({ ...narrowedUpdates, custom_fields: updates.custom_fields });
+            await rebaseFromServer({ ...narrowedUpdates, custom_fields: updates.custom_fields }, draft, baseline);
             setConcurrentConflict(null);
             setEditingSection(null);
-            setIsFormDirty(false);
             if (stageChanged) setActiveTab(draft.stage);
             void fetchLogs();
             return true;
@@ -871,7 +835,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
 
         savedDataRef.current = { ...serverRecord };
         loadedUpdatedAtRef.current = serverRecord.updated_at;
-        setEditData(merged);
+        commitDraft(merged);
         setConcurrentConflict(null);
         await handleSave(true, merged);
     };
@@ -880,9 +844,8 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
         if (!concurrentConflict?.serverData) return;
         const serverRecord = concurrentConflict.serverData;
         savedDataRef.current = { ...serverRecord };
-        setEditData({ ...serverRecord });
         loadedUpdatedAtRef.current = serverRecord.updated_at;
-        setIsFormDirty(false);
+        commitDraft({ ...serverRecord });
         setConcurrentConflict(null);
         showAlert('Reloaded latest data from server. Your unsaved edits were discarded.', { type: 'info' });
     };
@@ -950,8 +913,10 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
         }
     };
 
+    const isParked = editData.stage === STAGE_IDS.LOST_PROJECT;
     const tabs = [
         ...PRIMARY_STAGES.filter(stage => !stage.terminal && isStageApplicable(stage, editData)).map(stage => ({ id: stage.id, label: stage.label, icon: stage.icon })),
+        ...(isParked ? [{ id: STAGE_IDS.LOST_PROJECT, label: stageLabel(STAGE_IDS.LOST_PROJECT), icon: STAGE_BY_ID[STAGE_IDS.LOST_PROJECT]?.icon }] : []),
         ...(isOn('documentUploads') ? [{ id: DOCUMENTS_TAB, label: 'Documents', icon: FolderOpen }] : []),
         { id: HISTORY_TAB, label: 'Notes & History', icon: History },
     ];
@@ -1158,7 +1123,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
                                                     value={curRemark}
                                                     onChange={e => {
                                                         const newVal = e.target.value;
-                                                        setEditData(prev => ({ ...prev, stages_remarks: { ...parseRemarks(prev.stages_remarks), [prev.stage]: newVal } }));
+                                                        handleEditDataChange(prev => ({ ...prev, stages_remarks: { ...parseRemarks(prev.stages_remarks), [prev.stage]: newVal } }));
                                                     }}
                                                     onKeyDown={(e) => e.key === 'Enter' && handleSaveStageRemark()}
                                                     className="flex-1 bg-stone-50 border border-stone-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-amber-300"
@@ -1226,7 +1191,7 @@ export default function CustomerDetailModal({ customer, onClose, onUpdate, onDel
                         </LazyBoundary>
                     )}
 
-                    {isEditable && isStageTab && activeTab !== STAGE_IDS.LOST_PROJECT && customer.stage !== STAGE_IDS.COMPLETED && (
+                    {isEditable && isStageTab && !isParked && customer.stage !== STAGE_IDS.COMPLETED && (
                         <div className="mt-8 pt-4 border-t border-stone-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-stone-50/70 p-3.5 rounded-2xl border border-stone-200/60">
                             <div className="flex items-center gap-2.5">
                                 <div className="p-1.5 bg-amber-100 text-amber-700 rounded-lg flex-shrink-0">

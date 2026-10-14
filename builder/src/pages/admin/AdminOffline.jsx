@@ -1,18 +1,33 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { ArrowLeft, FileUp } from 'lucide-react';
 import { ErrorBanner, SectionCard } from '../../../../template/src/ui/index.js';
 import { parseSubmissionJson } from '../../zip/index.js';
 import { PageShell } from '../../components/common.jsx';
 import { SubmissionReview } from '../../components/SubmissionReview.jsx';
-import { normalizeSubmission } from '../../components/wizardData.js';
+import { normalizeSettings, normalizeSubmission, storage } from '../../components/wizardData.js';
 
 const MAX_BYTES = 1024 * 1024;
+const STORAGE_KEY = 'sf-builder-offline';
 
-/** Build a client zip from a saved answers file. Runs in the browser; no sign-in or backend needed. */
+// The last loaded file and the admin's settings for it, from this browser.
+function restore() {
+    const saved = storage.get(STORAGE_KEY);
+    if (!saved?.submission) return null;
+    return { submission: normalizeSubmission(saved.submission), settings: normalizeSettings(saved.settings), fileName: saved.fileName || '', key: 0 };
+}
+
+/**
+ * Build a client zip from a saved answers file. Runs in the browser; no
+ * sign-in or backend needed. The file and the settings made here stay in
+ * this browser until another file is loaded.
+ */
 export default function AdminOffline() {
     const id = useId();
-    const [loaded, setLoaded] = useState(null);
+    const [loaded, setLoaded] = useState(restore);
     const [error, setError] = useState('');
+    useEffect(() => {
+        if (loaded) storage.set(STORAGE_KEY, { submission: loaded.submission, settings: loaded.settings, fileName: loaded.fileName });
+    }, [loaded]);
 
     const pick = async event => {
         const file = event.target.files?.[0];
@@ -21,8 +36,8 @@ export default function AdminOffline() {
         setError('');
         try {
             if (file.size > MAX_BYTES) throw new Error('This file is too large to be a setup answers file.');
-            const parsed = parseSubmissionJson(await file.text());
-            setLoaded({ ...parsed, submission: normalizeSubmission(parsed.submission), fileName: file.name, key: Date.now() });
+            const { submission, ...settings } = parseSubmissionJson(await file.text());
+            setLoaded({ submission: normalizeSubmission(submission), settings: normalizeSettings(settings), fileName: file.name, key: Date.now() });
         } catch (err) {
             setLoaded(null);
             setError(err.message);
@@ -50,8 +65,8 @@ export default function AdminOffline() {
                     <ErrorBanner>{error}</ErrorBanner>
                 </SectionCard>
                 {loaded && (
-                    <SubmissionReview key={loaded.key} submission={loaded.submission}
-                        initial={{ adminOverrides: loaded.adminOverrides, slug: loaded.slug, ownerEmail: loaded.ownerEmail, branding: loaded.branding }} />
+                    <SubmissionReview key={loaded.key} submission={loaded.submission} settings={loaded.settings}
+                        onSettings={settings => setLoaded(current => ({ ...current, settings }))} />
                 )}
             </div>
         </PageShell>

@@ -79,13 +79,17 @@ Do this before you share the app's address with anyone. People who sign up on th
 ## 7. Build and publish
 
 ```
-npm install
+npm ci
 npm run build
 ```
+
+`npm ci` installs the exact package versions in `package-lock.json`, the ones this app was built and tested with. Use `npm install` only when you mean to update packages.
 
 Upload the contents of the `dist/` folder to your web host:
 - **Netlify / Vercel / Cloudflare Pages**: set the build command to `npm run build` and the output folder to `dist`, or drag the `dist` folder into the dashboard.
 - **cPanel or any other host**: upload everything inside `dist/` to the site's folder (for example `public_html`).
+
+**Building from Git.** This folder includes a `.gitignore`, so `node_modules`, `dist` and your `.env` stay out of Git. Because `.env` is not committed, a host that builds from your Git repository (Netlify, Vercel, Cloudflare Pages) does not have it: add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`, with the same values as in `.env`, under the host's **Environment variables** setting, then build again. Without them the build stops with "Supabase is not set up for this app yet."
 
 SolarFlow's pages use `#` links, so no rewrite rules are needed. If your host asks for a "single-page app" fallback, point it to `index.html`.
 
@@ -95,10 +99,21 @@ Open your site and sign in as {{OWNER_EMAIL}}.
 
 - **The owner sees "This email has no account in this workspace yet"**: run `backend/setup.sql` again (step 3). It adds the missing profile.
 - **The owner is told the login is switched off or waiting for approval**: the owner login was made with another email address, or after another admin. Open SQL Editor and run this, with the owner's email between the quotes:
-  `update public.profiles set user_type = 'admin', role = 'Admin', status = 'active' where lower(email) = lower('{{OWNER_EMAIL}}');`
+  `update public.profiles set user_type = 'admin', role = 'Admin', status = 'active' where lower(email) = lower('{{OWNER_EMAIL_SQL}}');`
 - **"Could not reach the account-creation service"** when adding staff: the `add_user` function is not deployed. Repeat step 4.
 - **Password-reset link does nothing or says it has expired**: check that your app's address is in **Site URL** and **Redirect URLs** (step 2), open the newest email only, and open it in the same browser where you asked for the reset. If emails stop arriving, set up your own SMTP (step 2).
 - **Changes after an update**: follow "Upgrading an existing install" below.
+
+## Changing features later
+
+Which features are on and which stages the pipeline has are set in `src/config/client.config.js`. The database keeps its own copy of them (it checks stage moves, login types and stock against it), so the app and the database must be changed together:
+
+1. Edit `src/config/client.config.js`: change `true` / `false` under `features`, or the list under `pipeline` → `stages`. Rename a stage by changing its `label`, never its `id`. Before you remove a stage, move every customer out of it.
+2. Run `npm run setup-sql`. It checks your changes and writes a new `backend/setup.sql`.
+3. Run the new `backend/setup.sql` in the SQL Editor, as in section 3 above.
+4. Build and publish the app again (step 7).
+
+Changing the file and rebuilding alone is not enough: the database would still refuse new stages and login types. A new download from the SolarFlow builder replaces `client.config.js`, so tell the SolarFlow team about changes you make here. For dropdown lists, `setup.sql` only adds items that are missing; to rename or remove one, use the **Operations** page in SolarFlow.
 
 ## Upgrading an existing install
 

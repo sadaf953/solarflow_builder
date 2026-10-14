@@ -18,6 +18,7 @@ class Query {
     select(columns = '*') { if (this.op === 'select') this.columns = columns; return this; }
     eq(column, value) { this.filters.push([column, '=', value]); return this; }
     ilike(column, value) { this.filters.push([column, 'ilike', value]); return this; }
+    in(column, values) { this.filters.push([column, 'in', values]); return this; }
     is(column) { this.filters.push([column, 'is null']); return this; }
     limit(n) { this.max = n; return this; }
     maybeSingle() { this.single = true; return this; }
@@ -36,7 +37,8 @@ class Query {
             sql = `insert into ${table}(${keys.map(ident).join(', ')}) values (${keys.map(k => param(this.values[k])).join(', ')})
                 on conflict (${ident(this.onConflict)}) do update set ${keys.map(k => `${ident(k)} = excluded.${ident(k)}`).join(', ')} returning *`;
         } else {
-            const where = this.filters.length ? ` where ${this.filters.map(([c, op, v]) => (op === 'is null' ? `${ident(c)} is null` : `${ident(c)} ${op} ${param(v)}`)).join(' and ')}` : '';
+            const where = this.filters.length ? ` where ${this.filters.map(([c, op, v]) => (op === 'is null' ? `${ident(c)} is null`
+                : op === 'in' ? `${ident(c)} = any(${param(v)})` : `${ident(c)} ${op} ${param(v)}`)).join(' and ')}` : '';
             if (this.op === 'select') {
                 const columns = this.columns === '*' ? '*' : this.columns.split(',').map(c => ident(c.trim())).join(', ');
                 sql = `select ${columns} from ${table}${where}${this.max ? ` limit ${Number(this.max)}` : ''}`;

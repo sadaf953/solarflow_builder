@@ -1,12 +1,17 @@
 -- SolarFlow database setup.
 --
--- Run in the Supabase SQL Editor of the client's own project. It is safe to
--- run again: it adds anything missing and replaces SolarFlow's own functions,
--- triggers and policies in place. It never removes data and leaves tables,
--- functions and policies you added yourself alone. It is not a migration
--- tool: a changed column type or a renamed column is not carried over. The
--- per-client settings (features, pipeline, dropdown lists, owner email)
--- follow from backend/seed.js.
+-- Clients run backend/setup.sql in the Supabase SQL Editor of their own
+-- project. setup.sql is backend/schema.sql followed by the client's own
+-- settings (features, pipeline, dropdown lists, owner email) from
+-- backend/seed.js. Do not run schema.sql on its own: it has none of those
+-- settings. schema.sql and seed.js are kept only so that `npm run setup-sql`
+-- can rebuild setup.sql after a change to src/config/client.config.js.
+--
+-- setup.sql is safe to run again: it adds anything missing and replaces
+-- SolarFlow's own functions, triggers and policies in place. It never
+-- removes data and leaves tables, functions and policies you added yourself
+-- alone. It is not a migration tool: a changed column type or a renamed
+-- column is not carried over.
 --
 -- No customers, staff or sample data are created here. The first login is
 -- created in Authentication > Users and becomes the admin (see the
@@ -33,15 +38,30 @@ create table if not exists public.app_roles (
 );
 insert into public.app_roles(user_type, label, role, sort_order, enabled) values
   ('admin', 'Admin', 'Admin', 1, true),
-  ('sales', 'Office', 'Office', 2, true),
-  ('channel_partner_office', 'Channel Partner Office', 'Channel Partner Office', 3, false),
-  ('office2', 'Manager', 'Channel Partner Manager', 4, false),
-  ('agent2', 'Dealer', 'Channel Partner', 5, false),
-  ('agent', 'Channel Partners', 'Channel Partners', 6, false),
-  ('vendor', 'Vendors', 'Vendors', 7, false),
-  ('stamp', 'Stamp Maker', 'Stamp', 8, false),
+  ('sales', 'Office staff', 'Office staff', 2, true),
+  ('channel_partner_office', 'Partner office', 'Partner office', 3, false),
+  ('office2', 'Partner office manager', 'Partner office manager', 4, false),
+  ('agent2', 'Dealer', 'Dealer', 5, false),
+  ('agent', 'Partner / agent', 'Partner / agent', 6, false),
+  ('vendor', 'Installer', 'Installer', 7, false),
+  ('stamp', 'Stamp maker', 'Stamp maker', 8, false),
   ('pending', 'Not set up', 'Not set up', 99, false)
 on conflict (user_type) do nothing;
+-- Earlier versions used other names. A name still as it was seeded takes the
+-- setup wizard's wording; one an admin changed is left alone.
+update public.app_roles r set
+  label = case when r.label = v.old_label then v.label else r.label end,
+  role = case when r.role = v.old_role then v.role else r.role end
+from (values
+  ('sales', 'Office', 'Office', 'Office staff', 'Office staff'),
+  ('channel_partner_office', 'Channel Partner Office', 'Channel Partner Office', 'Partner office', 'Partner office'),
+  ('office2', 'Manager', 'Channel Partner Manager', 'Partner office manager', 'Partner office manager'),
+  ('agent2', 'Dealer', 'Channel Partner', 'Dealer', 'Dealer'),
+  ('agent', 'Channel Partners', 'Channel Partners', 'Partner / agent', 'Partner / agent'),
+  ('vendor', 'Vendors', 'Vendors', 'Installer', 'Installer'),
+  ('stamp', 'Stamp Maker', 'Stamp', 'Stamp maker', 'Stamp maker')
+) v(user_type, old_label, old_role, label, role)
+where r.user_type = v.user_type and (r.label = v.old_label or r.role = v.old_role);
 
 -- Keys: features, pipeline, owner_email, client.
 create table if not exists public.app_settings (

@@ -1,10 +1,10 @@
 // Dashboard sidebar, built from the view registry and the client's pipeline.
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, KeyRound, LogOut, X } from 'lucide-react';
-import { STAGE_BY_ID, STAGE_GROUPS } from '../config/index.js';
+import { ChevronDown, CircleHelp, KeyRound, LogOut, X } from 'lucide-react';
+import { STAGE_BY_ID, STAGE_GROUPS, stageLabel } from '../config/index.js';
 import BrandMark from '../components/BrandMark';
-import { viewLabel, viewsInGroup } from './views.js';
+import { otherStageIds, viewLabel, viewsInGroup } from './views.js';
 
 const SECTION_HEADING = 'px-3 pt-4 pb-1 text-[10px] uppercase font-bold text-stone-500 tracking-widest';
 
@@ -89,6 +89,13 @@ export default function Sidebar({ user, ctx, currentView, selectedStage, stageCo
     const team = viewsInGroup('team', user);
     const admin = viewsInGroup('admin', user);
     const activeIn = views => views.some(view => view.id === currentView);
+    // Customers left in a stage that was taken out of the pipeline; admins move them on from here.
+    const otherStages = isAdmin ? otherStageIds(stageCounts) : [];
+    const stageButton = (id, icon, label) => (
+        <NavButton key={id} icon={icon} label={label} count={stageCounts[id] || 0}
+            active={currentView === 'stages' && selectedStage === id}
+            onClick={() => { onOpenStage(id); onClose(); }} />
+    );
 
     return (
         <>
@@ -113,14 +120,15 @@ export default function Sidebar({ user, ctx, currentView, selectedStage, stageCo
                         return (
                             <SidebarGroup key={group.id} id={`stages-${group.id}`} label={group.label}
                                 active={currentView === 'stages' && group.stages.includes(selectedStage)}>
-                                {stages.map(stage => (
-                                    <NavButton key={stage.id} icon={stage.icon} label={stage.label} count={stageCounts[stage.id] || 0}
-                                        active={currentView === 'stages' && selectedStage === stage.id}
-                                        onClick={() => { onOpenStage(stage.id); onClose(); }} />
-                                ))}
+                                {stages.map(stage => stageButton(stage.id, stage.icon, stage.label))}
                             </SidebarGroup>
                         );
                     })}
+                    {otherStages.length > 0 && (
+                        <SidebarGroup id="stages-other" label="Other stages" active={currentView === 'stages' && otherStages.includes(selectedStage)}>
+                            {otherStages.map(id => stageButton(id, CircleHelp, stageLabel(id)))}
+                        </SidebarGroup>
+                    )}
 
                     {isAdmin && (team.length > 0 || admin.length > 0) && (
                         <div className="pt-2">

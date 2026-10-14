@@ -5,7 +5,7 @@ import schemaSql from '../../../template/backend/schema.sql?raw';
 import { downloadBlob } from '../../../template/src/lib/download.js';
 import { createClientZip, createSetupSql } from './build.js';
 
-export { buildClientFiles, makeZip, parseSubmissionJson, checkClientConfig } from './build.js';
+export { buildClientFiles, buildOptions, makeZip, parseSubmissionJson, checkClientConfig } from './build.js';
 
 let templatePromise = null;
 
@@ -27,13 +27,14 @@ export function loadTemplateFiles() {
     return templatePromise;
 }
 
-export async function generateClientZip({ submission, adminOverrides = {}, slug, ownerEmail, branding, generatedAt } = {}) {
+// `workflow` is the admin's workflow; it wins over the client's.
+export async function generateClientZip({ submission, adminOverrides = {}, slug, ownerEmail, branding, workflow, generatedAt } = {}) {
     const templateFiles = await loadTemplateFiles();
-    return createClientZip({ templateFiles, schemaSql, submission, adminOverrides, slug, ownerEmail, branding, generatedAt });
+    return createClientZip({ templateFiles, schemaSql, submission, adminOverrides, slug, ownerEmail, branding, workflow, generatedAt });
 }
 
-export function generateSetupSql({ submission, adminOverrides = {}, slug, ownerEmail, branding } = {}) {
-    return createSetupSql({ schemaSql, submission, adminOverrides, slug, ownerEmail, branding });
+export function generateSetupSql({ submission, adminOverrides = {}, slug, ownerEmail, branding, workflow } = {}) {
+    return createSetupSql({ schemaSql, submission, adminOverrides, slug, ownerEmail, branding, workflow });
 }
 
 export function downloadBytes(bytes, fileName, mime = 'application/zip') {

@@ -7,11 +7,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Activity, RefreshCw } from 'lucide-react';
 import { supabase } from '../supabase';
-import { ACTION_COLORS } from '../constants';
+import { ACTION_COLORS, APP_ROLES } from '../constants';
 import { isOn, stageLabel } from '../config/index.js';
 import { EmptyState, ErrorBanner, LoadingState, LoadMoreButton, Select, useRefreshOnFocus } from '../ui/index.js';
 
 const PAGE_SIZE = 75;
+const roleLabel = userType => APP_ROLES.find(role => role.user_type === userType)?.label || userType;
 const LOG_COLUMNS = 'id, user_id, customer_id, action, message, new_value, created_at';
 
 // Filters for actions that only exist while their feature is on.
@@ -22,7 +23,7 @@ const ACTION_FILTER_OPTIONS = [
     { value: 'delete', label: 'Deletions' },
     { value: 'operations', label: 'Operations & directory' },
     { value: 'attendance', label: 'Staff attendance', feature: 'attendance' },
-    { value: 'vendor', label: 'Vendors', feature: 'vendorLogin' },
+    { value: 'vendor', label: roleLabel('vendor'), feature: 'vendorLogin' },
     { value: 'payment', label: 'Installation payments', feature: 'installationCommission' },
     { value: 'dispatch', label: 'Delivery & dispatch', feature: 'deliveryBatches' },
     { value: 'error_occurred', label: 'Errors' },
@@ -190,7 +191,7 @@ export default function ActivityLogView() {
                 </EmptyState>
             ) : logs.map(log => {
                 const colors = ACTION_COLORS[log.action] || { bg: 'bg-stone-100', text: 'text-stone-700', border: 'border-stone-200' };
-                const label = ACTION_COLORS[log.action]?.label || log.action?.replace(/_/g, ' ');
+                const label = log.action === 'vendor' ? roleLabel('vendor') : ACTION_COLORS[log.action]?.label || log.action?.replace(/_/g, ' ');
                 const { message, detail } = describe(log, customerNames);
                 return (
                     <div key={log.id} className="bg-white rounded-xl p-4 border border-stone-100 shadow-sm flex items-start gap-3">
