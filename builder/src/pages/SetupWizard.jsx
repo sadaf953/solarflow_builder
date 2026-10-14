@@ -197,7 +197,9 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
         }
     };
 
-    const started = Boolean(Object.keys(submission.answers).length || submission.contact.name);
+    // A link the admin filled in still starts at the business step, so the
+    // client confirms the details (the email becomes their admin login).
+    const started = Object.keys(submission.answers).length > 0;
     const title = step === 'features' ? QUESTION_STEPS[part].title : TITLES[step];
     const showSummary = step === 'features';
 
