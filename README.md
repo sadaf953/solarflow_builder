@@ -44,6 +44,11 @@ npm run make-client -- client-zips/answers.json
 Builds a client zip from a downloaded answers file. The result is identical to what the admin page downloads.
 
 ```bash
+npm run test-data -- <client folder>/src/config/client.config.js --count 500
+```
+Writes `client-zips/<slug>-test-data.sql` (made-up customers across every stage, for trying out a client's app) and `<slug>-remove-test-data.sql` (deletes them again). Paste them into that client's SQL Editor after `backend/setup.sql`. Never use it on a live client.
+
+```bash
 npm run build:builder
 ```
 Builds the static builder site into `builder/dist/`. Host it anywhere.

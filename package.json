@@ -12,7 +12,8 @@
     "make-client": "node scripts/make-client.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
     "test": "node --test --test-reporter=dot \"tests/**/*.test.mjs\"",
-    "lint": "eslint builder scripts tests/builder && eslint -c template/eslint.config.js template"
+    "lint": "eslint builder scripts tests/builder && eslint -c template/eslint.config.js template",
+    "test-data": "node scripts/make-test-data.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
