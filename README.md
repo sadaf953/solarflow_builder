@@ -69,3 +69,4 @@ To change a client's features or stages later, edit `src/config/client.config.js
 
 - `~/Desktop/solarflow_demo` is the live demo. It is never written to from here.
 - No Docker. SQL is tested with PGlite (`tests/backend`, `tests/builder`).
+# solarflow_builder
