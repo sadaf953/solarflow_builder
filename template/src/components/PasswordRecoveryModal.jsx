@@ -2,6 +2,7 @@ import { useEffect, useId, useState } from 'react';
 import { KeyRound, Eye, EyeOff, Check, Loader2 } from 'lucide-react';
 import { supabase } from '../supabase';
 import { BRANDING } from '../config/index.js';
+import { clearPasswordPending, isSessionGone, sessionStore } from '../lib/emailLink.js';
 import { containDialogFocus } from '../utils/dialogFocus';
 
 const MIN_LENGTH = 8;
@@ -18,6 +19,7 @@ export default function PasswordRecoveryModal({ mode = 'recovery', onClose }) {
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
     const [done, setDone] = useState(false);
+    const [sessionGone, setSessionGone] = useState(false);
     const changing = mode === 'change';
     const inviting = mode === 'invite';
 
@@ -42,12 +44,25 @@ export default function PasswordRecoveryModal({ mode = 'recovery', onClose }) {
             }
             const { error: updateError } = await supabase.auth.updateUser({ password });
             if (updateError) throw updateError;
+            clearPasswordPending(sessionStore());
             setDone(true);
         } catch (err) {
+            // An invitation dialog has no Cancel, so an ended sign-in needs a way out.
+            if (inviting && isSessionGone(err)) setSessionGone(true);
             setError(err.message || 'Could not update the password. Please try again.');
         } finally {
             setBusy(false);
         }
+    }
+
+    async function signOut() {
+        setBusy(true);
+        try {
+            await supabase.auth.signOut();
+        } catch { /* the session is already gone; signing out here only clears this browser */ }
+        clearPasswordPending(sessionStore());
+        setBusy(false);
+        onClose();
     }
 
     const field = (name, label, value, setValue, autoComplete, autoFocus) => (
@@ -80,6 +95,12 @@ export default function PasswordRecoveryModal({ mode = 'recovery', onClose }) {
                     <form onSubmit={submit} className="space-y-4 p-5">
                         {inviting && <p className="text-sm text-stone-600">Choose the password you will use to sign in. Use at least {MIN_LENGTH} characters.</p>}
                         {error && <p role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{error}</p>}
+                        {sessionGone && (
+                            <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+                                <p>Your invitation sign-in has ended, so the password could not be saved. Sign out, then choose “Forgot password?” on the sign-in page to get an email that lets you set it.</p>
+                                <button type="button" onClick={signOut} disabled={busy} className="sf-btn-secondary min-h-11 w-full">Sign out</button>
+                            </div>
+                        )}
                         {changing && field('current', 'Current password', current, setCurrent, 'current-password', true)}
                         {field('new', inviting ? 'Password' : 'New password', password, setPassword, 'new-password', !changing)}
                         {field('repeat', inviting ? 'Repeat password' : 'Repeat new password', confirm, setConfirm, 'new-password', false)}

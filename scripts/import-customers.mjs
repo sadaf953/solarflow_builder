@@ -23,7 +23,7 @@ import { parseArgs } from 'node:util';
 import { resolveClientConfig, validateClientConfig } from '../template/src/config/resolve.js';
 import {
     buildImport, columnNames, consumerKey, detectHeaderRow, distinctValues, guessMapping, guessStageMap, importTargets,
-    matchKey, mappingProblem, phoneKey, readSpreadsheet, STAGE_TARGET,
+    matchKey, mappingProblem, phoneKey, readSpreadsheet, STAGE_TARGET, usableSheets,
 } from '../template/src/lib/import/index.js';
 
 const USAGE = 'Usage: node scripts/import-customers.mjs <client folder | client.config.js> <file.xlsx|csv> [--sheet name] [--mapping mapping.json] [--write-mapping mapping.json] [--out file.sql] [--duplicates skip|import]';
@@ -205,14 +205,16 @@ export async function importCustomers({ configInput, filePath, sheet: sheetName,
     const mappingJson = mappingPath ? JSON.parse(readFileSync(mappingPath, 'utf8')) : null;
     const wantedSheet = sheetName ?? mappingJson?.sheet;
     const withRows = workbook.sheets.filter(item => item.rows.length);
+    // A sheet too big to read (often a hidden lookup list) is skipped unless asked for by name.
     const sheet = wantedSheet != null
         ? workbook.sheets.find(item => item.name.toLowerCase() === String(wantedSheet).trim().toLowerCase())
-        : withRows[0];
+        : usableSheets(workbook.sheets)[0];
     if (!sheet) {
         const list = workbook.sheets.map(item => `"${item.name}"`).join(', ');
         throw new Error(wantedSheet != null ? `There is no sheet named "${wantedSheet}". The sheets are: ${list}.` : 'The file has no rows to import.');
     }
-    if (wantedSheet == null && withRows.length > 1) log('info', `Using sheet "${sheet.name}". Other sheets: ${withRows.slice(1).map(item => `"${item.name}"`).join(', ')} (use --sheet to pick one).`);
+    if (sheet.error) throw new Error(`Sheet "${sheet.name}" cannot be imported: ${sheet.error}`);
+    if (wantedSheet == null && withRows.length > 1) log('info', `Using sheet "${sheet.name}". Other sheets: ${withRows.filter(item => item !== sheet).map(item => `"${item.name}"`).join(', ')} (use --sheet to pick one).`);
 
     const fromFile = Number(mappingJson?.headerRow);
     const headerRow = Number.isInteger(fromFile) && sheet.rowNumbers.includes(fromFile) ? sheet.rowNumbers.indexOf(fromFile) : detectHeaderRow(sheet.rows);

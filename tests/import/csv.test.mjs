@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseCsv, detectDelimiter } from '../../template/src/lib/import/csv.js';
+import { parseCsv, parseCsvRows, detectDelimiter } from '../../template/src/lib/import/csv.js';
 import { readSpreadsheet, tidyRows, detectHeaderRow, columnNames, columnLetter } from '../../template/src/lib/import/sheet.js';
 import { SpreadsheetError } from '../../template/src/lib/import/errors.js';
 import { utf8 } from './fixtures.mjs';
@@ -17,7 +17,7 @@ test('LF, CRLF and lone CR line ends; a BOM is dropped; empty cells are kept', (
     assert.deepEqual(parseCsv('\uFEFFa,b\nc,d'), [['a', 'b'], ['c', 'd']]);
     assert.deepEqual(parseCsv('a,b\r\nc,d\r\n'), [['a', 'b'], ['c', 'd']]);
     assert.deepEqual(parseCsv('a,b\rc,d\r'), [['a', 'b'], ['c', 'd']]);
-    assert.deepEqual(parseCsv('a,,c\n,,\nx,'), [['a', '', 'c'], ['', '', ''], ['x', '']]);
+    assert.deepEqual(parseCsv('a,,c\n,,\nx,'), [['a', '', 'c'], ['x', '']]);
     assert.deepEqual(parseCsv(''), []);
 });
 
@@ -47,6 +47,21 @@ test('too many rows are refused, not half read', () => {
     const text = Array.from({ length: 12 }, (_, i) => `row ${i}`).join('\n');
     assert.throws(() => parseCsv(text, { maxRows: 10 }), /too many rows: SolarFlow imports up to 20,000 customers/);
     assert.equal(parseCsv(text, { maxRows: 12 }).length, 12);
+});
+
+test('blank records do not count toward the row limit, and row numbers still match the file', async () => {
+    // A 3-customer export Excel padded with formatted-but-empty rows.
+    const text = ['Name,Mobile', 'Ravi,9876543210', ',', ' , ', 'Sita,9123456789', ...Array(30).fill(',,,,'), '', 'Mohan,9000000000'].join('\n');
+    assert.deepEqual(parseCsvRows(text, { maxRows: 10 }), {
+        rows: [['Name', 'Mobile'], ['Ravi', '9876543210'], ['Sita', '9123456789'], ['Mohan', '9000000000']],
+        rowNumbers: [1, 2, 5, 37],
+    });
+    assert.throws(() => parseCsv(text, { maxRows: 3 }), /too many rows/);
+    const { sheets } = await readSpreadsheet({ name: 'padded.csv', bytes: utf8(text) });
+    assert.deepEqual(sheets[0].rowNumbers, [1, 2, 5, 37]);
+    assert.equal(detectHeaderRow(sheets[0].rows), 0);
+    // A quoted line break keeps one record, so the unclosed-quote row stays right after blanks.
+    assert.throws(() => parseCsv(',,\nName,Note\nRavi,"open'), /Row 3 has a quote mark/);
 });
 
 test('tidyRows drops empty rows and columns but keeps spreadsheet row numbers and column letters', () => {

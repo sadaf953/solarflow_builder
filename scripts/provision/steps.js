@@ -14,6 +14,7 @@ import { childEnv } from './env.js';
 import { extractZip, sha256, textFiles, zipFolder } from './files.js';
 import { isNameTaken, siteNameFor } from './netlify.js';
 import { KEEPALIVE_JOB, KEEPALIVE_SCHEDULE, keepaliveSql, ownerLookupSql, profileSql } from './sql.js';
+import { ApiError } from './http.js';
 import { isFreeProjectLimit, pickPublicKey, pickServiceKey, projectApi, projectUrl } from './supabase.js';
 
 // South Asia (Mumbai), as README.client.md asks.
@@ -175,6 +176,10 @@ async function project(ctx) {
     if (found.length === 1) {
         state.supabase = { ref: found[0].ref, name, org, region: found[0].region, foundAt: at(ctx) };
         ctx.ok(`Found the existing project ${name} (${found[0].ref})`);
+        // No run on record created it, so nobody here knows its database
+        // password (an earlier create may have timed out after Supabase made
+        // it). The summary lists the reset as a to-do while state says foundAt.
+        ctx.note('  Its database password is not known here: reset it in Supabase (see the summary).');
         if (found[0].region && found[0].region !== REGION) ctx.warn(`That project is in ${found[0].region}, not Mumbai (${REGION}).`);
         return;
     }
@@ -187,9 +192,22 @@ async function project(ctx) {
     } catch (error) {
         if (isFreeProjectLimit(error)) throw Object.assign(new Error(freeLimitMessage(ctx, error.message)), { code: 'free_project_limit' });
         // A create that timed out may still have happened: look before failing.
-        if (error.code === 'network' || error.status >= 500) {
+        const unknown = error.code === 'network' || error.code === 'timeout' || error.status >= 500;
+        if (unknown) {
             found = await findByName();
             if (found.length === 1) created = found[0];
+        }
+        if (!created && unknown) {
+            // The project may still appear, and then this password is the only
+            // way into its database. It is a secret of this run, so the error
+            // message (which is redacted and saved in the state file) cannot
+            // carry it: show it here, on the console only.
+            ctx.box([
+                'Supabase may still be creating the project. Its database password (never saved):',
+                `  ${dbPass}`,
+                'Keep it: if the project appears, this is its password.',
+            ]);
+            throw new ApiError(`${error.message} The project may still appear in ${org}: keep the database password printed above, and run the same command again in a few minutes.`, { service: error.service, status: error.status, data: error.data, code: error.code });
         }
         if (!created) throw error;
     }
@@ -222,6 +240,9 @@ async function waitHealthy(ctx) {
         if (!STARTING.has(status) && status !== 'ACTIVE_HEALTHY') throw new Error(`The project ${ref} is ${status}. Check it in the Supabase dashboard, then run again.`);
         if (status === 'ACTIVE_HEALTHY') {
             const services = await ctx.supabase.health(ref);
+            // null: a hiccup, so keep waiting. [] (the API refused the request)
+            // means the project status above, already ACTIVE_HEALTHY, is all
+            // there is to go on.
             const waiting = services ? services.filter(s => !(s.healthy || s.status === 'ACTIVE_HEALTHY')).map(s => s.name) : ['db', 'auth', 'rest'];
             if (!waiting.length) {
                 ctx.ok(`Healthy after ${minutes(elapsed)}`);
@@ -400,8 +421,17 @@ async function auth(ctx) {
     const { goLive, supabase } = ctx;
     const live = liveUrl(ctx);
     const smtp = ctx.clientSecrets.smtp && goLive.senderEmail ? ctx.clientSecrets.smtp : null;
+    // Only used to see whether SMTP is set already. A 403 (the agency is now
+    // Developer) falls back to what the last run recorded; any other failure
+    // stops here, since guessing "no SMTP" would switch on auto-confirm on a
+    // project that sends through Brevo.
     let current = null;
-    try { current = await supabase.authConfig(ref); } catch { /* only used to see whether SMTP is set */ }
+    try {
+        current = await supabase.authConfig(ref);
+    } catch (error) {
+        if (error.status !== 403) throw error;
+        current = { smtp_host: ctx.state.auth?.ref === ref && ctx.state.auth.smtp ? 'recorded on an earlier run' : null };
+    }
     const smtpOn = Boolean(smtp) || Boolean(current?.smtp_host);
     const settings = templates => authSettings({
         siteUrl: live, urls: [goLive.siteUrl, netlifyUrl(ctx)], companyName: ctx.companyName,

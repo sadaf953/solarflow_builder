@@ -1,6 +1,6 @@
 // Any spreadsheet file the importer accepts -> sheets of tidy rows.
 
-import { parseCsv } from './csv.js';
+import { parseCsvRows } from './csv.js';
 import { readXlsx } from './xlsx.js';
 import { LIMITS, SAVE_AS_HELP, SpreadsheetError } from './errors.js';
 
@@ -59,6 +59,16 @@ export function tidyRows(rawRows, rawNumbers) {
     };
 }
 
+/**
+ * The sheets worth offering, best first: readable ones with rows (visible
+ * before hidden), then ones too big to read, so the default choice is a sheet
+ * that works and picking a broken one can still say why.
+ */
+export function usableSheets(sheets) {
+    const rank = sheet => (sheet.error ? 2 : 0) + (sheet.hidden ? 1 : 0);
+    return sheets.filter(sheet => sheet.rows.length || sheet.error).sort((a, b) => rank(a) - rank(b));
+}
+
 /** Index of the row with the column names: the first with at least two filled cells. */
 export function detectHeaderRow(rows) {
     const index = rows.findIndex(row => row.filter(Boolean).length >= 2);
@@ -91,9 +101,11 @@ function unsupported(bytes, ext) {
 }
 
 /**
- * Sheets of an .xlsx or CSV file: { sheets: [{ name, hidden, rows, rowNumbers, columnLetters }] }.
+ * Sheets of an .xlsx or CSV file: { sheets: [{ name, hidden, rows, rowNumbers, columnLetters, error? }] }.
  * The kind is decided by the file's first bytes, then its extension.
  * Throws SpreadsheetError, worded for the user, for anything it cannot read.
+ * A workbook sheet that alone is too big has no rows and an `error` instead,
+ * so a huge lookup sheet does not block the customer sheet beside it.
  */
 export async function readSpreadsheet({ name, bytes }) {
     const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
@@ -115,10 +127,13 @@ export async function readSpreadsheet({ name, bytes }) {
             throw new SpreadsheetError(`This file is not an Excel workbook or a CSV file. ${SAVE_AS_HELP}`);
         }
         if (text.includes('\0')) throw new SpreadsheetError(`This file is not a spreadsheet SolarFlow can read. ${SAVE_AS_HELP}`);
-        const rows = parseCsv(text, { delimiter: ext === 'tsv' ? '\t' : undefined });
-        sheets = [{ name: baseName(name), hidden: false, rows, rowNumbers: null }];
+        const { rows, rowNumbers } = parseCsvRows(text, { delimiter: ext === 'tsv' ? '\t' : undefined });
+        sheets = [{ name: baseName(name), hidden: false, rows, rowNumbers }];
     }
     return {
-        sheets: sheets.map(sheet => ({ name: sheet.name, hidden: sheet.hidden, ...tidyRows(sheet.rows, sheet.rowNumbers) })),
+        sheets: sheets.map(sheet => ({
+            name: sheet.name, hidden: sheet.hidden, ...tidyRows(sheet.rows, sheet.rowNumbers),
+            ...(sheet.error ? { error: sheet.error } : {}),
+        })),
     };
 }

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured, supabaseSetupProblem } from './supabase';
 import { BRANDING, isOn, isRoleEnabled } from './config/index.js';
-import { EMAIL_LINK_PARAMS, emailLinkProblem, readEmailLink } from './lib/emailLink.js';
+import { EMAIL_LINK_PARAMS, clearPasswordPending, emailLinkProblem, isPasswordPending, markPasswordPending, readEmailLink, sessionStore } from './lib/emailLink.js';
 import LoginScreen from './components/LoginScreen';
 import OfflineBanner from './components/OfflineBanner';
 const PasswordRecoveryModal = lazy(() => import('./components/PasswordRecoveryModal'));
@@ -125,6 +125,9 @@ function Workspace() {
         const restore = emailLink
             ? openEmailLink(emailLink).then(async ({ data, error }) => {
                 if (!error) {
+                    // The token leaves the address below; this flag brings the
+                    // welcome dialog back if the page is reloaded before saving.
+                    if (emailLink.type === 'invite') markPasswordPending(sessionStore(), data.session?.user?.id);
                     if (active) setPasswordMode(emailLink.type);
                     return { session: data.session };
                 }
@@ -136,6 +139,8 @@ function Workspace() {
         restore
             .then(async ({ session, problem }) => {
                 clearLinkParams();
+                // An invited user who reloaded before choosing a password.
+                if (active && isPasswordPending(sessionStore(), session?.user?.id)) setPasswordMode('invite');
                 const found = session ? await loadUser(session) : problem;
                 if (active && found) setNotice(found);
             })
@@ -147,6 +152,7 @@ function Workspace() {
                 loading.current = { id: null, promise: null };
                 setUser(null);
                 setPasswordMode(null);
+                clearPasswordPending(sessionStore());
             }
             if (event === 'PASSWORD_RECOVERY') setPasswordMode('recovery');
         });
@@ -174,18 +180,24 @@ function Workspace() {
 
     if (!isRoleEnabled(user.userType)) {
         return (
-            <Notice title="Your login type is not enabled" action={signOut}>
-                <p>Logins of type “{user.role || user.userType}” are switched off for {BRANDING.companyName}. Ask your administrator to change your login type.</p>
-            </Notice>
+            <>
+                {passwordModal}
+                <Notice title="Your login type is not enabled" action={signOut}>
+                    <p>Logins of type “{user.role || user.userType}” are switched off for {BRANDING.companyName}. Ask your administrator to change your login type.</p>
+                </Notice>
+            </>
         );
     }
 
     const Portal = portalFor(user.userType);
     if (!Portal) {
         return (
-            <Notice title="Waiting for access" action={signOut}>
-                <p>An admin needs to approve your login before you can use {BRANDING.appName}. Once they have, sign out and sign in again.</p>
-            </Notice>
+            <>
+                {passwordModal}
+                <Notice title="Waiting for access" action={signOut}>
+                    <p>An admin needs to approve your login before you can use {BRANDING.appName}. Once they have, sign out and sign in again.</p>
+                </Notice>
+            </>
         );
     }
 

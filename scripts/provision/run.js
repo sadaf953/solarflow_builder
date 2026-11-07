@@ -146,8 +146,9 @@ export async function runProvision({ answersPath, options = {} }, deps) {
             ctx.save();
         } catch (error) {
             state.steps[step.name] = { status: 'failed', at: ctx.now().toISOString(), error: redact(error.message).slice(0, 500) };
-            ctx.save();
             print(`  ✗ ${redact(error.message)}`);
+            // A failed save must not hide the step's own error.
+            try { ctx.save(); } catch (saveError) { print(`  ✗ The state file was not updated: ${redact(saveError.message)}`); }
             const left = run.slice(index + 1).map(s => s.name);
             throw new ProvisionError(`Stopped at “${step.title}”.${left.length ? ` Not done yet: ${left.join(', ')}.` : ''} Fix the problem and run the same command again: finished steps are skipped or checked, not repeated.`);
         }

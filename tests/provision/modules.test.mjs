@@ -11,7 +11,7 @@ import { createHttp, keyHeaders, redactHeaders } from '../../scripts/provision/h
 import { siteNameFor } from '../../scripts/provision/netlify.js';
 import { KEEPALIVE_JOB, keepaliveSql, ownerLookupSql } from '../../scripts/provision/sql.js';
 import { saveState } from '../../scripts/provision/state.js';
-import { isFreeProjectLimit, pickPublicKey, pickServiceKey } from '../../scripts/provision/supabase.js';
+import { isFreeProjectLimit, pickPublicKey, pickServiceKey, supabaseApi } from '../../scripts/provision/supabase.js';
 import { jwt, KEYS, REF, SMTP, TOKENS } from './world.mjs';
 
 const tempDir = t => {
@@ -123,6 +123,28 @@ test('http: errors say what to do and never contain a token', async () => {
     await assert.rejects(offline({ service: 'Netlify', url: 'https://api.netlify.com/api/v1/user', what: 'read the user' }), /Could not reach Netlify to read the user \(fetch failed\)/);
 });
 
+test('http: a timeout is never retried, network errors are', async () => {
+    const timeoutError = () => Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+    let sent = 0;
+    const slow = createHttp({ fetch: async () => { sent += 1; throw timeoutError(); }, sleep: async () => {} });
+    const error = await slow({ service: 'Supabase', method: 'POST', url: 'https://api.supabase.com/v1/projects/x/database/query', json: {}, idempotent: true, timeoutMs: 300_000, what: 'run backend/setup.sql' }).catch(e => e);
+    assert.equal(sent, 1, 'the SQL is sent once, not once per retry');
+    assert.equal(error.code, 'timeout');
+    assert.match(error.message, /did not answer within 300 s to run backend\/setup\.sql\. It may still be running there: check .* before you run the same command again/);
+
+    sent = 0;
+    const flaky = createHttp({ fetch: async () => { sent += 1; if (sent < 3) throw new TypeError('fetch failed'); return new Response('[]', { status: 200 }); }, sleep: async () => {} });
+    assert.equal((await flaky({ service: 'Supabase', url: 'https://api.supabase.com/v1/x' })).status, 200);
+    assert.equal(sent, 3);
+});
+
+test('health: a refused services list means nothing to wait for; a 5xx means ask again', async () => {
+    for (const [status, expected] of [[400, []], [404, []], [422, []], [503, null]]) {
+        const request = createHttp({ fetch: async () => new Response('{"message":"bad services"}', { status }), sleep: async () => {} });
+        assert.deepEqual(await supabaseApi({ request, token: TOKENS.supabase }).health(REF), expected, `HTTP ${status}`);
+    }
+});
+
 test('free-project-limit errors are recognised', () => {
     const error = message => Object.assign(new Error(message), { service: 'Supabase', status: 400 });
     assert.ok(isFreeProjectLimit(error('The following organization members have reached their maximum limits for the number of active free projects')));
@@ -133,6 +155,8 @@ test('free-project-limit errors are recognised', () => {
 test('env files: agency settings, client secrets, a clean environment for npm', t => {
     const dir = tempDir(t);
     assert.deepEqual(parseEnvFile('# c\nA=1\nexport B="two words"\nC=3 # note\nbad line\n'), { A: '1', B: 'two words', C: '3' });
+    // A comment after a quoted value; a # inside the quotes is part of the value.
+    assert.deepEqual(parseEnvFile('D="value" # note\nE=\'it#s\'  # x\nF="a # b"\nG="x"y"\n'), { D: 'value', E: 'it#s', F: 'a # b', G: 'x"y' });
     writeFileSync(join(dir, '.env.provision'), `SUPABASE_ACCESS_TOKEN=${TOKENS.supabase}\nNETLIFY_AUTH_TOKEN=from-file\n`);
     writeFileSync(join(dir, '.env.local'), 'VITE_AGENCY_DOMAIN=agency.in\n');
     const { values } = loadAgencyEnv({ repoRoot: dir, env: { NETLIFY_AUTH_TOKEN: 'from-shell' } });

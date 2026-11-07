@@ -56,14 +56,21 @@ export function supabaseApi({ request, token }) {
             json: { name, organization_slug: organizationSlug, db_pass: dbPass, region_selection: { type: 'specific', code: region } },
         })),
         // v1-get-services-health: [{name, healthy, status: COMING_UP | ACTIVE_HEALTHY | UNHEALTHY}]
+        // [] when the API refuses the request (400/404/422, e.g. it stops
+        // accepting this services list): nothing to wait for, so the wait step
+        // goes by the project status alone instead of failing on every run.
+        // null on a 5xx: a hiccup, so the wait step asks again.
         health: async ref => {
             const res = await call('GET', `/v1/projects/${ref}/health?services=db,auth,rest`, {
-                what: 'check the project health', retry: false, allow: [500, 502, 503, 504, 544],
+                what: 'check the project health', retry: false, allow: [400, 404, 422, 500, 502, 503, 504, 544],
             });
-            return res.status === 200 && Array.isArray(res.data) ? res.data : null;
+            if (res.status === 200 && Array.isArray(res.data)) return res.data;
+            return res.status < 500 ? [] : null;
         },
         // v1-run-a-query (beta): {query} -> rows of the last statement.
         // Idempotent here: only setup SQL that is safe to re-run goes through it.
+        // Retried after a network error or 5xx, never after our own timeout
+        // (see http.js): the SQL may still be running on the database.
         query: (ref, sql, what = 'run SQL') => data(call('POST', `/v1/projects/${ref}/database/query`, {
             what, json: { query: sql }, idempotent: true, timeoutMs: 300_000,
             hint: (status, said) => (status === 400 || status === 422 ? `The database said: ${said || 'no details'}.` : ''),

@@ -8,7 +8,7 @@ import { unzipSync, strFromU8 } from 'fflate';
 import { makeClient } from '../../scripts/make-client.mjs';
 import { collectTemplateFiles } from '../../scripts/pack-template.mjs';
 import { agency, agencyFrom, inviteEmailText } from '../../builder/src/agency.js';
-import { emptyGoLive } from '../../builder/src/catalog/goLive.js';
+import { emptyGoLive, resolveGoLive } from '../../builder/src/catalog/goLive.js';
 import {
     ADD_ON_DECISIONS, ADD_ON_LIMITS, ADD_ON_RULE, CUSTOMIZATION_MENU, LAUNCH_DAYS, PAYMENT_TAB_FEATURES,
     addOnList, normalizeAddOnRequests, normalizeAddOns, withAddOn, withoutAddOn,
@@ -93,11 +93,32 @@ test('the go-live step only stops sending for malformed values', () => {
     assert.deepEqual(goLiveErrors(READY), {});
     assert.deepEqual(goLiveErrors({ ...READY, domainMode: 'own', ownDomain: 'https://CRM.Surya.in/login' }), {});
     assert.deepEqual(goLiveErrors({ ...READY, supabaseOrg: 'surya-solar', supabaseInvited: false, brevoReady: false }), {}, 'unticked boxes never block');
-    assert.deepEqual(Object.keys(goLiveErrors({ domainMode: 'own', ownDomain: '' })), ['ownDomain']);
+    assert.deepEqual(goLiveErrors({ domainMode: 'own', ownDomain: '' }), {}, 'an own address not known yet is sorted out on a call');
+    assert.deepEqual(goLiveErrors({ domainMode: 'own', ownDomain: '   ' }), {});
     assert.deepEqual(Object.keys(goLiveErrors({ ...READY, domainMode: 'own', ownDomain: 'crm surya' })), ['ownDomain']);
     assert.deepEqual(Object.keys(goLiveErrors({ supabaseOrg: 'https://supabase.com/dashboard/projects' })), ['supabaseOrg']);
     assert.deepEqual(Object.keys(goLiveErrors({ senderEmail: 'info@' })), ['senderEmail']);
     assert.deepEqual(Object.keys(goLiveErrors({ senderName: 'Surya "Solar"' })), ['senderName']);
+});
+
+test('an own address left empty still stops provisioning, with a message for the admin', () => {
+    const live = resolveGoLive({ submission: { goLive: { ...READY, domainMode: 'own', ownDomain: '' } }, slug: SLUG, companyName: 'Surya', agencyDomain: 'solarflow.example' });
+    assert.equal(live.hostname, '');
+    assert.equal(live.siteUrl, '');
+    assert.deepEqual(live.problems, ['The client chose their own web address but did not give one.']);
+    const fixed = resolveGoLive({ submission: { goLive: { ...READY, domainMode: 'own', ownDomain: '' } }, settings: { goLive: { ownDomain: 'crm.surya.in' } }, slug: SLUG, agencyDomain: 'solarflow.example' });
+    assert.equal(fixed.hostname, 'crm.surya.in', 'the admin fills it in on the client page');
+    assert.deepEqual(fixed.problems, []);
+});
+
+test('the admin sender name is checked like the client one', () => {
+    const live = goLive => resolveGoLive({ submission: { goLive: READY }, settings: { goLive }, slug: SLUG, companyName: 'Surya Solar', agencyDomain: 'solarflow.example' });
+    assert.deepEqual(live({ senderName: 'Surya Team' }).problems, []);
+    assert.equal(live({}).senderName, 'Surya Solar');
+    for (const senderName of ['x'.repeat(61), 'Surya "Solar"', 'Surya <x@y.z>', 'Surya\r\nBcc: a@b.c']) {
+        assert.equal(live({ senderName }).problems.length, 1, JSON.stringify(senderName));
+        assert.match(live({ senderName }).problems[0], /sender name/);
+    }
 });
 
 test('the menu names only switchable features and the real limits', () => {
@@ -139,6 +160,29 @@ test('the add-on list joins client requests, admin decisions and admin items', (
     assert.equal(addOns.length, 3, 'an existing decision is replaced, not added');
     assert.equal(addOnList(submission, addOns)[0].decision, 'menu');
     assert.deepEqual(addOnList(submission, withoutAddOn(addOns, list[2])).map(entry => entry.id), ['a1', 'a3']);
+});
+
+test('saving an add-on drops undecided entries for removed requests and stays within the cap', () => {
+    const submission = { addOnRequests: [{ id: 'a1', text: 'A report' }] };
+    let addOns = [
+        { id: 'old1', from: 'client', decision: '' },
+        { id: 'old2', from: 'client', decision: 'declined' },
+        { id: 'a1', from: 'client', decision: '' },
+    ];
+    addOns = withAddOn(addOns, { id: 'm1', from: 'admin', text: 'Migration' }, submission);
+    assert.deepEqual(addOns.map(entry => entry.id), ['old2', 'a1', 'm1'], 'a decision on a removed request is kept');
+
+    // A list already at the cap, mostly decided entries for removed requests.
+    const full = Array.from({ length: ADD_ON_LIMITS.entries }, (_, i) => ({ id: `r${i}`, from: 'client', decision: 'declined' }));
+    const saved = withAddOn(full, { id: 'm2', from: 'admin', text: 'New item' }, submission);
+    assert.equal(saved.length, ADD_ON_LIMITS.entries);
+    assert.equal(saved[0].id, 'r1', 'the oldest removed entry goes first');
+    assert.equal(saved.at(-1).id, 'm2', 'the new item is kept');
+
+    // Without the submission nothing is known to be removed, but the cap still holds.
+    const blind = withAddOn([...full, { id: 'x', from: 'admin' }], { id: 'r5', from: 'client', decision: 'menu' });
+    assert.equal(blind.length, ADD_ON_LIMITS.entries);
+    assert.ok(blind.some(entry => entry.id === 'r5' && entry.decision === 'menu'));
 });
 
 test('agency details come from the env, and the copy still reads without them', () => {

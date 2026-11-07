@@ -18,7 +18,10 @@ export function parseEnvFile(text) {
         const match = line.match(/^(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/);
         if (!match) continue;
         let value = match[2].trim();
-        if (/^(["']).*\1$/.test(value)) value = value.slice(1, -1);
+        // A quoted value keeps any # inside the quotes; a comment may follow
+        // the closing quote (KEY="value" # note).
+        const quoted = value.match(/^(["'])(.*?)\1(?:\s+#.*)?$/);
+        if (quoted) value = quoted[2];
         else value = value.replace(/\s+#.*$/, '');
         values[match[1]] = value;
     }

@@ -55,14 +55,25 @@ function countOutsideQuotes(line, delimiter) {
 /**
  * Rows of cells. A cell that starts with a quote may hold the delimiter, line
  * breaks and "" (one quote); a quote anywhere else is plain text. Accepts
- * CRLF, LF or CR line ends and a leading BOM. A file with more than
- * `maxRows` rows (room is left for title rows) is refused rather than half read.
+ * CRLF, LF or CR line ends and a leading BOM. Blank records (",,,," or an
+ * empty line) are left out. A file with more than `maxRows` rows that hold a
+ * value (room is left for title rows) is refused rather than half read.
  */
-export function parseCsv(input, { delimiter, maxRows = LIMITS.rows + 20 } = {}) {
+export function parseCsv(input, options) {
+    return parseCsvRows(input, options).rows;
+}
+
+/**
+ * parseCsv, plus the record number of each row kept (1 = the first record),
+ * so messages can say "row 57" and mean line 57 even after blank lines.
+ */
+export function parseCsvRows(input, { delimiter, maxRows = LIMITS.rows + 20 } = {}) {
     const text = String(input ?? '').replace(/^\uFEFF/, '');
     const sep = delimiter || detectDelimiter(text);
     const n = text.length;
     const rows = [];
+    const rowNumbers = [];
+    let record = 0;
     let row = [];
     let i = 0;
     // Index of the next delimiter or line end at or after `from`.
@@ -80,7 +91,7 @@ export function parseCsv(input, { delimiter, maxRows = LIMITS.rows + 20 } = {}) 
             for (;;) {
                 const close = text.indexOf('"', j);
                 if (close === -1) {
-                    throw new SpreadsheetError(`Row ${rows.length + 1} has a quote mark (") that is never closed, so the rest of the file cannot be read. Open the file in Excel and save it again as CSV.`);
+                    throw new SpreadsheetError(`Row ${record + 1} has a quote mark (") that is never closed, so the rest of the file cannot be read. Open the file in Excel and save it again as CSV.`);
                 }
                 cell += text.slice(j, close);
                 if (text[close + 1] === '"') { cell += '"'; j = close + 2; continue; }
@@ -102,10 +113,17 @@ export function parseCsv(input, { delimiter, maxRows = LIMITS.rows + 20 } = {}) 
             if (i === n) row.push('');
             else continue;
         }
-        rows.push(row);
-        if (rows.length > maxRows) throw tooManyRows();
+        record += 1;
+        // Excel saves rows it once formatted as ",,,,". They are not customers,
+        // so they neither count toward the limit nor take memory (an .xlsx
+        // likewise only lists rows with a value).
+        if (row.some(cell => cell.trim())) {
+            rows.push(row);
+            rowNumbers.push(record);
+            if (rows.length > maxRows) throw tooManyRows();
+        }
         row = [];
         if (i < n) i += text[i] === '\r' && text[i + 1] === '\n' ? 2 : 1;
     }
-    return rows;
+    return { rows, rowNumbers };
 }

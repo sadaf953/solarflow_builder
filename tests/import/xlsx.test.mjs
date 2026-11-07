@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readSpreadsheet } from '../../template/src/lib/import/sheet.js';
+import { readSpreadsheet, usableSheets } from '../../template/src/lib/import/sheet.js';
 import { decodeEntities, isDateFormat, readSheetXml, scanXml } from '../../template/src/lib/import/xlsx.js';
 import { SpreadsheetError } from '../../template/src/lib/import/errors.js';
 import { centralEntries, workbook } from './fixtures.mjs';
@@ -160,4 +160,36 @@ test('the XML scanner is linear on hostile input', () => {
     assert.ok(Date.now() - started < 2000, 'scanning took too long');
     assert.equal(tags, 3, 'one tag for each input: the unclosed tag, the run of <, and <r/> after the DOCTYPE');
     assert.equal(decodeEntities('&'.repeat(100000) + 'amp;').length, 100000);
+});
+
+test('a hidden sheet that is too big does not block the customer sheet beside it', async () => {
+    const big = `<worksheet ${MAIN}><sheetData>${Array.from({ length: 20030 }, (_, i) => `<row r="${i + 1}"><c r="A${i + 1}"><v>${380001 + i}</v></c></row>`).join('')}</sheetData></worksheet>`;
+    const wide = `<worksheet ${MAIN}><sheetData><row r="1"><c r="KZ1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>`;
+    const bytes = workbook({
+        sheets: [
+            { name: 'Pincode master', hidden: true, xml: big },
+            { name: 'Customers', rows: [['Name', 'Mobile'], ['Ravi Patel', 9876543210]] },
+            { name: 'Wide', xml: wide },
+        ],
+    });
+    const { sheets } = await read(bytes);
+    const [master, customers, tooWide] = sheets;
+    assert.match(master.error, /too many rows/);
+    assert.deepEqual(master.rows, []);
+    assert.equal(customers.error, undefined);
+    assert.deepEqual(customers.rows, [['Name', 'Mobile'], ['Ravi Patel', '9876543210']]);
+    assert.match(tooWide.error, /beyond column 300/);
+    // The default choice is a readable sheet; broken ones come last, still with their message.
+    assert.deepEqual(usableSheets(sheets).map(sheet => sheet.name), ['Customers', 'Wide', 'Pincode master']);
+});
+
+test('a single sheet that is too big is still refused with its message', async () => {
+    const wide = `<worksheet ${MAIN}><sheetData><row r="1"><c r="KZ1" t="inlineStr"><is><t>x</t></is></c></row></sheetData></worksheet>`;
+    const { sheets } = await read(workbook({ sheets: [{ name: 'Only', xml: wide }] }));
+    assert.deepEqual(usableSheets(sheets).map(sheet => [sheet.name, Boolean(sheet.error)]), [['Only', true]]);
+});
+
+test('a cell holding only spaces past column 300 is ignored', () => {
+    const xml = `<worksheet ${MAIN}><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Ravi</t></is></c><c r="XFD1" t="inlineStr"><is><t xml:space="preserve">   </t></is></c></row></sheetData></worksheet>`;
+    assert.deepEqual(readSheetXml(xml), { rows: [['Ravi']], rowNumbers: [1] });
 });

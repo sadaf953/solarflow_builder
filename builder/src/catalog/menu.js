@@ -133,33 +133,39 @@ export function normalizeAddOnRequests(raw) {
 const priceDigits = value => (typeof value === 'string' || typeof value === 'number' ? String(value) : '')
     .replace(/\.\d*$/, '').replace(/\D/g, '').slice(0, ADD_ON_LIMITS.priceDigits);
 
-/**
- * settings.addOns as stored. Client entries hold only the admin's decision;
- * their text always comes from the submission. Entries for requests the
- * client later removed are kept, since an older version may still have them.
- */
-export function normalizeAddOns(raw) {
+// One settings.addOns entry as stored. Client entries hold only the admin's
+// decision; their text always comes from the submission.
+const storedEntry = item => ({
+    id: item.id,
+    from: item.from,
+    text: item.from === 'admin' ? clip(item.text, ADD_ON_LIMITS.text) : '',
+    decision: DECISIONS.has(item.decision) ? item.decision : '',
+    price: priceDigits(item.price),
+    timeline: clip(item.timeline, ADD_ON_LIMITS.timeline),
+    note: clip(item.note, ADD_ON_LIMITS.note),
+});
+
+// Valid entries, one per source and id, in order, with no cap.
+function storedEntries(raw) {
     if (!Array.isArray(raw)) return [];
     const seen = new Set();
     const entries = [];
     for (const item of raw) {
         if (!isObject(item) || !isId(item.id) || !SOURCES.has(item.from) || seen.has(`${item.from}:${item.id}`)) continue;
         seen.add(`${item.from}:${item.id}`);
-        entries.push({
-            id: item.id,
-            from: item.from,
-            text: item.from === 'admin' ? clip(item.text, ADD_ON_LIMITS.text) : '',
-            decision: DECISIONS.has(item.decision) ? item.decision : '',
-            price: priceDigits(item.price),
-            timeline: clip(item.timeline, ADD_ON_LIMITS.timeline),
-            note: clip(item.note, ADD_ON_LIMITS.note),
-        });
-        if (entries.length === ADD_ON_LIMITS.entries) break;
+        entries.push(storedEntry(item));
     }
     return entries;
 }
 
+/**
+ * settings.addOns as stored. Entries for requests the client later removed
+ * may still be here (withAddOn drops them once nothing was decided on them).
+ */
+export const normalizeAddOns = raw => storedEntries(raw).slice(0, ADD_ON_LIMITS.entries);
+
 const UNDECIDED = { decision: '', price: '', timeline: '', note: '' };
+const isUndecided = entry => Object.keys(UNDECIDED).every(key => !entry[key]);
 
 /**
  * Everything on one client's add-on list: their requests (blank ones left
@@ -174,20 +180,29 @@ export function addOnList(submission, addOns) {
     return [...requests, ...saved.filter(entry => entry.from === 'admin')];
 }
 
-/** `addOns` with one entry's admin fields saved (added when it is new). */
-export function withAddOn(addOns, entry) {
-    const list = Array.isArray(addOns) ? addOns : [];
-    const saved = {
-        id: entry.id,
-        from: entry.from,
-        text: entry.from === 'admin' ? clip(entry.text, ADD_ON_LIMITS.text) : '',
-        decision: DECISIONS.has(entry.decision) ? entry.decision : '',
-        price: priceDigits(entry.price),
-        timeline: clip(entry.timeline, ADD_ON_LIMITS.timeline),
-        note: clip(entry.note, ADD_ON_LIMITS.note),
-    };
-    const index = list.findIndex(item => item?.from === entry.from && item?.id === entry.id);
-    return index < 0 ? [...list, saved] : list.map((item, i) => (i === index ? saved : item));
+/**
+ * `addOns` with one entry's admin fields saved (added when it is new).
+ * Pass the client's `submission` so entries for requests they removed can be
+ * tidied: builder.sql refuses more than ADD_ON_LIMITS.entries, and every save
+ * would fail once the list grew past that.
+ */
+export function withAddOn(addOns, entry, submission) {
+    const saved = storedEntry(entry);
+    const list = storedEntries(addOns);
+    const index = list.findIndex(item => item.from === saved.from && item.id === saved.id);
+    const merged = index < 0 ? [...list, saved] : list.map((item, i) => (i === index ? saved : item));
+
+    const live = submission ? new Set(normalizeAddOnRequests(submission.addOnRequests).map(request => request.id)) : null;
+    const removed = item => item !== saved && item.from === 'client' && live !== null && !live.has(item.id);
+    // Nothing was decided on these, so nothing is lost.
+    const entries = merged.filter(item => !(removed(item) && isUndecided(item)));
+    // Still too many: drop the oldest entries for removed requests first,
+    // then the oldest of the rest. The entry being saved always stays.
+    while (entries.length > ADD_ON_LIMITS.entries) {
+        const oldRemoved = entries.findIndex(removed);
+        entries.splice(oldRemoved >= 0 ? oldRemoved : entries.findIndex(item => item !== saved), 1);
+    }
+    return entries;
 }
 
 export const withoutAddOn = (addOns, entry) => (Array.isArray(addOns) ? addOns : [])

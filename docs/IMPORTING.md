@@ -9,7 +9,7 @@ There are two ways in, and both use the same code (`template/src/lib/import/`):
 
 ## Files it reads
 
-- **Excel workbooks (.xlsx, .xlsm).** Every sheet is read. When there are several, the user picks one.
+- **Excel workbooks (.xlsx, .xlsm).** Every sheet is read. When there are several, the user picks one. A sheet that breaks a limit below (often a hidden lookup list) does not block the others: it is offered last, and its problem is shown only if it is picked.
 - **CSV files** from Excel, Google Sheets or LibreOffice. Commas, semicolons and tabs all work. So do UTF-8, the old Windows encoding, and Excel's "Unicode text".
 
 Other files get a message that says what to do:
@@ -18,8 +18,8 @@ Other files get a message that says what to do:
 - **Google Sheets:** choose **File → Download → Microsoft Excel (.xlsx)**.
 
 **Limits:**
-- 20,000 customers per file.
-- 300 columns.
+- 20,000 customers per file. Empty rows (",,,," in a CSV) do not count.
+- 300 columns. A cell past that holding only spaces is ignored.
 - 60 MB, both for the file and for what it unpacks to. A zip bomb is stopped as soon as it passes that.
 
 ## How columns are matched
@@ -67,7 +67,7 @@ The user can change each one. Anything unmatched, and empty cells, start in Lead
 
 ## Duplicates
 
-A row counts as a duplicate when its mobile number, or its consumer number, is already used. That can be by a customer already in SolarFlow, or by an earlier row of the same file. Customers in Trash do not count.
+A row counts as a duplicate when its mobile number, or its consumer number, is already used. That can be by a customer already in SolarFlow, or by an earlier row of the same file. Customers in Trash do not count, so restoring undone customers from Trash after importing the same file again can create duplicates.
 
 Duplicates are left out by default. The user can choose **Import them anyway**. Rows with no name, "Total" rows and repeated header rows are always left out, with the reason shown.
 
@@ -77,7 +77,7 @@ The steps are: **Choose file → Match columns → Match stages → Check → Im
 
 1. **Check** shows how many rows are ready, left out or have warnings, plus the first 20 customers as they will be saved. Nothing is saved before this step.
 2. **Import** saves 100 customers at a time.
-   - If something fails, it stops and says which rows were saved.
+   - If something fails, it stops and says which rows were saved. Each customer's id is made before saving, so a batch that was saved but whose reply was lost is found, counted as saved and covered by Undo.
    - **Download rows that were not imported** gives a CSV with the reason for each row. Fix the file and import that CSV.
 3. **Undo this import** moves exactly the customers from this import to Trash, the same as deleting them one by one. They can be recovered from Trash. It works until the page is left.
 

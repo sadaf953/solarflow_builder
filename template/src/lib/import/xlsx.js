@@ -362,11 +362,13 @@ export function readSheetXml(xml, { shared = [], dateStyles = new Set(), date190
         else if (dateStyles.has(style) && Number.isFinite(Number(value))) text = excelSerialText(Number(value), { date1904 });
         else text = normalizeNumber(value);
         if (text !== '') {
-            if (cell.col >= LIMITS.columns) {
+            if (cell.col < LIMITS.columns) {
+                cells[cell.col] = text;
+                if (text.trim()) hasValue = true;
+            } else if (text.trim()) {
                 throw new SpreadsheetError(`Row ${rowNumber} has data beyond column ${LIMITS.columns}. Delete the extra columns, save the file and try again.`);
             }
-            cells[cell.col] = text;
-            if (text.trim()) hasValue = true;
+            // A stray space far to the right is dropped: it holds nothing to import.
         }
         cell = null;
     };
@@ -418,7 +420,10 @@ export function readSheetXml(xml, { shared = [], dateStyles = new Set(), date190
     return { rows, rowNumbers };
 }
 
-/** Every worksheet of an .xlsx file: { sheets: [{ name, hidden, rows, rowNumbers }] }. */
+/**
+ * Every worksheet of an .xlsx file: { sheets: [{ name, hidden, rows, rowNumbers, error? }] }.
+ * A sheet that cannot be read on its own has no rows and its message in `error`.
+ */
 export async function readXlsx(bytes) {
     const entries = zipEntries(bytes);
     const budget = { left: LIMITS.inflatedBytes };
@@ -449,7 +454,14 @@ export async function readXlsx(bytes) {
         if (!rel || !rel.type.endsWith('/worksheet')) continue;
         const xml = await text(resolvePath(workbookPath, rel.target));
         if (xml == null) continue;
-        result.push({ name: sheet.name, hidden: sheet.hidden, ...readSheetXml(xml, { shared, dateStyles, date1904 }) });
+        try {
+            result.push({ name: sheet.name, hidden: sheet.hidden, ...readSheetXml(xml, { shared, dateStyles, date1904 }) });
+        } catch (error) {
+            // One sheet too big (often a hidden lookup list) must not block the
+            // customer sheet beside it; the error shows only if this sheet is picked.
+            if (!(error instanceof SpreadsheetError)) throw error;
+            result.push({ name: sheet.name, hidden: sheet.hidden, rows: [], rowNumbers: [], error: error.message });
+        }
     }
     return { sheets: result };
 }

@@ -19,7 +19,7 @@ import { ChoiceCards, ErrorBanner, Field, LoadingState, SectionCard, Select, Spi
 import { useGlobalPopup } from './GlobalPopup';
 import {
     LIMITS, NAME_TARGET, STAGE_TARGET, SpreadsheetError, TARGET_GROUPS, blankSheetHeaders, buildImport, columnNames, detectHeaderRow,
-    distinctValues, guessMapping, guessStageMap, importTargets, mappingProblem, readSpreadsheet,
+    distinctValues, guessMapping, guessStageMap, importTargets, insertInBatches, mappingProblem, readSpreadsheet, usableSheets,
 } from '../lib/import/index.js';
 
 const CONFIG = { features: FEATURES, stages: PRIMARY_STAGES, customFields: CUSTOM_FIELDS };
@@ -219,9 +219,14 @@ export default function ImportCustomersView({ user, showAlert, refreshMetrics, s
         setFileName(file.name);
         try {
             const { sheets: read } = await readSpreadsheet({ name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) });
-            const usable = [...read.filter(item => item.rows.length && !item.hidden), ...read.filter(item => item.rows.length && item.hidden)];
+            const usable = usableSheets(read);
             if (!usable.length) {
                 setFileError('This file has no rows to import. Check that you chose the right file.');
+                return;
+            }
+            // Sheets that could not be read come last, so the first one failing means none can be used.
+            if (usable[0].error) {
+                setFileError(usable.length > 1 ? `No sheet in this file can be imported. "${usable[0].name}": ${usable[0].error}` : usable[0].error);
                 return;
             }
             setSheets(usable);
@@ -283,44 +288,31 @@ export default function ImportCustomersView({ user, showAlert, refreshMetrics, s
         setStep('import');
         setOutcome(null);
         setProgress({ saved: 0, total });
-        const ids = [];
-        let failure = null;
-        let saved = 0;
-        for (let start = 0; start < total; start += BATCH) {
-            const batch = final.ready.slice(start, start + BATCH);
-            let response;
-            try {
-                response = await supabase.from('admin').insert(batch, { defaultToNull: false }).select('id');
-            } catch (error) {
-                response = { error };
-            }
-            const confirmed = response.data?.length || 0;
-            ids.push(...(response.data || []).map(row => row.id));
-            saved += confirmed;
-            setProgress({ saved, total });
-            if (response.error || confirmed !== batch.length) {
-                console.error('Import batch failed:', response.error);
-                failure = {
-                    start: start + confirmed,
-                    message: response.error?.message || 'The database did not confirm every customer in this batch.',
-                };
-                break;
-            }
-        }
+        // Ids are made in the browser so a batch whose reply is lost can still be found, counted and undone.
+        const { ids, savedIndexes, failure } = await insertInBatches({
+            rows: final.ready,
+            batchSize: BATCH,
+            insert: batch => supabase.from('admin').insert(batch, { defaultToNull: false }).select('id'),
+            findSaved: batchIds => supabase.from('admin').select('id').in('id', batchIds),
+            onProgress: saved => setProgress({ saved, total }),
+        });
+        if (failure) console.error('Import batch failed:', failure.message);
+        const saved = ids.length;
+        const savedSet = new Set(savedIndexes);
         const unsaved = failure
-            ? final.readyRowNumbers.slice(failure.start).map(rowNumber => ({ rowNumber, reason: `Not saved: ${failure.message}` }))
+            ? final.readyRowNumbers.flatMap((rowNumber, index) => (savedSet.has(index) ? [] : [{ rowNumber, reason: `Not saved: ${failure.message}` }]))
             : [];
         setOutcome({
             ids,
             saved,
-            failure: failure && { message: failure.message, row: final.readyRowNumbers[failure.start] },
+            failure: failure && { message: failure.message, row: final.readyRowNumbers[failure.index] },
             notImported: [...final.skipped, ...unsaved].sort((a, b) => a.rowNumber - b.rowNumber),
         });
         if (ids.length) {
             const left = final.skipped.length + unsaved.length;
             void logActivity(user?.id, 'create', `Imported ${plural(ids.length, 'customer')} from ${fileName}`,
                 `Done by: ${user?.name || 'Admin'}.${left ? ` ${plural(left, 'row')} not imported.` : ''}`, null);
-            await addListLabels(final.ready.slice(0, saved));
+            await addListLabels(final.ready.filter((_, index) => savedSet.has(index)));
             refreshMetrics?.();
         }
     };
@@ -410,10 +402,11 @@ export default function ImportCustomersView({ user, showAlert, refreshMetrics, s
                                 label="Sheet to import" columns={2} value={sheetIndex} onChange={index => pickSheet(sheets, index)}
                                 options={sheets.map((item, index) => ({
                                     value: index, label: item.hidden ? `${item.name} (hidden)` : item.name,
-                                    description: `${plural(Math.max(0, item.rows.length - 1), 'row')} below the column names`,
+                                    description: item.error ? 'Cannot be imported' : `${plural(Math.max(0, item.rows.length - 1), 'row')} below the column names`,
                                 }))}
                             />
-                            <NavButtons onNext={() => setStep('columns')} nextLabel="Next: match columns" />
+                            {sheet?.error && <ErrorBanner title={`"${sheet.name}" cannot be imported`}>{sheet.error}</ErrorBanner>}
+                            <NavButtons onNext={() => setStep('columns')} nextLabel="Next: match columns" nextDisabled={Boolean(sheet?.error)} />
                         </div>
                     )}
 

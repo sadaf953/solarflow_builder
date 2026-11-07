@@ -38,6 +38,10 @@ const LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export const isEmailAddress = value => EMAIL.test(text(value)) && text(value).length <= GO_LIVE_LIMITS.email;
 
+// The From name goes into an email header, so it stays short and free of
+// line breaks, quotes and angle brackets.
+const isSafeSenderName = value => text(value).length <= GO_LIVE_LIMITS.senderName && !/[\p{Cc}"<>]/u.test(value);
+
 // "https://CRM.Acme.in/login" -> "crm.acme.in". Anything that is not a
 // plain host name stays as typed, so isHostname() can reject it.
 export function normalizeHostname(value) {
@@ -78,18 +82,22 @@ export function normalizeGoLive(raw) {
     return value;
 }
 
-/** Problems in what the client typed, keyed by field (for the setup form). */
+/**
+ * Problems in what the client typed, keyed by field (for the setup form).
+ * Only malformed values count: an empty one is sorted out with the client on
+ * a call, and resolveGoLive() keeps it from the admin until then.
+ */
 export function goLiveErrors(raw) {
     const value = normalizeGoLive(raw);
     const errors = {};
-    if (value.domainMode === 'own' && !isHostname(normalizeHostname(value.ownDomain))) {
+    if (value.domainMode === 'own' && text(value.ownDomain) && !isHostname(normalizeHostname(value.ownDomain))) {
         errors.ownDomain = 'Enter an address like crm.yourcompany.in, without https://.';
     }
     if (text(value.supabaseOrg) && !isOrgSlug(normalizeOrgSlug(value.supabaseOrg))) {
         errors.supabaseOrg = 'Paste the organization link from Supabase, or the short name after /org/ in it.';
     }
     if (text(value.senderEmail) && !isEmailAddress(value.senderEmail)) errors.senderEmail = 'Enter a valid email address.';
-    if (text(value.senderName).length > GO_LIVE_LIMITS.senderName || /[\p{Cc}"<>]/u.test(value.senderName)) {
+    if (!isSafeSenderName(value.senderName)) {
         errors.senderName = `Use up to ${GO_LIVE_LIMITS.senderName} characters, without quotes or < >.`;
     }
     return errors;
@@ -146,6 +154,12 @@ export function resolveGoLive({ submission, settings, slug, companyName, agencyD
     if (!senderEmail) warnings.push('No email sender yet: password emails will use Supabase’s test mailer, which only reaches members of the client’s Supabase organization.');
     else if (!isEmailAddress(senderEmail)) problems.push(`The sender “${senderEmail}” is not a valid email address.`);
     else if (!value.brevoReady) warnings.push(`The client has not confirmed that ${senderEmail} is verified in their Brevo account. Brevo refuses mail from unverified senders.`);
+    // The admin's override (or the company name it falls back to) skips the
+    // setup form's check, so the same rule is applied here. Without a sender
+    // email no From header is set, so the name does not matter yet.
+    if (senderEmail && !isSafeSenderName(senderName)) {
+        problems.push(`The sender name must be up to ${GO_LIVE_LIMITS.senderName} characters, without quotes, < > or line breaks. Set a shorter one on the client page.`);
+    }
 
     return {
         ...value,

@@ -68,7 +68,7 @@ export function AddOnsPanel({ submission, addOns = [], onChange }) {
     const full = entries.filter(entry => entry.from === 'admin').length >= ADD_ON_LIMITS.adminItems;
     const add = () => {
         const entry = { id: newAddOnId(), from: 'admin', text: '' };
-        onChange(withAddOn(addOns, entry));
+        onChange(withAddOn(addOns, entry, submission));
         setFocusId(entry.id);
     };
     return (
@@ -77,7 +77,7 @@ export function AddOnsPanel({ submission, addOns = [], onChange }) {
                 <ul className="space-y-3">
                     {entries.map(entry => (
                         <AddOnRow key={`${entry.from}:${entry.id}`} entry={entry} textId={`${id}-${entry.id}`}
-                            onChange={next => onChange(withAddOn(addOns, next))}
+                            onChange={next => onChange(withAddOn(addOns, next, submission))}
                             onRemove={entry.from === 'admin' ? () => onChange(withoutAddOn(addOns, entry)) : undefined} />
                     ))}
                 </ul>

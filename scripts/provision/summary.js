@@ -47,6 +47,10 @@ export function summaryLines(ctx) {
 
     const todo = [];
     if (memo.dbPassword) todo.push('Send the client the database password above, privately.');
+    // Found by name, not created by a recorded run: its password is unknown.
+    if (state.supabase?.foundAt && !state.supabase.createdAt) {
+        todo.push(`Reset the database password in Supabase (Project settings → Database) and send it to the client, privately, unless they already have it.`);
+    }
     if (state.dns && !state.dns.ok) todo.push(goLive.domainMode === 'own' ? 'Send the client the DNS record above, and run the same command again once it is in.' : 'Add the DNS record above.');
     if (smtpState === 'off') todo.push('Get the client\'s Brevo SMTP key into the secrets file and run again.');
     if (ADMIN_ROLE.test(memo.role || '')) {

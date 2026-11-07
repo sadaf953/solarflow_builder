@@ -24,3 +24,43 @@ export function emailLinkProblem(type, error) {
     const what = type === 'invite' ? 'invitation link' : 'password reset link';
     return `That ${what} has expired or was already used. Choose "Forgot password?" below to get a new one.`;
 }
+
+// ── A password still to choose ───────────────────────────────────────────
+// Opening an invitation signs the new user in, but they have no password
+// until they save one in the welcome dialog. The link's token is removed
+// from the address once it is used, so a reload would lose the dialog. A
+// flag in sessionStorage, holding the user's id, brings it back. These take
+// the storage as an argument (null when the browser blocks it) and never
+// throw, since storage can be unavailable in private windows.
+
+export const PASSWORD_PENDING_KEY = 'solarflow_password_pending';
+
+/** Remember that this user opened an invitation and has no password yet. */
+export function markPasswordPending(storage, userId) {
+    if (!userId) return;
+    try { storage?.setItem(PASSWORD_PENDING_KEY, userId); } catch { /* storage may be unavailable */ }
+}
+
+/** True when this user still has to choose a password. */
+export function isPasswordPending(storage, userId) {
+    if (!userId) return false;
+    try { return storage?.getItem(PASSWORD_PENDING_KEY) === userId; } catch { return false; }
+}
+
+/** Forget the flag: the password was saved, or the user signed out. */
+export function clearPasswordPending(storage) {
+    try { storage?.removeItem(PASSWORD_PENDING_KEY); } catch { /* storage may be unavailable */ }
+}
+
+/** sessionStorage, or null when the browser does not allow it. */
+export function sessionStore() {
+    try { return globalThis.sessionStorage ?? null; } catch { return null; }
+}
+
+/** True when updating the password failed because the sign-in has ended. */
+export function isSessionGone(error) {
+    if (!error) return false;
+    if (error.name === 'AuthSessionMissingError') return true;
+    if (['session_not_found', 'session_expired', 'bad_jwt', 'refresh_token_not_found'].includes(error.code)) return true;
+    return /session missing|session.*(expired|not found)|jwt expired|token is expired/i.test(error.message || '');
+}

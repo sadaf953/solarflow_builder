@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { chmodSync, existsSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { runProvision } from '../../scripts/provision/run.js';
 import { makeClient } from '../../scripts/make-client.mjs';
@@ -419,4 +419,105 @@ test('the client\'s org must have invited the agency', async t => {
     const failed = await run(world, ws);
     assert.ok(failed instanceof Error);
     assert.match(failed.text, /is not in the client's organization “someone-else”\. Ask the client to invite agency@ray2volt\.test as Administrator/);
+});
+
+test('a create that times out and is not found keeps the password on screen only; the next run finds the project', async t => {
+    const ws = workspace();
+    t.after(() => rmSync(ws.dir, { recursive: true, force: true }));
+    const world = fakeWorld();
+    const fetch = world.fetch;
+    world.fetch = async (url, init = {}) => {
+        if (init.method === 'POST' && new URL(url).pathname === '/v1/projects') {
+            await fetch(url, init);   // recorded, but the fake project is hidden below
+            world.projects.clear();
+            throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' });
+        }
+        return fetch(url, init);
+    };
+    const failed = await run(world, ws);
+    assert.ok(failed instanceof Error);
+    const dbPass = mgmt(world, 'POST', '/v1/projects')[0].body.db_pass;
+    assert.equal(mgmt(world, 'POST', '/v1/projects').length, 1, 'the create is not sent twice');
+    assert.ok(failed.text.includes(dbPass), 'the password is printed for the agency');
+    assert.match(failed.text, /The project may still appear in surya-org: keep the database password printed above/);
+    const stateText = readFileSync(join(ws.root, 'surya', 'provision-state.json'), 'utf8');
+    assert.ok(!stateText.includes(dbPass), 'the password never reaches the state file');
+    assert.equal(stateOf(ws).steps.project.status, 'failed');
+
+    // Supabase made it after all: the next run finds it and asks for a password reset.
+    world.fetch = fetch;
+    world.projects.set(REF, { ref: REF, name: 'surya-solarflow', organization_slug: 'surya-org', region: 'ap-south-1', status: 'ACTIVE_HEALTHY' });
+    const result = await run(world, ws);
+    assert.equal(result.ok, true, result.text);
+    assert.equal(mgmt(world, 'POST', '/v1/projects').length, 1);
+    assert.match(result.text, /Found the existing project surya-solarflow/);
+    assert.match(result.text, /- Reset the database password in Supabase \(Project settings → Database\) and send it to the client/);
+    assert.ok(!result.text.includes(dbPass));
+});
+
+test('a project created by a recorded run needs no password reset', async t => {
+    const ws = workspace();
+    t.after(() => rmSync(ws.dir, { recursive: true, force: true }));
+    const result = await run(fakeWorld(), ws);
+    assert.equal(result.ok, true, result.text);
+    assert.ok(!/Reset the database password/.test(result.text));
+});
+
+test('Auth: a failed read of the settings stops the step instead of guessing "no SMTP"', async t => {
+    const ws = workspace();
+    t.after(() => rmSync(ws.dir, { recursive: true, force: true }));
+    const world = fakeWorld();
+    await run(world, ws);
+    rmSync(ws.secretsPath);   // no secrets this time: SMTP must be seen on the project
+    world.failures.push({ match: /^GET \/v1\/projects\/[a-z]+\/config\/auth$/, status: 503, times: 10 });
+    const before = mgmt(world, 'PATCH', `/v1/projects/${REF}/config/auth`).length;
+    const failed = await run(world, ws, { only: 'auth' });
+    assert.ok(failed instanceof Error);
+    assert.match(failed.message, /Stopped at/);
+    assert.equal(mgmt(world, 'PATCH', `/v1/projects/${REF}/config/auth`).length, before, 'nothing was changed');
+    assert.equal(world.auth[REF].mailer_autoconfirm, false);
+});
+
+test('Auth: a 403 on reading the settings falls back to the SMTP recorded last run', async t => {
+    const ws = workspace();
+    t.after(() => rmSync(ws.dir, { recursive: true, force: true }));
+    const world = fakeWorld();
+    await run(world, ws);
+    assert.equal(stateOf(ws).auth.smtp, true);
+    rmSync(ws.secretsPath);
+    world.failures.push({ match: /^GET \/v1\/projects\/[a-z]+\/config\/auth$/, status: 403, times: 10 });
+    const result = await run(world, ws, { only: 'auth' });
+    assert.equal(result.ok, true, result.text);
+    const patches = mgmt(world, 'PATCH', `/v1/projects/${REF}/config/auth`);
+    assert.equal(patches.at(-1).body.mailer_autoconfirm, false, 'auto-confirm stays off on a project with SMTP');
+    assert.match(result.text, /SMTP: kept as set on an earlier run/);
+});
+
+test('wait: a health endpoint that refuses the services list does not block the run', async t => {
+    const ws = workspace();
+    t.after(() => rmSync(ws.dir, { recursive: true, force: true }));
+    const world = fakeWorld();
+    world.failures.push({ match: /^GET \/v1\/projects\/[a-z]+\/health$/, status: 400, times: 100, body: { message: 'invalid services' } });
+    const result = await run(world, ws);
+    assert.equal(result.ok, true, result.text);
+    assert.match(result.text, /Healthy after/);
+});
+
+test('a state file that cannot be saved does not hide the step\'s error', async t => {
+    const ws = workspace();
+    const folder = join(ws.root, 'surya');
+    t.after(() => { chmodSync(folder, 0o755); rmSync(ws.dir, { recursive: true, force: true }); });
+    const world = fakeWorld();
+    const fetch = world.fetch;
+    world.fetch = async (url, init = {}) => {
+        if (/\/functions\/deploy$/.test(new URL(url).pathname)) {
+            chmodSync(folder, 0o555);   // the save after the failure cannot write
+            return new Response('{"message":"boom"}', { status: 400 });
+        }
+        return fetch(url, init);
+    };
+    const failed = await run(world, ws);
+    assert.ok(failed instanceof Error);
+    assert.match(failed.message, /Stopped at “Staff-login function”/);
+    assert.match(failed.text, /The state file was not updated/);
 });

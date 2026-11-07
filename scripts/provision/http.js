@@ -5,7 +5,8 @@
 // - Timeouts on every request.
 // - 429 is always retried (the request was refused before it ran); network
 //   errors and 5xx only for requests marked idempotent, so a create that
-//   failed half-way is never sent twice.
+//   failed half-way is never sent twice. A timeout is never retried: the
+//   request may still be running on the other side.
 // - Errors say which service refused what, and what to do next.
 // - Nothing that could hold a token is ever printed: headers are redacted and
 //   every message passes through `redact`, which knows the secret values of
@@ -80,12 +81,19 @@ export function createHttp({ fetch = globalThis.fetch, sleep = wait, retries = 4
             try {
                 response = await fetch(url, { method, headers: sendHeaders, body: sendBody, signal: AbortSignal.timeout(limit) });
             } catch (error) {
-                if (retry && idempotent && attempt < retries) {
+                // Our own timeout is not retried: the request reached the
+                // service and may still be running there (a long SQL file
+                // runs for minutes), so sending it again would run it twice
+                // at the same time. Real network errors are retried.
+                const timedOut = error?.name === 'TimeoutError';
+                if (retry && idempotent && !timedOut && attempt < retries) {
                     await sleep(backoff(attempt));
                     continue;
                 }
-                const reason = error?.name === 'TimeoutError' ? `no answer after ${Math.round(limit / 1000)} s` : error?.message || 'network error';
-                throw new ApiError(redact(`Could not reach ${service} to ${label} (${reason}). Check the internet connection and run the same command again.`), { service, code: 'network' });
+                const message = timedOut
+                    ? `${service} did not answer within ${Math.round(limit / 1000)} s to ${label}. It may still be running there: check in the dashboard whether it finished before you run the same command again.`
+                    : `Could not reach ${service} to ${label} (${error?.message || 'network error'}). Check the internet connection and run the same command again.`;
+                throw new ApiError(redact(message), { service, code: timedOut ? 'timeout' : 'network' });
             }
             const text = await response.text();
             let data = null;
