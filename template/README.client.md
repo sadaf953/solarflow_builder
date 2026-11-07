@@ -2,6 +2,8 @@
 
 This folder is your own copy of SolarFlow. It runs on your own Supabase project, so your customer data stays in your account. Setup takes about 20 minutes and is done once.
 
+**Did the SolarFlow team put your app online for you?** Then steps 1 to 7 below are already done. Open the "Set your password" email sent to {{OWNER_EMAIL}}, choose your password, and you are in. Keep this folder as your copy of the app.
+
 You need:
 - a free Supabase account (https://supabase.com)
 - Node.js 20 or newer, to build the app
@@ -94,6 +96,10 @@ Upload the contents of the `dist/` folder to your web host:
 SolarFlow's pages use `#` links, so no rewrite rules are needed. If your host asks for a "single-page app" fallback, point it to `index.html`.
 
 Open your site and sign in as {{OWNER_EMAIL}}.
+
+## Bring in your existing customers
+
+Signed in as admin, open **Import customers** in the sidebar and choose your Excel (.xlsx) or CSV file. SolarFlow matches your columns and stages, shows what it will save and what it will leave out (rows without a name, customers already in SolarFlow), and only saves when you click Import. Right after an import, **Undo this import** moves those customers to Trash. From Google Sheets, use File → Download → Microsoft Excel (.xlsx) first.
 
 ## If something goes wrong
 

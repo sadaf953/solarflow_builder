@@ -9,7 +9,8 @@ import { configWith, importTemplate } from '../dashboard/fixtures/templateModule
 
 // The shipped template config turns every available feature on.
 
-const ALWAYS_ON = ['dashboard'];
+// Import customers is how an admin brings in their old data: every client gets it.
+const ALWAYS_ON = ['dashboard', 'import_customers'];
 const GROUPS = ['main', 'tracking', 'team', 'admin'];
 const ids = views => views.map(view => view.id);
 const as = userType => ({ id: `${userType}-1`, name: 'Test Login', userType });
@@ -112,7 +113,7 @@ test('each login type sees only the views open to it', () => {
 });
 
 test('only admins open the admin tools', () => {
-    for (const id of ['channel_partner_mgmt', 'installation_payments', 'activity', 'exports', 'trash']) {
+    for (const id of ['channel_partner_mgmt', 'installation_payments', 'activity', 'exports', 'import_customers', 'trash']) {
         assert.equal(canOpenView(id, ADMIN), true, id);
         for (const userType of ['sales', 'channel_partner_office', 'office2']) assert.equal(canOpenView(id, as(userType)), false, `${id} for ${userType}`);
     }
@@ -139,7 +140,7 @@ test('the sidebar groups keep the registry order', () => {
     assert.deepEqual(ids(viewsInGroup('main', ADMIN)), ['dashboard', 'quotations', 'calendar']);
     assert.deepEqual(ids(viewsInGroup('tracking', ADMIN)), ['delivery_batches', 'inventory', 'subsidy', 'loan_tags', 'installation_tags']);
     assert.deepEqual(ids(viewsInGroup('team', ADMIN)), ['attendance', 'channel_partner_mgmt', 'installation_payments']);
-    assert.deepEqual(ids(viewsInGroup('admin', ADMIN)), ['activity', 'users', 'exports', 'trash']);
+    assert.deepEqual(ids(viewsInGroup('admin', ADMIN)), ['activity', 'users', 'exports', 'import_customers', 'trash']);
     assert.deepEqual(GROUPS.flatMap(group => ids(viewsInGroup(group, ADMIN))).sort(), ids(VIEWS).sort());
 
     assert.deepEqual(ids(viewsInGroup('admin', as('channel_partner_office'))), ['users']);
@@ -189,7 +190,7 @@ test('views follow the features and stages they depend on', async () => {
 
     const minimal = Object.fromEntries(Object.entries(FEATURE_REGISTRY).filter(([, feature]) => feature.status === 'available').map(([id]) => [id, false]));
     const bare = await importTemplate('app/views.js', { config: configWith({ features: minimal }) });
-    assert.deepEqual(openTo(ADMIN, bare), ['dashboard', 'channel_partner_mgmt', 'activity', 'users', 'trash']);
+    assert.deepEqual(openTo(ADMIN, bare), ['dashboard', 'channel_partner_mgmt', 'activity', 'users', 'import_customers', 'trash']);
     assert.deepEqual(openTo(as('sales'), bare), ['dashboard']);
 });
 

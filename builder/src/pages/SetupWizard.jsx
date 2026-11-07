@@ -7,8 +7,9 @@ import { emptySubmission, normalizePhone } from '../catalog/submission.js';
 import { LiveSummary } from '../components/FeatureViews.jsx';
 import { PageShell, SaveStatus } from '../components/common.jsx';
 import { downloadJson, normalizeSubmission, storage } from '../components/wizardData.js';
-import { businessErrors, unansweredIds, workflowErrors } from './wizard/checks.js';
+import { businessErrors, goLiveErrors, unansweredIds, workflowErrors } from './wizard/checks.js';
 import { FeaturesStep } from './wizard/FeaturesStep.jsx';
+import { GoLiveStep } from './wizard/GoLiveStep.jsx';
 import { ReviewStep } from './wizard/ReviewStep.jsx';
 import { BusinessStep, DoneStep, SendStep, WelcomeStep } from './wizard/SimpleSteps.jsx';
 import { WorkflowStep } from './wizard/WorkflowStep.jsx';
@@ -19,6 +20,7 @@ const STEPS = [
     { id: 'features', label: 'Features' },
     { id: 'review', label: 'Review' },
     { id: 'workflow', label: 'Workflow' },
+    { id: 'golive', label: 'Go live' },
     { id: 'send', label: 'Send' },
 ];
 const TITLES = {
@@ -26,6 +28,7 @@ const TITLES = {
     business: 'Your business',
     review: 'Your features',
     workflow: 'Your workflow',
+    golive: 'Go live',
     send: 'Check and send',
     done: 'Thank you',
 };
@@ -42,6 +45,7 @@ function findProblems(submission) {
         problems.push({ step: 'features', part, text: `${open.length} question${open.length === 1 ? ' is' : 's are'} not answered yet.` });
     }
     if (workflowErrors(submission).length) problems.push({ step: 'workflow', text: 'Your workflow needs a fix.' });
+    if (Object.keys(goLiveErrors(submission.goLive)).length) problems.push({ step: 'golive', text: 'A go-live detail needs a fix.' });
     return problems;
 }
 
@@ -156,6 +160,7 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
     const setContact = (key, value) => update(s => ({ ...s, contact: { ...s.contact, [key]: value } }));
     const setAnswer = (id, value) => update(s => ({ ...s, answers: { ...s.answers, [id]: value } }));
     const setWorkflow = patch => update(s => ({ ...s, workflow: { ...s.workflow, ...patch } }));
+    const setGoLive = patch => update(s => ({ ...s, goLive: { ...s.goLive, ...patch } }));
     const goTo = (id, toPart) => {
         setStep(id);
         if (toPart != null) setPart(Math.max(0, toPart));
@@ -218,12 +223,16 @@ export default function SetupWizard({ inviteId, token, preview = false }) {
                 onBack={() => goTo('features', QUESTION_STEPS.length - 1)} onNext={() => goTo('workflow')} />;
             break;
         case 'workflow':
-            body = <WorkflowStep submission={submission} onWorkflow={setWorkflow} onBack={() => goTo('review')} onNext={() => goTo('send')} />;
+            body = <WorkflowStep submission={submission} onWorkflow={setWorkflow} onBack={() => goTo('review')} onNext={() => goTo('golive')} />;
+            break;
+        case 'golive':
+            body = <GoLiveStep submission={submission} onChange={setGoLive} onBack={() => goTo('workflow')} onNext={() => goTo('send')} />;
             break;
         case 'send':
             body = <SendStep submission={submission} problems={problems} onGo={(id, toPart) => goTo(id, toPart)}
                 notes={submission.notes} onNotes={notes => update(s => ({ ...s, notes }))}
-                onBack={() => goTo('workflow')} onSend={send} busy={sending} error={sendError} blocked={sendBlocked} resend={resend} preview={preview} />;
+                onAddOnRequests={addOnRequests => update(s => ({ ...s, addOnRequests }))}
+                onBack={() => goTo('golive')} onSend={send} busy={sending} error={sendError} blocked={sendBlocked} resend={resend} preview={preview} />;
             break;
         case 'done':
             body = <DoneStep submittedAt={load.meta.submittedAt} preview={preview} onEdit={() => goTo('review')} onDownload={preview ? downloadAnswers : undefined} />;

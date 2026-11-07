@@ -12,6 +12,7 @@ backups/
 
 .env.*
 !.env.example
+!.env.provision.example
 output/
 scratch/
 supabase/.temp/
@@ -23,3 +24,6 @@ builder/public/client-template.json
 .claude/
 client-zips/
 scripts/sql/
+
+# Handoff brief: holds the do-not-sell list, never commit
+HANDOFF.md

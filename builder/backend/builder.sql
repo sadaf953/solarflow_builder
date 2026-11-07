@@ -60,7 +60,7 @@ create table if not exists setup_private.invites (
 );
 
 -- What the admin set on the client page: {adminOverrides, slug, ownerEmail,
--- branding, workflow}. Never shown to the client.
+-- branding, workflow, goLive, addOns}. Never shown to the client.
 alter table setup_private.invites add column if not exists admin_settings jsonb;
 
 create table if not exists setup_private.drafts (
@@ -265,7 +265,10 @@ begin
      or p_payload -> 'schemaVersion' is distinct from '1'::jsonb
      or jsonb_typeof(p_payload -> 'contact') is distinct from 'object'
      or jsonb_typeof(p_payload -> 'answers') is distinct from 'object'
-     or jsonb_typeof(p_payload -> 'workflow') is distinct from 'object' then
+     or jsonb_typeof(p_payload -> 'workflow') is distinct from 'object'
+     -- Older forms saved neither of these.
+     or coalesce(jsonb_typeof(p_payload -> 'goLive'), 'object') <> 'object'
+     or coalesce(jsonb_typeof(p_payload -> 'addOnRequests'), 'array') <> 'array' then
     raise exception 'invalid_payload' using errcode = 'P0001';
   end if;
 
@@ -492,7 +495,7 @@ end;
 $$;
 
 -- Replaces the admin's settings: {adminOverrides, slug, ownerEmail, branding,
--- workflow}, at most 256 KB.
+-- workflow, goLive, addOns}, at most 256 KB. addOns holds at most 100 objects.
 create or replace function setup_private.setup_admin_save_settings(p_invite uuid, p_settings jsonb)
 returns void
 language plpgsql security definer
@@ -505,13 +508,22 @@ begin
   end if;
   if jsonb_typeof(p_settings) is distinct from 'object'
      or exists (select 1 from jsonb_object_keys(p_settings) k
-                 where k not in ('adminOverrides', 'slug', 'ownerEmail', 'branding', 'workflow'))
+                 where k not in ('adminOverrides', 'slug', 'ownerEmail', 'branding', 'workflow', 'goLive', 'addOns'))
      or coalesce(jsonb_typeof(p_settings -> 'adminOverrides'), 'object') <> 'object'
      or coalesce(jsonb_typeof(p_settings -> 'branding'), 'object') <> 'object'
      or coalesce(jsonb_typeof(p_settings -> 'workflow'), 'null') not in ('object', 'null')
      or coalesce(jsonb_typeof(p_settings -> 'slug'), 'string') <> 'string'
-     or coalesce(jsonb_typeof(p_settings -> 'ownerEmail'), 'string') <> 'string' then
+     or coalesce(jsonb_typeof(p_settings -> 'ownerEmail'), 'string') <> 'string'
+     or coalesce(jsonb_typeof(p_settings -> 'goLive'), 'object') <> 'object'
+     or coalesce(jsonb_typeof(p_settings -> 'addOns'), 'array') <> 'array' then
     raise exception 'invalid_input' using errcode = 'P0001', detail = 'These settings could not be saved. Reload the page and try again.';
+  end if;
+  -- Checked on its own: the elements can only be read once addOns is known to be an array.
+  if jsonb_typeof(p_settings -> 'addOns') = 'array' then
+    if jsonb_array_length(p_settings -> 'addOns') > 100
+       or exists (select 1 from jsonb_array_elements(p_settings -> 'addOns') e where jsonb_typeof(e) <> 'object') then
+      raise exception 'invalid_input' using errcode = 'P0001', detail = 'These settings could not be saved. Reload the page and try again.';
+    end if;
   end if;
   update setup_private.invites set admin_settings = p_settings where id = p_invite;
   if not found then

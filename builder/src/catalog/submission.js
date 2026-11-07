@@ -5,6 +5,7 @@
 // config with submissionToClientConfig().
 
 import { answersToFeatures } from './questions.js';
+import { emptyGoLive } from './goLive.js';
 import { FEATURE_REGISTRY } from '../../../template/src/config/catalog/features.js';
 import { BUILTIN_STAGES } from '../../../template/src/config/catalog/stages.js';
 import { DROPDOWN_CATALOG } from '../../../template/src/config/catalog/dropdowns.js';
@@ -27,6 +28,8 @@ export function emptySubmission(prefill = {}) {
             dropdowns: {},             // category -> list (only lists the client changed)
             customFields: [],          // [{key,label,type,stage,options?,required?,showInAddLead?}]
         },
+        goLive: emptyGoLive(),         // web address, Supabase organization, email sender (goLive.js)
+        addOnRequests: [],             // [{id,text}]: what the client needs outside the menu (menu.js)
         notes: '',
     };
 }

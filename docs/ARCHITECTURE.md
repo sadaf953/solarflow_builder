@@ -23,7 +23,8 @@ template/                     client app (standalone Vite project; root of every
   backend/functions/add_user  hardened Edge Function for staff logins
   README.client.md            becomes README.md in the zip
 builder/                      agency website (Vite project, imports template/src/{config,ui,lib})
-scripts/                      pack-template.mjs, make-client.mjs, check-secrets.mjs
+scripts/                      pack-template.mjs, make-client.mjs, check-secrets.mjs, import-customers.mjs,
+                              provision.mjs + provision/ (one-command go-live, docs/PROVISIONING.md), keepalive.mjs
 tests/                        node --test suites (config, backend SQL via PGlite, builder, app helpers)
 ```
 
@@ -102,7 +103,7 @@ Runtime API (`config/index.js`), resolved once and frozen:
 | activity | activityLog |
 | trash | trash |
 
-The old `vendor_availability` view is replaced by `calendar`.
+The old `vendor_availability` view is replaced by `calendar`. `dashboard` and `import_customers` (Import customers, admin only; docs/IMPORTING.md) belong to no feature and are always on.
 
 **Role → feature:**
 
@@ -180,6 +181,7 @@ The client's own fresh Supabase project is set up by one idempotent script, foll
 | metrics | `get_dashboard_metrics_scoped(...)`, `get_dashboard_metrics(...)`, `get_cpo_dashboard_metrics(...)`; partner and dealer match the whole name ignoring case |
 | inventory | `record_inventory_movement(...)`, `bom_stock_document`, `get_inventory_bom_lines`, `set_bom_stock_quantity` |
 | delivery batches | `save_delivery_batch_atomic`, `delete_delivery_batch_atomic`, `update_delivery_batch_status_atomic` (same signatures as the demo; a batch without a vendor keeps each project's installer) |
+| `keepalive() returns timestamptz` | returns now() and reads nothing; the only function `anon` may execute. Provisioning schedules a daily pg_cron + pg_net call to it so free projects do not pause (that job is not in setup.sql). |
 
 **Security:**
 - Helper functions live in schema `solarflow_private` (security definer, `search_path=''`): `my_role()`, `is_active()`, `is_admin()`, `is_head_office()` (admin|sales), `current_cpo()`, `can_view_lead(uuid)`.
@@ -200,6 +202,7 @@ The client's own fresh Supabase project is set up by one idempotent script, foll
   - It verifies the caller's JWT, then loads the caller's profile: the caller must be an active admin, or a CPO creating office2/agent2 under itself.
   - It refuses roles that are disabled in `app_roles`, writes the role into `app_metadata`, and restricts CORS to `ALLOWED_ORIGIN` if set.
 - There is no anonymous sign-in and no public sign-up. The Supabase settings to use are in README.client.md.
+- **Email links:** provisioning sets branded invite and reset templates whose links are `{{ .SiteURL }}/?token_hash={{ .TokenHash }}&type=invite|recovery`. The app (`lib/emailLink.js`, App.jsx) verifies them with `verifyOtp`, so they work in any browser, and an invited admin lands on a "choose your password" dialog that cannot be skipped. The default PKCE `?code=` links of a hand-made project still work.
 
 ## 4. Shared UI kit (`template/src/ui/`) and lib (`template/src/lib/`)
 
@@ -225,6 +228,8 @@ Build every new screen from these. When you touch existing code, replace a hand-
 | `lazy.js` | `lazyWithRetry`, `LazyBoundary` |
 | `env.js` | `jwtClaims`, `projectRef`, `supabaseEnvProblem` (pure; shared by the app, check-env and the builder) |
 | `metadata.js` | `useMetadataOptions(category)`, cached and invalidatable |
+| `emailLink.js` | `readEmailLink`, `emailLinkProblem`, `EMAIL_LINK_PARAMS` (invite / reset links, see §3) |
+| `import/` | the customer importer, shared by the Import customers view and `scripts/import-customers.mjs`: `readSpreadsheet` (.xlsx via `DecompressionStream`, CSV), `importTargets`, `guessMapping`, `guessStageMap`, `buildImport` (docs/IMPORTING.md) |
 
 ## 5. Ownership and conventions for agents
 

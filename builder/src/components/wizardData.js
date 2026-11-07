@@ -2,6 +2,8 @@
 
 import { emptySubmission, availableBuiltinStages, defaultStageList } from '../catalog/submission.js';
 import { questionById } from '../catalog/questions.js';
+import { DOMAIN_MODES, GO_LIVE_KEYS, emptyGoLive, normalizeGoLive } from '../catalog/goLive.js';
+import { normalizeAddOnRequests, normalizeAddOns } from '../catalog/menu.js';
 import { FEATURE_REGISTRY } from '../../../template/src/config/catalog/features.js';
 import { BUILTIN_STAGES } from '../../../template/src/config/catalog/stages.js';
 import { downloadBlob } from '../../../template/src/lib/download.js';
@@ -41,6 +43,8 @@ export function normalizeSubmission(raw, prefill) {
         answers: isObject(raw.answers) ? { ...raw.answers } : {},
         featureOverrides: isObject(raw.featureOverrides) ? { ...raw.featureOverrides } : {},
         workflow: { ...base.workflow, ...(isObject(raw.workflow) ? raw.workflow : {}) },
+        goLive: normalizeGoLive(raw.goLive),
+        addOnRequests: normalizeAddOnRequests(raw.addOnRequests),
     };
 }
 
@@ -59,8 +63,21 @@ export const stageName = stage => String(stage?.label || '').trim() || BUILTIN_B
 
 export const isEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 
+const GO_LIVE_TYPES = emptyGoLive();
+
+// The admin's go-live changes: only the keys they set, each of the right type
+// (resolveGoLive uses text that is not blank and any boolean).
+function goLiveOverrides(raw) {
+    if (!isObject(raw)) return {};
+    return Object.fromEntries(GO_LIVE_KEYS
+        .filter(key => typeof raw[key] === typeof GO_LIVE_TYPES[key])
+        .filter(key => key !== 'domainMode' || DOMAIN_MODES.includes(raw[key]))
+        .map(key => [key, raw[key]]));
+}
+
 // What the admin sets on a client page, with every key present:
-// {adminOverrides, slug, ownerEmail, branding, workflow (null = the client's)}.
+// {adminOverrides, slug, ownerEmail, branding, workflow (null = the client's),
+// goLive (only the keys the admin changed), addOns (see menu.js)}.
 export function normalizeSettings(raw) {
     const value = isObject(raw) ? raw : {};
     const text = key => (typeof value[key] === 'string' ? value[key] : '');
@@ -70,6 +87,8 @@ export function normalizeSettings(raw) {
         ownerEmail: text('ownerEmail'),
         branding: isObject(value.branding) ? value.branding : {},
         workflow: isObject(value.workflow) ? value.workflow : null,
+        goLive: goLiveOverrides(value.goLive),
+        addOns: normalizeAddOns(value.addOns),
     };
 }
 
@@ -85,7 +104,7 @@ export function adminWorkflowFrom(submission) {
 const greetName = name => String(name || '').trim() || 'there';
 
 export const whatsappInviteText = (name, link) =>
-    `Hi ${greetName(name)}, please fill your SolarFlow setup form (about 5 minutes): ${link} Keep your Excel or Google Sheet handy for the last part.`;
+    `Hi ${greetName(name)}, please fill your SolarFlow setup form (about 5 minutes): ${link} Keep your Excel or Google Sheet handy for the stages and fields part.`;
 
 export const emailInviteText = (name, link) => [
     `Hi ${greetName(name)},`,
@@ -94,7 +113,7 @@ export const emailInviteText = (name, link) => [
     '',
     link,
     '',
-    'Keep your Excel or Google Sheet open next to it for the last part, where you choose your stages and fields.',
+    'Keep your Excel or Google Sheet open next to it for the part where you choose your stages and fields.',
     '',
     'Thank you,',
     'The SolarFlow team',

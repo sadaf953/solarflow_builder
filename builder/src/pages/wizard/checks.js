@@ -4,6 +4,10 @@ import { visibleQuestions } from '../../catalog/questions.js';
 import { normalizePhone, submissionToClientConfig } from '../../catalog/submission.js';
 import { isEmail } from '../../components/wizardData.js';
 
+// Go-live details: only malformed values count (goLiveErrors, keyed by
+// field). Anything left empty is done with the client on a call.
+export { goLiveErrors } from '../../catalog/goLive.js';
+
 export function businessErrors(contact = {}) {
     const errors = {};
     if (!String(contact.company || '').trim()) errors.company = 'Enter your company name.';

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured, supabaseSetupProblem } from './supabase';
 import { BRANDING, isOn, isRoleEnabled } from './config/index.js';
+import { EMAIL_LINK_PARAMS, emailLinkProblem, readEmailLink } from './lib/emailLink.js';
 import LoginScreen from './components/LoginScreen';
 import OfflineBanner from './components/OfflineBanner';
 const PasswordRecoveryModal = lazy(() => import('./components/PasswordRecoveryModal'));
@@ -57,9 +58,17 @@ function linkProblem() {
 
 function clearLinkParams() {
     const url = new URL(window.location.href);
-    for (const key of ['code', 'sb_flow_id', 'error', 'error_code', 'error_description']) url.searchParams.delete(key);
+    for (const key of ['code', 'sb_flow_id', 'error', 'error_code', 'error_description', ...EMAIL_LINK_PARAMS]) url.searchParams.delete(key);
     if (new URLSearchParams(url.hash.slice(1)).has('error')) url.hash = '';
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
+}
+
+// A link works once, and StrictMode runs effects twice in development, so
+// both runs share one verification.
+let openedLink = null;
+function openEmailLink({ tokenHash, type }) {
+    if (openedLink?.tokenHash !== tokenHash) openedLink = { tokenHash, result: supabase.auth.verifyOtp({ token_hash: tokenHash, type }) };
+    return openedLink.result;
 }
 
 function clearSessionKeys() {
@@ -110,12 +119,25 @@ function Workspace() {
 
     useEffect(() => {
         let active = true;
+        const emailLink = readEmailLink(window.location.href);
         const brokenLink = linkProblem();
-        supabase.auth.getSession()
-            .then(async ({ data }) => {
+        // An invite or reset email signs the user in here; they then choose a password.
+        const restore = emailLink
+            ? openEmailLink(emailLink).then(async ({ data, error }) => {
+                if (!error) {
+                    if (active) setPasswordMode(emailLink.type);
+                    return { session: data.session };
+                }
+                // An old link opened by someone already signed in on this browser.
+                const { data: current } = await supabase.auth.getSession();
+                return { session: current.session, problem: emailLinkProblem(emailLink.type, error) };
+            })
+            : supabase.auth.getSession().then(({ data }) => ({ session: data.session, problem: brokenLink }));
+        restore
+            .then(async ({ session, problem }) => {
                 clearLinkParams();
-                const problem = data.session ? await loadUser(data.session) : brokenLink;
-                if (active && problem) setNotice(problem);
+                const found = session ? await loadUser(session) : problem;
+                if (active && found) setNotice(found);
             })
             .catch(error => { if (active) setNotice(error.message); })
             .finally(() => { if (active) setRestoring(false); });

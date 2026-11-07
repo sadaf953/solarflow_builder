@@ -1,11 +1,14 @@
 import { useId, useState } from 'react';
-import { CheckCircle2, Clock, FileJson, Info, ListChecks, Save, Workflow } from 'lucide-react';
+import { CheckCircle2, Clock, FileJson, Info, ListChecks, Rocket, Save, Workflow } from 'lucide-react';
 import { formatDate } from '../../../../template/src/lib/format.js';
 import { ErrorBanner, Field, Input, SectionCard, SuccessBanner, Textarea } from '../../../../template/src/ui/index.js';
+import { emptyGoLive, normalizeGoLive } from '../../catalog/goLive.js';
+import { LAUNCH_DAYS } from '../../catalog/menu.js';
 import { answersToFeatures } from '../../catalog/questions.js';
 import { normalizePhone, restoredStages } from '../../catalog/submission.js';
 import { featureLists, summaryLine } from '../../components/wizardData.js';
 import { StepNav } from '../../components/common.jsx';
+import { AddOnRequests } from './AddOnRequests.jsx';
 import { businessErrors } from './checks.js';
 
 export function WelcomeStep({ company, started, onNext }) {
@@ -13,6 +16,7 @@ export function WelcomeStep({ company, started, onNext }) {
         [Clock, 'About 5 minutes', 'Short questions about how your business works. No technical words.'],
         [ListChecks, 'Features follow your answers', 'You will see what you get and why, before you send anything.'],
         [Workflow, 'Your stages and lists', 'Then you choose your pipeline stages, dropdown lists and any extra fields, or share your sheet with us. Keep your Excel or Google Sheet handy for this part.'],
+        [Rocket, 'Going live', 'Near the end: your web address and two free accounts, Supabase for your data and Brevo for emails. Not ready? We can do this part with you on a call.'],
         [Save, 'Saved as you go', 'Everything saves by itself. Close the page any time and open the same link to carry on.'],
     ];
     return (
@@ -81,12 +85,19 @@ export function BusinessStep({ contact, onChange, onBack, onNext }) {
     );
 }
 
+// True once the client has filled in any go-live detail.
+const goLiveStarted = goLive => {
+    const value = normalizeGoLive(goLive);
+    return Object.entries(emptyGoLive()).some(([key, blank]) => value[key] !== blank && String(value[key]).trim() !== '');
+};
+
 // `blocked` is why the form cannot be sent right now ('' when it can).
-export function SendStep({ submission, problems, onGo, notes, onNotes, onBack, onSend, busy, error, blocked, resend, preview }) {
+export function SendStep({ submission, problems, onGo, notes, onNotes, onAddOnRequests, onBack, onSend, busy, error, blocked, resend, preview }) {
     const id = useId();
     const lists = featureLists(answersToFeatures(submission.answers, submission.featureOverrides));
     const sheet = submission.workflow?.source === 'sheet';
     const restored = sheet ? [] : restoredStages(submission);
+    const goLive = goLiveStarted(submission.goLive);
     return (
         <div className="space-y-6">
             <SectionCard>
@@ -98,12 +109,16 @@ export function SendStep({ submission, problems, onGo, notes, onNotes, onBack, o
                         <li key={stage.id} className="flex gap-2"><Info size={18} className="shrink-0 text-blue-600" aria-hidden="true" />
                             We added the {stage.label} stage back to your stages. {stage.reason}, which you chose.</li>
                     ))}
+                    {goLive
+                        ? <li className="flex gap-2"><CheckCircle2 size={18} className="shrink-0 text-emerald-600" aria-hidden="true" />You gave us your go-live details. Anything missing we will do with you on a call.</li>
+                        : <li className="flex gap-2"><Info size={18} className="shrink-0 text-blue-600" aria-hidden="true" />Go-live details: we will set them up with you on a short call.</li>}
                 </ul>
                 <Field label="Anything else we should know? (optional)" htmlFor={`${id}-notes`}>
                     <Textarea id={`${id}-notes`} rows={4} maxLength={2000} value={notes || ''} onChange={event => onNotes(event.target.value)}
                         placeholder="For example: we also do commercial rooftops, or we want to start next month." />
                 </Field>
             </SectionCard>
+            <AddOnRequests requests={submission.addOnRequests} onChange={onAddOnRequests} />
             {problems.length > 0 && (
                 <ErrorBanner title="A few things are missing">
                     <ul className="mt-1 space-y-1">
@@ -132,7 +147,12 @@ export function DoneStep({ submittedAt, preview, onEdit, onDownload }) {
                     ? 'Nothing was sent. Download your answers to keep them or to load them on the admin page.'
                     : `Sent${submittedAt ? ` on ${formatDate(submittedAt, 'long')}` : ''}. We will look at them and get back to you on WhatsApp or email.`}
             </SuccessBanner>
-            {!preview && <p className="text-sm text-stone-600">Need to change something? Open the same link again any time. When you send again, we keep it as a new version.</p>}
+            {!preview && (
+                <p className="text-sm text-stone-600">
+                    Once your accounts are ready, your app goes live in {LAUNCH_DAYS}. Anything you asked for outside the form follows on its own timeline.
+                    Need to change something? Open the same link again any time. When you send again, we keep it as a new version.
+                </p>
+            )}
             <div className="flex flex-col gap-2 sm:flex-row">
                 <button type="button" onClick={onEdit} className="sf-btn-secondary min-h-11 px-6">Change my answers</button>
                 {onDownload && (

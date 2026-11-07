@@ -12,7 +12,7 @@
 //
 // The Solar toolbox is a removed feature, so it has no entry here at all.
 
-import { Activity, CalendarDays, CreditCard, Download, IndianRupee, LayoutDashboard, Package, Tag, Trash2, Truck, UserCheck, UserCog, Users, Wrench } from 'lucide-react';
+import { Activity, CalendarDays, CreditCard, Download, IndianRupee, LayoutDashboard, Package, Tag, Trash2, Truck, Upload, UserCheck, UserCog, Users, Wrench } from 'lucide-react';
 import { lazyWithRetry } from '../lib/lazy.js';
 import { STAGE_IDS, isStageEnabled, isViewOn } from '../config/index.js';
 
@@ -100,6 +100,13 @@ export const VIEWS = Object.freeze([
         props: ctx => ({
             isChannelPartnerOffice: ctx.isChannelPartnerOffice, channelPartnerFilter: ctx.channelPartnerFilter,
             dealerFilter: ctx.dealerFilter, showAlert: ctx.showAlert,
+        }),
+    },
+    {
+        id: 'import_customers', title: 'Import customers', icon: Upload, group: 'admin', roles: ADMIN_ONLY, system: true,
+        load: lazyWithRetry(() => import('../components/ImportCustomersView')),
+        props: ctx => ({
+            user: ctx.user, showAlert: ctx.showAlert, refreshMetrics: ctx.refreshMetrics, setTrashCount: ctx.setTrashCount, goHome: ctx.goHome,
         }),
     },
     {

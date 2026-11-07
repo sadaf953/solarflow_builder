@@ -97,6 +97,20 @@ export function StepNav({ onBack, onNext, nextLabel = 'Next', backLabel = 'Back'
     );
 }
 
+/** Label / value rows; an empty value shows as a dash. */
+export function DetailRows({ rows }) {
+    return (
+        <dl className="divide-y divide-stone-100">
+            {rows.map(([label, value]) => (
+                <div key={label} className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:justify-between sm:gap-4">
+                    <dt className="text-stone-500">{label}</dt>
+                    <dd className="min-w-0 break-words font-semibold text-stone-800 sm:text-right">{value || '–'}</dd>
+                </div>
+            ))}
+        </dl>
+    );
+}
+
 /** Bulleted list of messages (validation errors or warnings). */
 export function MessageList({ items }) {
     if (!items?.length) return null;

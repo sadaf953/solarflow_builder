@@ -139,9 +139,10 @@ test('settings, login types and private helpers are out of reach', async () => {
         where n.nspname in ('public', 'solarflow_private') and p.prosecdef
           and not exists(select 1 from unnest(coalesce(p.proconfig, '{}')) cfg where cfg = 'search_path=""')`);
     assert.deepEqual(unsafe, [], 'security definer functions pin an empty search_path');
-    const anonCallable = await rows(db, `select p.proname from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    // keepalive() (returns now(), reads nothing) is the only function anon may call.
+    const anonCallable = await rows(db, `select n.nspname || '.' || p.proname as fn from pg_proc p join pg_namespace n on n.oid = p.pronamespace
         where n.nspname in ('public', 'solarflow_private') and has_function_privilege('anon', p.oid, 'execute')`);
-    assert.deepEqual(anonCallable, []);
+    assert.deepEqual(anonCallable, [{ fn: 'public.keepalive' }]);
 });
 
 // ── add_user ────────────────────────────────────────────────────────────
