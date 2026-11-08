@@ -166,10 +166,15 @@ function configFor(submission, { adminOverrides, slug, ownerEmail, branding, wor
 }
 
 // `workflow` is the admin's workflow (settings.workflow); it wins over the client's.
-export function createClientZip({ templateFiles, schemaSql, submission, adminOverrides = {}, slug, ownerEmail, branding, workflow, generatedAt }) {
+// `goLive` and `addOns` (the admin's settings) and `agencyDomain` only reach
+// SETUP-SUMMARY.md; without `agencyDomain` a free address shows as
+// <slug>.<agency domain>.
+export function createClientZip({ templateFiles, schemaSql, submission, adminOverrides = {}, slug, ownerEmail, branding, workflow, goLive, addOns, agencyDomain, generatedAt }) {
     const at = isoTime(generatedAt);
     const { config, validation } = configFor(submission, { adminOverrides, slug, ownerEmail, branding, workflow });
-    const summaryMarkdown = setupSummaryMarkdown({ submission, adminOverrides, adminWorkflow: workflow, config, validation, generatedAt: at });
+    const summaryMarkdown = setupSummaryMarkdown({
+        submission, adminOverrides, adminWorkflow: workflow, goLive, addOns, agencyDomain, config, validation, generatedAt: at,
+    });
     const files = buildClientFiles({ templateFiles, config, schemaSql, generatedAt: at, summaryMarkdown });
     const folder = `${config.client.slug}-solarflow`;
     const bytes = makeZip({ templateFiles, files, rootFolder: folder, mtime: at });
@@ -184,9 +189,11 @@ export function createSetupSql({ schemaSql, submission, adminOverrides = {}, slu
 const isPlainObject = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const filledText = value => (typeof value === 'string' && value.trim() ? value.trim() : undefined);
 
-// The admin settings {adminOverrides, slug, ownerEmail, branding, workflow}
-// as build options. The admin page and scripts/make-client.mjs both use it,
-// so the same settings give the same zip.
+// The admin settings {adminOverrides, slug, ownerEmail, branding, workflow,
+// goLive, addOns} as build options. The admin page and
+// scripts/make-client.mjs both use it, so the same settings give the same zip.
+// `agencyDomain` is not an admin setting: the admin page adds it to its
+// exports, so a zip built from the export prints the same web address.
 export function buildOptions(settings = {}) {
     return {
         adminOverrides: isPlainObject(settings?.adminOverrides) ? settings.adminOverrides : {},
@@ -194,12 +201,15 @@ export function buildOptions(settings = {}) {
         ownerEmail: filledText(settings?.ownerEmail),
         branding: isPlainObject(settings?.branding) ? settings.branding : {},
         workflow: isPlainObject(settings?.workflow) ? settings.workflow : undefined,
+        goLive: isPlainObject(settings?.goLive) ? settings.goLive : {},
+        addOns: Array.isArray(settings?.addOns) ? settings.addOns : [],
+        agencyDomain: filledText(settings?.agencyDomain),
     };
 }
 
 // A submission file: either the payload itself, or an export that wraps it
-// as {payload | submission, adminOverrides?, slug?, ownerEmail?, branding?, workflow?}.
-// Returns {submission, ...buildOptions}.
+// as {payload | submission, adminOverrides?, slug?, ownerEmail?, branding?,
+// workflow?, goLive?, addOns?, agencyDomain?}. Returns {submission, ...buildOptions}.
 export function parseSubmissionJson(text) {
     let data;
     try { data = JSON.parse(text); } catch { throw new Error('This file is not valid JSON.'); }

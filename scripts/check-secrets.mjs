@@ -30,6 +30,12 @@ export function findSecrets(text) {
     if (!/^[[<{$]/.test(m[1])) found.push(['postgres URL with password', lineOf(m.index)]);
   }
   for (const m of text.matchAll(/\b(?:gh[pousr]_[A-Za-z0-9]{36}|github_pat_\w{22,})\b/g)) found.push(['GitHub token', lineOf(m.index)]);
+  // The agency tokens scripts/provision.mjs reads from .env.provision, and the
+  // per-client Brevo keys. Any of them in a shipped file is a leak.
+  for (const m of text.matchAll(/\bsbp_[0-9a-f]{40}\b/g)) found.push(['Supabase access token', lineOf(m.index)]);
+  for (const m of text.matchAll(/\bnfp_[A-Za-z0-9]{20,}\b/g)) found.push(['Netlify access token', lineOf(m.index)]);
+  for (const m of text.matchAll(/\bxsmtpsib-[A-Za-z0-9-]{20,}/g)) found.push(['Brevo SMTP key', lineOf(m.index)]);
+  for (const m of text.matchAll(/\bxkeysib-[A-Za-z0-9-]{20,}/g)) found.push(['Brevo API key', lineOf(m.index)]);
   return found;
 }
 

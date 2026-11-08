@@ -3,6 +3,9 @@
 import { FEATURE_REGISTRY, FEATURE_GROUPS } from '../../../template/src/config/catalog/features.js';
 import { DROPDOWN_CATALOG, CUSTOM_FIELD_TYPES } from '../../../template/src/config/catalog/dropdowns.js';
 import { resolveClientConfig } from '../../../template/src/config/resolve.js';
+import { formatINR } from '../../../template/src/lib/format.js';
+import { resolveGoLive } from '../catalog/goLive.js';
+import { LAUNCH_DAYS, addOnList } from '../catalog/menu.js';
 import { visibleQuestions, describeAnswer, questionById } from '../catalog/questions.js';
 import { effectiveWorkflow, restoredStages, submissionFeatures } from '../catalog/submission.js';
 
@@ -10,7 +13,60 @@ import { effectiveWorkflow, restoredStages, submissionFeatures } from '../catalo
 const inline = value => String(value ?? '').replace(/\s+/g, ' ').trim().replace(/([\\`*_[\]<>|#])/g, '\\$1');
 const list = items => (items.length ? items : ['None.']);
 
-export function setupSummaryMarkdown({ submission, adminOverrides = {}, adminWorkflow, config, validation, generatedAt }) {
+// Stands in for the agency domain when the build is not given one (the CLI),
+// so a free address still reads <slug>.<agency domain>. Nothing is ever
+// served under .invalid.
+const AGENCY_STAND_IN = 'agency-domain.invalid';
+
+function goLiveLines({ submission, goLive, agencyDomain, config }) {
+    const known = String(agencyDomain ?? '').trim();
+    const live = resolveGoLive({
+        submission, settings: { goLive }, slug: config.client.slug, companyName: config.branding?.companyName || config.client.name,
+        agencyDomain: known || AGENCY_STAND_IN,
+    });
+    const own = live.domainMode === 'own';
+    // Host names are checked by resolveGoLive, so they are safe in a code span.
+    const host = own || known ? live.hostname : live.hostname.replace(AGENCY_STAND_IN, '<agency domain>');
+    const address = !host ? 'not set yet'
+        : `\`https://${host}\` (${own ? 'the client’s own address: they add one CNAME record at their domain provider' : 'free address on the agency domain'})`;
+    const confirmed = value => (value ? 'yes' : 'not confirmed');
+    return [
+        `- Web address: ${address}`,
+        `- Supabase organization: ${live.supabaseOrg ? `${inline(live.supabaseOrg)} (agency invited as Administrator: ${confirmed(live.supabaseInvited)})` : 'not given yet'}`,
+        `- Email sender: ${live.senderEmail ? `${inline(live.senderName)}, ${inline(live.senderEmail)} (verified in Brevo: ${confirmed(live.brevoReady)})` : 'none yet'}`,
+        '- The client’s Brevo SMTP key is never stored by the builder. It goes only into their secrets file for the provisioning script.',
+        ...(live.problems.length ? ['', '**Fix before provisioning:**', '', ...live.problems.map(problem => `- ${inline(problem)}`)] : []),
+        ...(live.warnings.length ? ['', '**Check:**', '', ...live.warnings.map(warning => `- ${inline(warning)}`)] : []),
+    ];
+}
+
+function addOnLines(submission, addOns) {
+    const entries = addOnList(submission, addOns).filter(entry => entry.text.trim());
+    const line = entry => {
+        const paid = entry.decision === 'addon';
+        const details = [
+            paid ? (entry.price ? formatINR(entry.price, { zero: '₹0' }) : 'price not set') : '',
+            paid ? inline(entry.timeline) || 'timeline not set' : '',
+            entry.note.trim() ? `note: ${inline(entry.note)}` : '',
+        ].filter(Boolean);
+        const text = paid ? `**${inline(entry.text)}**` : inline(entry.text);
+        return `- ${text} (${entry.from === 'client' ? 'asked by the client' : 'added by the SolarFlow team'})${details.length ? `: ${details.join('; ')}` : ''}`;
+    };
+    const group = (decision, title) => {
+        const items = entries.filter(entry => entry.decision === decision).map(line);
+        return items.length ? ['', title, '', ...items] : [];
+    };
+    return [
+        `The launch takes ${LAUNCH_DAYS}. Paid add-ons are quoted separately and follow on their own timeline.`,
+        '',
+        ...list(entries.filter(entry => entry.decision === 'addon').map(line)),
+        ...group('', 'Not decided yet:'),
+        ...group('menu', 'Covered by the menu at no charge:'),
+        ...group('declined', 'Not doing:'),
+    ];
+}
+
+export function setupSummaryMarkdown({ submission, adminOverrides = {}, adminWorkflow, goLive, addOns, agencyDomain, config, validation, generatedAt }) {
     const resolved = resolveClientConfig(config);
     const fromAnswers = submission ? submissionFeatures(submission, adminOverrides) : { reasons: {}, discuss: [], unanswered: [] };
     const contact = submission?.contact || {};
@@ -94,6 +150,11 @@ export function setupSummaryMarkdown({ submission, adminOverrides = {}, adminWor
         ].filter(Boolean);
         return `- **${inline(field.label)}** (\`${field.key}\`): ${details.join('; ')}`;
     })));
+
+    if (submission) {
+        section('Go live', goLiveLines({ submission, goLive, agencyDomain, config }));
+        section('Paid add-ons (separate timeline, not part of the launch)', addOnLines(submission, addOns));
+    }
 
     if (submission?.notes) section('Client notes', [inline(submission.notes)]);
     if (validation?.warnings?.length) section('Check before sending', validation.warnings.map(warning => `- ${inline(warning)}`));

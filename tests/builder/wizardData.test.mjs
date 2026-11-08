@@ -16,14 +16,14 @@ test('extra fields can never be put on Completed or Lost Project', () => {
 test('the WhatsApp invite asks the client to keep their sheet handy', () => {
     const text = whatsappInviteText('Asha', 'https://x.example/#/s/1/t');
     assert.match(text, /^Hi Asha, /);
-    assert.match(text, /Keep your Excel or Google Sheet handy for the last part\./);
+    assert.match(text, /Keep your Excel or Google Sheet handy for the stages and fields part\./);
     assert.match(emailInviteText('', 'L'), /^Hi there,/);
 });
 
 test('admin settings always have every key; anything else is dropped', () => {
-    assert.deepEqual(normalizeSettings(null), { adminOverrides: {}, slug: '', ownerEmail: '', branding: {}, workflow: null });
+    assert.deepEqual(normalizeSettings(null), { adminOverrides: {}, slug: '', ownerEmail: '', branding: {}, workflow: null, goLive: {}, addOns: [] });
     const settings = normalizeSettings({ adminOverrides: { calendar: true }, slug: 'x', ownerEmail: 4, branding: [], workflow: { stagesMode: 'custom' }, extra: 1 });
-    assert.deepEqual(settings, { adminOverrides: { calendar: true }, slug: 'x', ownerEmail: '', branding: {}, workflow: { stagesMode: 'custom' } });
+    assert.deepEqual(settings, { adminOverrides: { calendar: true }, slug: 'x', ownerEmail: '', branding: {}, workflow: { stagesMode: 'custom' }, goLive: {}, addOns: [] });
 });
 
 test('the admin starts from the client workflow, or the standard one for a sheet', () => {

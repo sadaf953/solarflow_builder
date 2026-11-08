@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { supabase, isSupabaseConfigured, supabaseSetupProblem } from './supabase';
 import { BRANDING, isOn, isRoleEnabled } from './config/index.js';
+import { EMAIL_LINK_PARAMS, clearPasswordPending, emailLinkProblem, isPasswordPending, markPasswordPending, readEmailLink, sessionStore } from './lib/emailLink.js';
 import LoginScreen from './components/LoginScreen';
 import OfflineBanner from './components/OfflineBanner';
 const PasswordRecoveryModal = lazy(() => import('./components/PasswordRecoveryModal'));
@@ -57,9 +58,17 @@ function linkProblem() {
 
 function clearLinkParams() {
     const url = new URL(window.location.href);
-    for (const key of ['code', 'sb_flow_id', 'error', 'error_code', 'error_description']) url.searchParams.delete(key);
+    for (const key of ['code', 'sb_flow_id', 'error', 'error_code', 'error_description', ...EMAIL_LINK_PARAMS]) url.searchParams.delete(key);
     if (new URLSearchParams(url.hash.slice(1)).has('error')) url.hash = '';
     if (url.href !== window.location.href) window.history.replaceState(window.history.state, '', url);
+}
+
+// A link works once, and StrictMode runs effects twice in development, so
+// both runs share one verification.
+let openedLink = null;
+function openEmailLink({ tokenHash, type }) {
+    if (openedLink?.tokenHash !== tokenHash) openedLink = { tokenHash, result: supabase.auth.verifyOtp({ token_hash: tokenHash, type }) };
+    return openedLink.result;
 }
 
 function clearSessionKeys() {
@@ -110,12 +119,30 @@ function Workspace() {
 
     useEffect(() => {
         let active = true;
+        const emailLink = readEmailLink(window.location.href);
         const brokenLink = linkProblem();
-        supabase.auth.getSession()
-            .then(async ({ data }) => {
+        // An invite or reset email signs the user in here; they then choose a password.
+        const restore = emailLink
+            ? openEmailLink(emailLink).then(async ({ data, error }) => {
+                if (!error) {
+                    // The token leaves the address below; this flag brings the
+                    // welcome dialog back if the page is reloaded before saving.
+                    if (emailLink.type === 'invite') markPasswordPending(sessionStore(), data.session?.user?.id);
+                    if (active) setPasswordMode(emailLink.type);
+                    return { session: data.session };
+                }
+                // An old link opened by someone already signed in on this browser.
+                const { data: current } = await supabase.auth.getSession();
+                return { session: current.session, problem: emailLinkProblem(emailLink.type, error) };
+            })
+            : supabase.auth.getSession().then(({ data }) => ({ session: data.session, problem: brokenLink }));
+        restore
+            .then(async ({ session, problem }) => {
                 clearLinkParams();
-                const problem = data.session ? await loadUser(data.session) : brokenLink;
-                if (active && problem) setNotice(problem);
+                // An invited user who reloaded before choosing a password.
+                if (active && isPasswordPending(sessionStore(), session?.user?.id)) setPasswordMode('invite');
+                const found = session ? await loadUser(session) : problem;
+                if (active && found) setNotice(found);
             })
             .catch(error => { if (active) setNotice(error.message); })
             .finally(() => { if (active) setRestoring(false); });
@@ -125,6 +152,7 @@ function Workspace() {
                 loading.current = { id: null, promise: null };
                 setUser(null);
                 setPasswordMode(null);
+                clearPasswordPending(sessionStore());
             }
             if (event === 'PASSWORD_RECOVERY') setPasswordMode('recovery');
         });
@@ -152,18 +180,24 @@ function Workspace() {
 
     if (!isRoleEnabled(user.userType)) {
         return (
-            <Notice title="Your login type is not enabled" action={signOut}>
-                <p>Logins of type “{user.role || user.userType}” are switched off for {BRANDING.companyName}. Ask your administrator to change your login type.</p>
-            </Notice>
+            <>
+                {passwordModal}
+                <Notice title="Your login type is not enabled" action={signOut}>
+                    <p>Logins of type “{user.role || user.userType}” are switched off for {BRANDING.companyName}. Ask your administrator to change your login type.</p>
+                </Notice>
+            </>
         );
     }
 
     const Portal = portalFor(user.userType);
     if (!Portal) {
         return (
-            <Notice title="Waiting for access" action={signOut}>
-                <p>An admin needs to approve your login before you can use {BRANDING.appName}. Once they have, sign out and sign in again.</p>
-            </Notice>
+            <>
+                {passwordModal}
+                <Notice title="Waiting for access" action={signOut}>
+                    <p>An admin needs to approve your login before you can use {BRANDING.appName}. Once they have, sign out and sign in again.</p>
+                </Notice>
+            </>
         );
     }
 

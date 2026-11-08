@@ -3,30 +3,20 @@ import { Columns3, Download, ExternalLink, FileCode2, FileJson, ListChecks, List
 import { DROPDOWN_CATALOG, CUSTOM_FIELD_TYPES } from '../../../template/src/config/catalog/dropdowns.js';
 import { BRANDING_FIELDS, brandingErrors, isAllowedSheetUrl, resolveClientConfig, slugify } from '../../../template/src/config/resolve.js';
 import { Badge, ErrorBanner, Field, Input, SectionCard, Spinner, SuccessBanner, Textarea, describedBy } from '../../../template/src/ui/index.js';
+import { agency } from '../agency.js';
 import { QUESTION_STEPS, describeAnswer, isVisible } from '../catalog/questions.js';
 import { brandingOverrides, effectiveWorkflow, restoredStages, submissionFeatures, submissionToClientConfig } from '../catalog/submission.js';
 import { buildOptions, checkClientConfig, downloadBytes, generateClientZip, generateSetupSql } from '../zip/index.js';
+import { AddOnsPanel } from './AddOnsPanel.jsx';
 import { FeatureColumns, FeatureToggles } from './FeatureViews.jsx';
 import { FieldEditor } from './FieldEditor.jsx';
+import { GoLivePanel } from './GoLivePanel.jsx';
 import { ListsEditor } from './ListEditors.jsx';
 import { StageEditor } from './StageEditor.jsx';
-import { Expander, MessageList } from './common.jsx';
+import { DetailRows, Expander, MessageList } from './common.jsx';
 import { BUILTIN_BY_ID, adminWorkflowFrom, currentStages, downloadJson } from './wizardData.js';
 
 const CONTACT_ROWS = [['company', 'Company'], ['name', 'Name'], ['phone', 'Phone'], ['email', 'Email (first admin login)'], ['city', 'City'], ['state', 'State']];
-
-function Rows({ rows }) {
-    return (
-        <dl className="divide-y divide-stone-100">
-            {rows.map(([label, value]) => (
-                <div key={label} className="flex flex-col gap-0.5 py-2 text-sm sm:flex-row sm:justify-between sm:gap-4">
-                    <dt className="text-stone-500">{label}</dt>
-                    <dd className="min-w-0 break-words font-semibold text-stone-800 sm:text-right">{value || '–'}</dd>
-                </div>
-            ))}
-        </dl>
-    );
-}
 
 function Answers({ answers }) {
     return (
@@ -234,9 +224,10 @@ function AdminWorkflowEditor({ submission, features, workflow, onChange }) {
 
 /**
  * Everything the agency needs about one submission, plus the downloads.
- * `settings` ({adminOverrides, slug, ownerEmail, branding, workflow}, see
- * normalizeSettings) belong to the page, which decides where they are kept;
- * every change goes to `onSettings`. `saveStatus` is shown next to them.
+ * `settings` ({adminOverrides, slug, ownerEmail, branding, workflow, goLive,
+ * addOns}, see normalizeSettings) belong to the page, which decides where
+ * they are kept; every change goes to `onSettings`. `saveStatus` is shown
+ * next to them.
  */
 export function SubmissionReview({ submission, settings, onSettings, saveStatus, onDownloaded }) {
     const id = useId();
@@ -244,7 +235,8 @@ export function SubmissionReview({ submission, settings, onSettings, saveStatus,
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
 
-    const options = useMemo(() => buildOptions(settings), [settings]);
+    // The agency domain only names free web addresses in SETUP-SUMMARY.md.
+    const options = useMemo(() => buildOptions({ ...settings, agencyDomain: agency.domain }), [settings]);
     const config = useMemo(() => submissionToClientConfig(submission, options), [submission, options]);
     const fallbackBranding = useMemo(() => submissionToClientConfig(submission).branding, [submission]);
     const validation = useMemo(() => checkClientConfig(config, { adminWorkflow: options.workflow }), [config, options]);
@@ -278,8 +270,10 @@ export function SubmissionReview({ submission, settings, onSettings, saveStatus,
         downloadBytes(result.sql, result.fileName, 'application/sql');
         return `Downloaded ${result.fileName}.`;
     });
+    // The export carries the agency domain too, so a zip built from it with
+    // make-client matches the one this page downloads.
     const downloadAnswers = () => {
-        downloadJson({ submission, ...settings }, `${config.client.slug}-setup.json`);
+        downloadJson({ submission, ...settings, ...(agency.domain ? { agencyDomain: agency.domain } : {}) }, `${config.client.slug}-setup.json`);
     };
     const overrideCount = Object.keys(settings.adminOverrides).length;
 
@@ -287,7 +281,7 @@ export function SubmissionReview({ submission, settings, onSettings, saveStatus,
         <div className="space-y-4">
             {saveStatus && <div className="flex justify-end">{saveStatus}</div>}
             <SectionCard title="Contact" icon={User}>
-                <Rows rows={CONTACT_ROWS.map(([key, label]) => [label, contact[key]])} />
+                <DetailRows rows={CONTACT_ROWS.map(([key, label]) => [label, contact[key]])} />
             </SectionCard>
 
             <SectionCard title="Features" icon={ListChecks} subtitle="From the client's answers, their own switches and yours.">
@@ -316,6 +310,9 @@ export function SubmissionReview({ submission, settings, onSettings, saveStatus,
                         onChange={workflow => update({ workflow })} />
                 </Expander>
             </SectionCard>
+            <GoLivePanel submission={submission} config={config} overrides={settings.goLive} onChange={goLive => update({ goLive })} />
+            <AddOnsPanel submission={submission} addOns={settings.addOns} onChange={addOns => update({ addOns })} />
+
             <SectionCard title="Build the client app" icon={Settings2}>
                 <div className="grid gap-3 sm:grid-cols-2">
                     <Field label="Owner email (first admin login)" htmlFor={`${id}-owner`} hint={`Leave empty to use ${contact.email || 'the client email'}.`}>

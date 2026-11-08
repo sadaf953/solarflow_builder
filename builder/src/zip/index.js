@@ -28,9 +28,9 @@ export function loadTemplateFiles() {
 }
 
 // `workflow` is the admin's workflow; it wins over the client's.
-export async function generateClientZip({ submission, adminOverrides = {}, slug, ownerEmail, branding, workflow, generatedAt } = {}) {
+export async function generateClientZip({ submission, adminOverrides = {}, slug, ownerEmail, branding, workflow, goLive, addOns, agencyDomain, generatedAt } = {}) {
     const templateFiles = await loadTemplateFiles();
-    return createClientZip({ templateFiles, schemaSql, submission, adminOverrides, slug, ownerEmail, branding, workflow, generatedAt });
+    return createClientZip({ templateFiles, schemaSql, submission, adminOverrides, slug, ownerEmail, branding, workflow, goLive, addOns, agencyDomain, generatedAt });
 }
 
 export function generateSetupSql({ submission, adminOverrides = {}, slug, ownerEmail, branding, workflow } = {}) {

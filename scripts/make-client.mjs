@@ -4,7 +4,8 @@
 //
 // The file is the submission payload, or an export wrapping it with the
 // admin settings, as "Download answers (JSON)" on the admin page writes it:
-// {payload | submission, adminOverrides?, slug?, ownerEmail?, branding?, workflow?}.
+// {payload | submission, adminOverrides?, slug?, ownerEmail?, branding?,
+// workflow?, goLive?, addOns?, agencyDomain?}.
 // --slug and --owner-email win over the file. The zip is identical to the one
 // the admin page downloads with the same settings.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';

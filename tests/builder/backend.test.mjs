@@ -127,7 +127,22 @@ test('drafts are validated: size, schemaVersion and object sections', async () =
     await fails(save({ ...payload(), schemaVersion: 2 }), /invalid_payload/);
     await fails(save({ ...payload(), answers: [] }), /invalid_payload/);
     await fails(save({ schemaVersion: 1, contact: {}, answers: {} }), /invalid_payload/);
+    await fails(save({ ...payload(), goLive: [] }), /invalid_payload/);
+    await fails(save({ ...payload(), goLive: 'own' }), /invalid_payload/);
+    await fails(save({ ...payload(), addOnRequests: {} }), /invalid_payload/);
     await fails(call(db, null, 'select public.setup_submit($1, $2, 0) as r', [id, token]), /nothing_to_submit/);
+});
+
+test('drafts from older forms (no go-live details or add-on requests) and newer ones both save', async () => {
+    const db = await newDb();
+    const { id, token } = await createInvite(db);
+    const save = (body, version) => call(db, null, 'select public.setup_save($1, $2, $3, $4) as r', [id, token, body, version]);
+    assert.equal((await save(payload(), 0)).r, 1);
+    const newer = payload({ goLive: { domainMode: 'own', ownDomain: 'crm.surya.in', supabaseInvited: true }, addOnRequests: [{ id: 'a1', text: 'A custom report' }] });
+    assert.equal((await save(newer, 1)).r, 2);
+    const opened = (await call(db, null, 'select public.setup_open($1, $2) as r', [id, token])).r;
+    assert.deepEqual(opened.payload.goLive, newer.goLive);
+    assert.deepEqual(opened.payload.addOnRequests, newer.addOnRequests);
 });
 
 test('anon and signed-in users cannot read setup_private', async () => {
@@ -209,15 +224,29 @@ test('admin settings are kept with the invite, validated and never shown to the 
         workflow: { source: 'form', stagesMode: 'custom', stages: [{ id: 'LEADS' }], dropdowns: {}, customFields: [] },
     };
     await save(settings);
-    assert.deepEqual((await get()).r, settings);
+    assert.deepEqual((await get()).r, settings, 'settings saved before go-live details existed still save');
     await save({ ...settings, workflow: null });
     assert.equal((await get()).r.workflow, null);
+    const withGoLive = {
+        ...settings,
+        goLive: { senderEmail: 'info@surya.example', supabaseInvited: true },
+        addOns: [{ id: 'a1', from: 'client', text: '', decision: 'addon', price: '15000', timeline: '2 weeks', note: '' }],
+    };
+    await save(withGoLive);
+    assert.deepEqual((await get()).r, withGoLive);
+    await save({ ...withGoLive, goLive: {}, addOns: [] });
+    assert.deepEqual((await get()).r.addOns, []);
 
     await fails(save([]), /invalid_input/);
     await fails(save({ ...settings, secret: 1 }), /invalid_input/);
     await fails(save({ ...settings, branding: 'x' }), /invalid_input/);
     await fails(save({ ...settings, workflow: [] }), /invalid_input/);
     await fails(save({ ...settings, slug: 4 }), /invalid_input/);
+    await fails(save({ ...settings, goLive: [] }), /invalid_input/);
+    await fails(save({ ...settings, goLive: 'own' }), /invalid_input/);
+    await fails(save({ ...settings, addOns: {} }), /invalid_input/);
+    await fails(save({ ...settings, addOns: ['x'] }), /invalid_input/);
+    await fails(save({ ...settings, addOns: Array.from({ length: 101 }, (_, i) => ({ id: `a${i}`, from: 'admin' })) }), /invalid_input/);
     await fails(save({ ...settings, branding: { address: 'x'.repeat(300 * 1024) } }), /too_large/);
     await fails(call(db, ADMIN, 'select public.setup_admin_save_settings($1, $2)', [randomUUID(), settings]), /not_found/);
 

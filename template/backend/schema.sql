@@ -1354,6 +1354,16 @@ begin
   return merged;
 end $$;
 
+-- ═══ Keep-alive ═════════════════════════════════════════════════════════
+-- Free Supabase projects pause after a week without activity. The agency's
+-- provisioning schedules a daily call to /rest/v1/rpc/keepalive with the
+-- public key, and its weekly health check calls it too. It reads no data, so
+-- it is the one function anon may call.
+create or replace function public.keepalive()
+returns timestamptz language sql stable security invoker set search_path = '' as $$
+  select now();
+$$;
+
 -- ═══ Row-level security ═════════════════════════════════════════════════
 -- SolarFlow's own tables. Policies on these are rebuilt on every run, so the
 -- set below is always the whole set (a policy left over from an older version
@@ -1672,7 +1682,7 @@ begin
       'move_stage', 'merge_custom_fields', 'get_dashboard_metrics_scoped', 'get_dashboard_metrics',
       'get_cpo_dashboard_metrics', 'inventory_item_key', 'sync_inventory_catalog', 'record_inventory_movement',
       'bom_stock_document', 'get_inventory_bom_lines', 'set_bom_stock_quantity', 'save_delivery_batch_atomic',
-      'delete_delivery_batch_atomic', 'update_delivery_batch_status_atomic'
+      'delete_delivery_batch_atomic', 'update_delivery_batch_status_atomic', 'keepalive'
     ])
   loop
     execute format('revoke all on function %s from public, anon, authenticated', f);
@@ -1709,6 +1719,7 @@ grant execute on function
   public.delete_delivery_batch_atomic(uuid, uuid[]),
   public.update_delivery_batch_status_atomic(uuid, text, uuid[])
 to authenticated, service_role;
+grant execute on function public.keepalive() to anon, authenticated, service_role;
 grant execute on function
   solarflow_private.my_profile(),
   solarflow_private.my_role(),

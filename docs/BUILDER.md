@@ -6,6 +6,9 @@ It is a Vite + React app in `builder/`:
 - imports `template/src/config/*`, `template/src/ui/*` and `template/src/lib/*` through relative paths
 - uses the same Tailwind look as the template
 - reads its backend from the repo-root `.env.local` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`), which points at the **builder** Supabase project (ref `oxzojaxhnvwzqhokbyil`)
+- reads the agency's go-live details from the same file, through `builder/src/agency.js`. Both are optional; without them the pages use plain words instead.
+  - `VITE_AGENCY_DOMAIN`: free client addresses are `<slug>.<this domain>` (Netlify)
+  - `VITE_AGENCY_EMAIL`: the agency's Supabase account email, which clients invite to their organization
 
 ## Data model (already written)
 
@@ -13,19 +16,30 @@ It is a Vite + React app in `builder/`:
 |---|---|
 | `builder/src/catalog/questions.js` | Form A questions: `QUESTION_STEPS`, `answersToFeatures(answers, overrides)`, `visibleQuestions`, `describeAnswer` |
 | `builder/src/catalog/submission.js` | payload shape `emptySubmission()`, `submissionToClientConfig(submission, {adminOverrides, slug, ownerEmail, branding, workflow})`, `stageLocks(features)`, `restoreLockedStages`, `restoredStages`, `effectiveWorkflow`, `availableBuiltinStages`, `defaultStageList`, `submissionFeatures`, `normalizePhone` |
+| `builder/src/catalog/goLive.js` | go-live details, shared with `scripts/provision.mjs`: `emptyGoLive()`, `GO_LIVE_KEYS`, `normalizeGoLive`, `goLiveErrors` (malformed values only), `resolveGoLive({submission, settings, slug, companyName, agencyDomain})` → address, sender, `problems`, `warnings` |
+| `builder/src/catalog/menu.js` | the fixed customization menu (`CUSTOMIZATION_MENU`, `LAUNCH_DAYS`, `ADD_ON_RULE`, `ADD_ON_EXAMPLES`) and add-on requests: `ADD_ON_LIMITS`, `ADD_ON_DECISIONS`, `normalizeAddOnRequests`, `normalizeAddOns`, `addOnList(submission, addOns)`, `withAddOn`, `withoutAddOn`. See [CUSTOMIZATION-MENU.md](CUSTOMIZATION-MENU.md). |
 | `template/src/config/resolve.js` | `validateClientConfig`, `resolveClientConfig`, `keyFromLabel`, `slugify`, `isAllowedSheetUrl`, `LIMITS` |
 | `template/src/config/serialize.js` | `clientConfigSource(config)` |
 | `template/backend/seed.js` | `setupSql({schema, config})`, `configSeedSql(config)` |
+
+### Payload and admin settings
+
+- **Payload** (`emptySubmission()`, read back with `normalizeSubmission`, which fills in what older payloads lack): `{schemaVersion: 1, contact, answers, featureOverrides, workflow, goLive, addOnRequests, notes}`.
+  - `goLive`: `{domainMode: 'ours'|'own', ownDomain, supabaseOrg, supabaseInvited, senderEmail, senderName, brevoReady}` (`emptyGoLive()`). Never a key or password.
+  - `addOnRequests`: `[{id, text}]`, at most 20, each at most 500 characters.
+- **Admin settings** (`normalizeSettings`): `{adminOverrides, slug, ownerEmail, branding, workflow, goLive, addOns}`.
+  - `goLive`: only the keys the admin changed, same keys and types as the payload's. `resolveGoLive` uses admin text that is not blank and any admin yes/no.
+  - `addOns`: `[{id, from: 'client'|'admin', text, decision: ''|'menu'|'addon'|'declined', price, timeline, note}]`, at most 100. A `client` entry is the decision on the request with that id; its text always comes from the submission (`text` is empty), and it is kept when the client removes the request, since an older version may still have it. An `admin` entry is the admin's own item. `price` is whole rupees as digits.
 
 ## Routes (hash router; the site is static)
 
 | Route | Who | What |
 |---|---|---|
 | `#/` | anyone | Short landing page with a "Have a setup link? Open it" hint. No marketing copy or pricing. |
-| `#/s/<inviteId>/<token>` | client | The setup wizard: Welcome → A. Your business (contact) → A. Features (question steps) → A. Review → B. Your workflow → Done. Everything autosaves. |
+| `#/s/<inviteId>/<token>` | client | The setup wizard: Welcome → A. Your business (contact) → A. Features (question steps) → A. Review → B. Your workflow → Go live → Send → Done. Everything autosaves. |
 | `#/admin` | admin | Sign in with email and password via Supabase Auth. Lists invites with status. |
 | `#/admin/new` | admin | Create an invite: company, contact name, phone, email. Shows the link and a ready WhatsApp/email message to copy. |
-| `#/admin/i/<inviteId>` | admin | One client. Shows: answers, features with reasons, the To discuss list, workflow (stages, lists, fields, sheet link), validation warnings, admin feature overrides, the owner email used for the first admin, the slug and company details for documents (including DISCOM name and the registration charges label). **Set up the workflow (admin)** reuses the stage, list and field editors so the admin can enter the workflow from a shared sheet (or correct the client's). These admin settings autosave to the server with the invite (settings an older builder kept in localStorage are moved there on first open). Buttons: **Download zip**, **Download setup.sql**, **Copy client link**, **Reset link**, **Archive**. |
+| `#/admin/i/<inviteId>` | admin | One client. Shows: answers, features with reasons, the To discuss list, workflow (stages, lists, fields, sheet link), validation warnings, admin feature overrides, the owner email used for the first admin, the slug and company details for documents (including DISCOM name and the registration charges label). **Set up the workflow (admin)** reuses the stage, list and field editors so the admin can enter the workflow from a shared sheet (or correct the client's). **Go live** shows the client's go-live answers, the admin's corrections, the resolved address and sender (`resolveGoLive`), problems and warnings, and the `npm run provision -- client-zips/<slug>-setup.json` command. **Add-ons** lists the client's requests and the admin's own items, each with a decision, price (₹), timeline and note. These admin settings autosave to the server with the invite (settings an older builder kept in localStorage are moved there on first open). Buttons: **Download zip**, **Download setup.sql**, **Download answers (JSON)**, **Copy client link**, **Reset link**, **Archive**. |
 | `#/admin/offline` | admin | Load a submission JSON file and download a zip with no backend. The file and the admin settings made here stay in this browser's localStorage. Used for testing and as a fallback. |
 
 ## Client wizard UX rules
@@ -43,6 +57,12 @@ It is a Vite + React app in `builder/`:
      - **Stages:** "Use the standard stages" (`stagesMode: 'default'`) or "Change them" (`'custom'`). In the editor, built-in stages can be renamed, reordered with ↑/↓ buttons (no drag-only controls), and removed when not locked. Locks come from `stageLocks(features)` and say why. Leads, Completed and Lost are pinned. Custom stages are added with a name, a group and an icon from `STAGE_ICON_NAMES`; the id comes from `keyFromLabel(label, {stage:true})`.
      - **Lists:** each `DROPDOWN_CATALOG` list is an editable chip list prefilled with defaults. Metadata lists accept any value. Tag lists use fixed ids with editable labels; extendable lists accept new tags, and locked ids cannot be removed.
      - **Extra fields:** label, type (`CUSTOM_FIELD_TYPES`), stage (never Completed or Lost Project), options for dropdowns, "must be filled before moving on", and "ask when adding a lead" (LEADS only). The key comes from `keyFromLabel`. A live preview renders the fields with `FieldRenderer`.
+- **Go live** (`GoLiveStep.jsx`), between Workflow and Send. It opens with "Not ready yet? Skip this step — we'll do it with you on a short call." and a Skip button. Three sections, each with a one-line reason and numbered steps:
+  1. **Web address:** "Free address from us" (`<slugify(company)>.<VITE_AGENCY_DOMAIN>`, shown live) or "My own address" (for example crm.yourcompany.in). For their own address we send one CNAME record to add at their domain provider; until it works the app goes live on the free address.
+  2. **Supabase account:** sign up free (ideally with the owner email), create an organization named after the company on the Free plan, and invite `VITE_AGENCY_EMAIL` as **Administrator** (Organization settings → Team → Invite). The client pastes the organization link (`normalizeOrgSlug` keeps the slug) and ticks "I have invited …". After go-live we ask them to change our role to Developer.
+  3. **Brevo:** sign up free, add and verify a sender (Senders), generate an SMTP key (SMTP & API → SMTP) and **send the key on WhatsApp — never type it here**. The client gives the sender email and name (the company name when empty) and ticks "This sender is verified in Brevo". The builder never asks for or stores the key.
+  - Everything here is optional. Only malformed values (`goLiveErrors`) stop Next and Send.
+- **Send:** besides the summary, the notes field and the problems list, it has "Need something that isn't in this form?": the rule from `menu.js` (things outside the form are paid add-ons with their own timeline, so the app still goes live in 3–5 working days), a collapsible "What's included at no extra cost" built from `CUSTOMIZATION_MENU`, and a list editor for `addOnRequests` (up to 20, 500 characters each). "Add a request" adds an empty request to type into, so nothing typed is lost; empty requests are ignored on the admin page and in the summary.
 - **Locked stages:** when a custom stage list (the client's or the admin's) lacks a built-in stage the final features need (`stageLocks`), `submissionToClientConfig` puts it back at its usual place. The Send step tells the client which stages were added back and why.
 - **Phone:** the client may type +91, a leading 0 or spaces; `normalizePhone` turns it into 10 digits on blur and on save. The country code is removed before the digits are counted, so `+91 98765 432` stays invalid instead of becoming a wrong number.
 - **Conflicts:** after a save conflict (another tab saved first) the page stops saving, warns before leaving, and Send is off until the client reloads. `setup_submit` also checks the version the page last saw, so a page never sends another tab's answers.
@@ -72,7 +92,7 @@ The script binds `admin@crm.com` to that existing login; add more admins with th
 | RPC | Returns / behaviour |
 |---|---|
 | `setup_open(p_invite uuid, p_token text)` | `jsonb {company, contact, payload, version, status, submitted_at}`. Returns null on a bad token, an expired invite or an archived invite. Applies a lockout after repeated failures and keeps a per-invite rate limit. |
-| `setup_save(p_invite uuid, p_token text, p_payload jsonb, p_base_version int)` | `int` new version. Raises `'conflict'` when `p_base_version` is stale. Validates size (≤ 256 KB), `schemaVersion = 1`, and that `contact`, `answers`, `workflow` are objects. |
+| `setup_save(p_invite uuid, p_token text, p_payload jsonb, p_base_version int)` | `int` new version. Raises `'conflict'` when `p_base_version` is stale. Validates size (≤ 256 KB), `schemaVersion = 1`, that `contact`, `answers`, `workflow` are objects, and, when present, that `goLive` is an object and `addOnRequests` an array (older forms saved neither). |
 | `setup_submit(p_invite uuid, p_token text, p_version int)` | `timestamptz`. Raises `'conflict'` when the draft is no longer `p_version`, and `'submit_limited'` after 10 sends in an hour. Snapshots the draft into `submissions` (keeping the latest 20), sets status to `submitted`, logs an event. |
 
 **Admin RPCs** (granted to `authenticated`; each checks `setup_private.is_admin()` = the user id is in `admins` and the JWT is not anonymous):
@@ -85,8 +105,8 @@ The script binds `admin@crm.com` to that existing login; add more admins with th
 | `setup_admin_reset_token(p_invite uuid)` | `{token}` |
 | `setup_admin_set_status(p_invite uuid, p_status text)` | archive or reopen |
 | `setup_admin_mark_downloaded(p_invite uuid)` | — |
-| `setup_admin_get_settings(p_invite uuid)` | `{adminOverrides, slug, ownerEmail, branding, workflow}` or null |
-| `setup_admin_save_settings(p_invite uuid, p_settings jsonb)` | — . Replaces the settings; only those keys, typed, at most 256 KB. |
+| `setup_admin_get_settings(p_invite uuid)` | `{adminOverrides, slug, ownerEmail, branding, workflow, goLive, addOns}` or null |
+| `setup_admin_save_settings(p_invite uuid, p_settings jsonb)` | — . Replaces the settings; only those keys, typed (`goLive` an object, `addOns` an array of at most 100 objects), at most 256 KB. |
 
 `builder/src/api.js` wraps every RPC: `openInvite`, `saveDraft`, `submitSetup(inviteId, token, version)`, `adminCreateInvite`, `adminList`, `adminGet`, `adminResetToken`, `adminSetStatus`, `adminMarkDownloaded`, `adminGetSettings`, `adminSaveSettings`, plus `signIn`, `signOut`, `getSession`. They throw `Error`s with friendly messages, and `saveDraft` and `submitSetup` throw `err.code === 'conflict'` on a stale version.
 
@@ -103,8 +123,8 @@ The script binds `admin@crm.com` to that existing login; add more admins with th
   - `.env.example`
   - `package.json` with name = slug, and `package-lock.json` with its `name` and `packages[''].name` set to the slug too
   - `backend/README.md`: says to run `setup.sql`. `schema.sql` and `seed.js` still ship, because `npm run setup-sql` rebuilds `setup.sql` from them.
-  - `SETUP-SUMMARY.md`: features on/off with reasons (including why the resolver keeps a feature on, such as checklists), the core features the client really gets, stages (and any added back), lists, fields, sheet link and To discuss items, for the agency
+  - `SETUP-SUMMARY.md`: features on/off with reasons (including why the resolver keeps a feature on, such as checklists), the core features the client really gets, stages (and any added back), lists, fields, sheet link and To discuss items, for the agency. Then **Go live** (web address, Supabase organization, sender, the two confirmations, problems and warnings, from `resolveGoLive`) and **Paid add-ons (separate timeline, not part of the launch)**: paid add-ons with price and timeline, then the requests not decided yet, covered by the menu, or not done.
 - `makeZip({templateFiles, files, rootFolder})` returns a `Uint8Array`. It uses `fflate.zipSync`, and every path is prefixed with `<slug>-solarflow/`.
 - Both the browser admin page and `scripts/make-client.mjs <submission.json> [--out dir] [--slug x] [--owner-email y]` (Node) use these same functions, and both turn the admin settings into build options with `buildOptions(settings)`, so the CLI and the website produce identical zips. The CLI reads the settings from the export file; `--slug` and `--owner-email` win over it.
-- Every build function takes the admin settings `{adminOverrides, slug, ownerEmail, branding, workflow}`. An admin `workflow` wins over the client's for stages, lists and fields; the client's sheet link and note are still recorded. Exports (`Download answers (JSON)`) wrap the payload with these settings, and `parseSubmissionJson` reads them back.
+- Every build function takes the admin settings `{adminOverrides, slug, ownerEmail, branding, workflow, goLive, addOns}`. An admin `workflow` wins over the client's for stages, lists and fields; the client's sheet link and note are still recorded. `goLive`, `addOns` and the optional `agencyDomain` only change `SETUP-SUMMARY.md`. Without `agencyDomain`, a free address is printed as `<slug>.<agency domain>`. Exports (`Download answers (JSON)`) wrap the payload with these settings plus `agencyDomain` (from `VITE_AGENCY_DOMAIN`, when set), and `parseSubmissionJson` reads them back. So `npm run make-client` on an export builds the same zip as the admin page, and `scripts/provision.mjs` reads the same file.
 - Branding: `chargesLabel` defaults to `GEB / GEDA` only when the state is Gujarat; elsewhere it is empty, so quotations print `<DISCOM> registration`. The admin can set `discomName` and `chargesLabel`.

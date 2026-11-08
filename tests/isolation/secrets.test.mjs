@@ -35,6 +35,32 @@ test('public keys, placeholders and the sb_secret_ check itself are fine', () =>
     assert.deepEqual(findSecrets(text), []);
 });
 
+test('finds agency tokens and Brevo keys', () => {
+    const text = [
+        `SUPABASE_ACCESS_TOKEN=sbp_${'0123456789abcdef'.repeat(2)}01234567`,
+        `NETLIFY_AUTH_TOKEN=nfp_${'Ab3'.repeat(12)}`,
+        `BREVO_SMTP_KEY=xsmtpsib-${'a1'.repeat(32)}-${'Q'.repeat(16)}`,
+        `const key = "xkeysib-${'f0'.repeat(32)}-${'z'.repeat(16)}";`,
+    ].join('\n');
+    assert.deepEqual(findSecrets(text), [
+        ['Supabase access token', 1],
+        ['Netlify access token', 2],
+        ['Brevo SMTP key', 3],
+        ['Brevo API key', 4],
+    ]);
+});
+
+test('placeholders and prefix checks for agency tokens are fine', () => {
+    const text = [
+        'SUPABASE_ACCESS_TOKEN=sbp_your-token-here',
+        `short sbp_${'a'.repeat(39)} and not hex sbp_${'g'.repeat(40)}`,
+        'NETLIFY_AUTH_TOKEN=nfp_...',
+        "if (key.startsWith('xkeysib-')) refuse('use the SMTP key, not the API key');",
+        'BREVO_SMTP_KEY=xsmtpsib-...',
+    ].join('\n');
+    assert.deepEqual(findSecrets(text), []);
+});
+
 test('scan covers dist folders and skips node_modules', () => {
     const root = mkdtempSync(join(tmpdir(), 'sf-secrets-'));
     try {
