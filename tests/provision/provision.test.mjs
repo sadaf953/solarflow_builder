@@ -235,7 +235,7 @@ test('the free-project limit is explained, with the organizations that count', a
     t.after(() => rmSync(ws.dir, { recursive: true, force: true }));
     const world = fakeWorld({
         otherOrgs: [{ slug: 'old-client-1', projects: ['old1-solarflow'] }, { slug: 'old-client-2', projects: ['old2-solarflow'] }, { slug: 'paid-client', plan: 'pro', projects: ['big'] }],
-        createError: { status: 400, message: 'The following organization members have reached their maximum limits for the number of active free projects within organizations where they are an administrator or owner: agency@ray2volt.test' },
+        createError: { status: 400, message: 'The following organization members have reached their maximum limits for the number of active free projects within organizations where they are an administrator or owner: agency@sfagency.test' },
     });
     const failed = await run(world, ws);
     assert.ok(failed instanceof Error);
@@ -418,7 +418,7 @@ test('the client\'s org must have invited the agency', async t => {
     const world = fakeWorld();
     const failed = await run(world, ws);
     assert.ok(failed instanceof Error);
-    assert.match(failed.text, /is not in the client's organization “someone-else”\. Ask the client to invite agency@ray2volt\.test as Administrator/);
+    assert.match(failed.text, /is not in the client's organization “someone-else”\. Ask the client to invite agency@sfagency\.test as Administrator/);
 });
 
 test('a create that times out and is not found keeps the password on screen only; the next run finds the project', async t => {

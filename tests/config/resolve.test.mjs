@@ -128,7 +128,7 @@ test('status tags keep locked ids and put the final tag last', () => {
 });
 
 test('helpers for names, keys and sheet links', () => {
-    assert.equal(slugify('Ray2Volt Solar Pvt. Ltd.'), 'ray2volt-solar-pvt-ltd');
+    assert.equal(slugify('Sunrise Solar Pvt. Ltd.'), 'sunrise-solar-pvt-ltd');
     assert.equal(keyFromLabel('Site survey date'), 'site_survey_date');
     assert.equal(keyFromLabel('2nd visit'), 'f_2nd_visit');
     assert.equal(keyFromLabel('Site survey!', { stage: true }), 'SITE SURVEY');

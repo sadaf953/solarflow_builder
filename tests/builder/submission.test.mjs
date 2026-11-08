@@ -9,7 +9,7 @@ import { businessErrors, workflowErrors } from '../../builder/src/pages/wizard/c
 import { checkClientConfig } from '../../builder/src/zip/build.js';
 
 const filled = () => {
-    const submission = emptySubmission({ contact: { company: 'Ray2Volt Solar', name: 'Asha', phone: '9800000000', email: 'owner@ray2volt.example', state: 'Gujarat' } });
+    const submission = emptySubmission({ contact: { company: 'Sunrise Solar', name: 'Asha', phone: '9800000000', email: 'owner@sunrise.example', state: 'Gujarat' } });
     submission.answers = {
         partners: 'no', partnerOffices: 'no', quotations: 'yes', payments: 'both', subsidy: 'yes', bom: 'yes', trucks: 'no',
         godown: 'yes', documents: 'both', installerLogins: 'yes', installerPayouts: 'no', installationPayments: 'yes',
@@ -21,8 +21,8 @@ const filled = () => {
 test('a default-workflow submission becomes a valid config', () => {
     const config = submissionToClientConfig(filled());
     assert.deepEqual(validateClientConfig(config).errors, []);
-    assert.equal(config.client.slug, 'ray2volt-solar');
-    assert.equal(config.client.ownerEmail, 'owner@ray2volt.example');
+    assert.equal(config.client.slug, 'sunrise-solar');
+    assert.equal(config.client.ownerEmail, 'owner@sunrise.example');
     assert.equal(config.features.vendorLogin, true);
     assert.equal(config.features.inventory, true);
     const resolved = resolveClientConfig(config);
@@ -84,8 +84,8 @@ test('admin overrides win and stage locks explain themselves', () => {
 
 test('admin company details are merged over the submission: known keys with text only', () => {
     const branding = {
-        address: '  12 Ring Road,\nSurat 395002  ', gstin: '24ABCDE1234F1Z5', website: 'www.ray2volt.example', logoUrl: 'https://cdn.example.com/logo.png',
-        epcCode: 'EPC-77', bankAccountName: 'Ray2Volt Solar', bankAccountNumber: '001234567890', bankName: 'State Bank of India',
+        address: '  12 Ring Road,\nSurat 395002  ', gstin: '24ABCDE1234F1Z5', website: 'www.sunrise.example', logoUrl: 'https://cdn.example.com/logo.png',
+        epcCode: 'EPC-77', bankAccountName: 'Sunrise Solar', bankAccountNumber: '001234567890', bankName: 'State Bank of India',
         bankBranch: 'Surat', bankIfsc: 'SBIN0001234',
         phone: '   ', email: 42, notAField: 'dropped', state: 'Maharashtra',
     };
@@ -96,8 +96,8 @@ test('admin company details are merged over the submission: known keys with text
     assert.equal(config.branding.logoUrl, 'https://cdn.example.com/logo.png');
     assert.equal(config.branding.state, 'Maharashtra', 'known keys may be overridden');
     assert.equal(config.branding.phone, '9800000000', 'a blank keeps what the client gave');
-    assert.equal(config.branding.email, 'owner@ray2volt.example', 'non-text values are ignored');
-    assert.equal(config.branding.companyName, 'Ray2Volt Solar');
+    assert.equal(config.branding.email, 'owner@sunrise.example', 'non-text values are ignored');
+    assert.equal(config.branding.companyName, 'Sunrise Solar');
     assert.ok(!('notAField' in config.branding));
     assert.deepEqual(Object.keys(config.branding).sort(), Object.keys(submissionToClientConfig(filled()).branding).sort());
 

@@ -22,7 +22,7 @@ export const KEYS = Object.freeze({
     service: jwt('service_role', REF),
 });
 export const SMTP = Object.freeze({ login: '8a1b2c001@smtp-brevo.com', key: `xsmtpsib-${'b'.repeat(64)}-${'K'.repeat(16)}` });
-export const AGENCY = Object.freeze({ id: 'agency-user', email: 'agency@ray2volt.test' });
+export const AGENCY = Object.freeze({ id: 'agency-user', email: 'agency@sfagency.test' });
 export const OWNER_EMAIL = 'owner@surya-solar.example';
 
 const fixture = JSON.parse(readFileSync(new URL('../builder/fixtures/submission.json', import.meta.url), 'utf8'));
@@ -212,8 +212,8 @@ export function fakeWorld(options = {}) {
 
     async function netlify(method, path, query, body) {
         let m;
-        if (path === '/user') return json(200, { id: 'n1', email: 'agency@ray2volt.test' });
-        if (path === '/accounts') return json(200, [{ id: 'a1', slug: 'ray2volt' }]);
+        if (path === '/user') return json(200, { id: 'n1', email: 'agency@sfagency.test' });
+        if (path === '/accounts') return json(200, [{ id: 'a1', slug: 'sfagency' }]);
         if (method === 'GET' && (m = path.match(/^(?:\/[\w-]+)?\/sites$/))) {
             const name = query.get('name') || '';
             return json(200, [...world.sites.values()].filter(s => s.name.includes(name)));
